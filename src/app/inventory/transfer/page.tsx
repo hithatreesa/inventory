@@ -26,16 +26,18 @@ export default function StockTransferPage() {
   return (
     <div className="space-y-8 pb-12">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-6">
-          <h1 className="text-2xl font-black text-text-main italic tracking-tight">Stock Transfer</h1>
-          <div className="bg-sidebar-bg px-3 py-1.5 rounded-lg border border-border-main text-[10px] font-black text-text-secondary uppercase tracking-widest">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+        <div className="flex items-center gap-6 w-full sm:w-auto overflow-hidden">
+          <h1 className="text-2xl font-black text-text-main italic tracking-tight truncate">Stock Transfer</h1>
+          <div className="bg-sidebar-bg px-3 py-1.5 rounded-lg border border-border-main text-[10px] font-black text-text-secondary uppercase tracking-widest whitespace-nowrap shrink-0">
             REF: {stockTransferData.txnId}
           </div>
         </div>
-        <div className="flex items-center gap-6">
-           <Bell className="w-5 h-5 text-text-secondary" />
-           <HelpCircle className="w-5 h-5 text-text-secondary" />
+        <div className="flex items-center gap-6 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-4 sm:pt-0 border-border-main">
+           <div className="flex gap-4">
+             <Bell className="w-5 h-5 text-text-secondary cursor-pointer hover:text-primary transition-colors" />
+             <HelpCircle className="w-5 h-5 text-text-secondary cursor-pointer hover:text-primary transition-colors" />
+           </div>
            <div className="flex items-center gap-3 border-l border-border-main pl-6">
              <div className="text-right">
                <p className="text-xs font-black text-text-main leading-none">Alex Mercer</p>
@@ -122,66 +124,68 @@ export default function StockTransferPage() {
 
       {/* Line Items */}
       <div className="space-y-6">
-        <div className="flex justify-between items-end">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
           <div>
             <h2 className="text-2xl font-black text-text-main tracking-tight italic">Line Item Selection</h2>
             <p className="text-sm text-text-secondary font-medium">Select the SKU and quantities for movement.</p>
           </div>
-          <button className="flex items-center gap-2 px-6 py-2.5 bg-primary/10 text-primary rounded-xl text-xs font-black shadow-sm hover:bg-primary hover:text-white transition-all">
+          <button className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-primary/10 text-primary rounded-xl text-xs font-black shadow-sm hover:bg-primary hover:text-white transition-all">
             <Plus className="w-4 h-4" /> Add New Item
           </button>
         </div>
 
         <div className="bg-white rounded-[32px] border border-border-main shadow-sm overflow-hidden">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="text-[9px] font-black text-text-secondary uppercase tracking-[0.2em] border-b border-gray-50">
-                <th className="px-8 py-6">PRODUCT DETAILS</th>
-                <th className="px-6 py-6 text-center">SKU CODE</th>
-                <th className="px-6 py-6 text-center">IN STOCK</th>
-                <th className="px-6 py-6 text-center">TRANSFER QTY</th>
-                <th className="px-8 py-6 text-right">UNIT VALUE</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {items.map((item) => (
-                <tr key={item.id} className="group hover:bg-gray-50/50 transition-colors">
-                  <td className="px-8 py-6">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-primary/5 rounded-xl flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
-                        <MapPin className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-black text-text-main">{item.name}</p>
-                        <p className="text-[10px] text-text-secondary font-bold uppercase tracking-tighter">Batch: {item.batch}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-6 text-center text-[10px] font-bold text-text-secondary font-mono uppercase">{item.sku}</td>
-                  <td className="px-6 py-6 text-center text-sm font-bold text-text-main">{item.inStock} units</td>
-                  <td className="px-6 py-6">
-                    <div className="flex items-center justify-center gap-4">
-                       <button className="w-6 h-6 rounded-lg border border-border-main flex items-center justify-center text-text-secondary hover:bg-primary hover:text-white transition-all hover:border-primary">
-                         <Minus className="w-3 h-3" />
-                       </button>
-                       <span className="text-sm font-black text-text-main w-8 text-center">{item.transferQty}</span>
-                       <button className="w-6 h-6 rounded-lg border border-border-main flex items-center justify-center text-text-secondary hover:bg-primary hover:text-white transition-all hover:border-primary">
-                         <Plus className="w-3 h-3" />
-                       </button>
-                    </div>
-                  </td>
-                  <td className="px-8 py-6 text-right text-sm font-extrabold text-text-main">₹{item.unitValue.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left min-w-[800px] lg:min-w-0">
+              <thead>
+                <tr className="text-[9px] font-black text-text-secondary uppercase tracking-[0.2em] border-b border-gray-50">
+                  <th className="px-8 py-6">PRODUCT DETAILS</th>
+                  <th className="px-6 py-6 text-center">SKU CODE</th>
+                  <th className="px-6 py-6 text-center">IN STOCK</th>
+                  <th className="px-6 py-6 text-center">TRANSFER QTY</th>
+                  <th className="px-8 py-6 text-right">UNIT VALUE</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {items.map((item) => (
+                  <tr key={item.id} className="group hover:bg-gray-50/50 transition-colors">
+                    <td className="px-8 py-6">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-primary/5 rounded-xl flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                          <MapPin className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-black text-text-main">{item.name}</p>
+                          <p className="text-[10px] text-text-secondary font-bold uppercase tracking-tighter">Batch: {item.batch}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-6 text-center text-[10px] font-bold text-text-secondary font-mono uppercase">{item.sku}</td>
+                    <td className="px-6 py-6 text-center text-sm font-bold text-text-main">{item.inStock} units</td>
+                    <td className="px-6 py-6">
+                      <div className="flex items-center justify-center gap-4">
+                         <button className="w-6 h-6 rounded-lg border border-border-main flex items-center justify-center text-text-secondary hover:bg-primary hover:text-white transition-all hover:border-primary">
+                           <Minus className="w-3 h-3" />
+                         </button>
+                         <span className="text-sm font-black text-text-main w-8 text-center">{item.transferQty}</span>
+                         <button className="w-6 h-6 rounded-lg border border-border-main flex items-center justify-center text-text-secondary hover:bg-primary hover:text-white transition-all hover:border-primary">
+                           <Plus className="w-3 h-3" />
+                         </button>
+                      </div>
+                    </td>
+                    <td className="px-8 py-6 text-right text-sm font-extrabold text-text-main">₹{item.unitValue.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 bg-white p-8 rounded-[32px] border border-border-main shadow-sm space-y-8">
           <h3 className="text-lg font-black text-text-main uppercase tracking-tight italic">Transaction Metadata</h3>
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="text-[9px] font-black text-text-secondary uppercase tracking-widest pl-1">EXPECTED ARRIVAL</label>
               <div className="relative">

@@ -17,7 +17,7 @@ interface BreadcrumbsProps {
 
 export function Breadcrumbs({ items, className }: BreadcrumbsProps) {
   return (
-    <nav className={cn("flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest", className)}>
+    <nav className={cn("flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-black text-gray-400 uppercase tracking-widest", className)}>
       <Link 
         href="/dashboard" 
         className="flex items-center gap-1.5 hover:text-primary transition-colors hover:scale-105 transform duration-200"

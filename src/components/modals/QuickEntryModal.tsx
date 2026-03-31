@@ -23,7 +23,7 @@ export function QuickEntryModal({ isOpen, onClose }: { isOpen: boolean, onClose:
 
   const handleSubmit = () => {
     setIsSubmitting(true)
-    
+
     toast.promise(new Promise(resolve => setTimeout(resolve, 1500)), {
       loading: 'Validating entry against ISO-9001 standards...',
       success: () => {
@@ -39,7 +39,7 @@ export function QuickEntryModal({ isOpen, onClose }: { isOpen: boolean, onClose:
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Quick Data Entry">
+    <Modal isOpen={isOpen} onClose={onClose} title="Quick Entry">
       <div className="space-y-8">
         {/* Tab Selection */}
         <div className="flex bg-gray-50 p-1.5 rounded-2xl border border-gray-100">
@@ -52,8 +52,8 @@ export function QuickEntryModal({ isOpen, onClose }: { isOpen: boolean, onClose:
                 onClick={() => setActiveTab(tab.id as Tab)}
                 className={cn(
                   "flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                  IsActive 
-                    ? "bg-white text-primary shadow-sm border border-gray-100" 
+                  IsActive
+                    ? "bg-white text-primary shadow-sm border border-gray-100"
                     : "text-text-secondary hover:text-text-main hover:bg-white/50"
                 )}
                 disabled={isSubmitting}
@@ -121,28 +121,28 @@ export function QuickEntryModal({ isOpen, onClose }: { isOpen: boolean, onClose:
 
         {/* Footer Actions */}
         <div className="flex gap-4 pt-4 border-t border-gray-100">
-           <Button variant="secondary" className="flex-1 rounded-2xl h-14 font-black italic tracking-widest text-[11px]" onClick={onClose} disabled={isSubmitting}>
-             CANCEL
-           </Button>
-           <Button 
-             className="flex-[1.5] rounded-2xl h-14 font-black italic tracking-widest text-[11px] shadow-xl shadow-primary/20" 
-             onClick={handleSubmit}
-             disabled={isSubmitting}
-           >
-             {isSubmitting ? 'PROCESSING...' : <><Save className="w-4 h-4 mr-2" /> PROCESS ENTRY</>}
-           </Button>
+          <Button variant="secondary" className="flex-1 rounded-2xl h-14 font-black italic tracking-widest text-[11px]" onClick={onClose} disabled={isSubmitting}>
+            CANCEL
+          </Button>
+          <Button
+            className="flex-[1.5] rounded-2xl h-14 font-black italic tracking-widest text-[11px] shadow-xl shadow-primary/20"
+            onClick={handleSubmit}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'PROCESSING...' : <><Save className="w-4 h-4 mr-2" /> PROCESS ENTRY</>}
+          </Button>
         </div>
 
         {/* Info Box */}
         {!isSubmitting && (
           <div className="p-5 bg-primary/5 rounded-2xl border border-primary/10 flex gap-4">
-             <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-primary shadow-sm shrink-0">
-               <Plus className="w-5 h-5" />
-             </div>
-             <div>
-               <p className="text-[11px] font-black text-text-main italic leading-tight">SYSTEM AUTO-VALIDATE</p>
-               <p className="text-[9px] font-bold text-text-secondary uppercase tracking-widest mt-1">Data will be validated against strict ISO-9001 norms before commit.</p>
-             </div>
+            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-primary shadow-sm shrink-0">
+              <Plus className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-[11px] font-black text-text-main italic leading-tight">SYSTEM AUTO-VALIDATE</p>
+              <p className="text-[9px] font-bold text-text-secondary uppercase tracking-widest mt-1">Data will be validated against strict ISO-9001 norms before commit.</p>
+            </div>
           </div>
         )}
       </div>

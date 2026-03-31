@@ -49,6 +49,22 @@ export default function POSPage() {
     searchRef.current?.focus()
   }, [])
 
+  const handleCompleteSale = useCallback(() => {
+    if (billItems.length === 0) {
+      toast.error('Cannot complete empty sale')
+      return
+    }
+    toast.promise(new Promise(resolve => setTimeout(resolve, 1500)), {
+      loading: 'Processing transaction...',
+      success: () => {
+        setBillItems([])
+        setReceived('')
+        return 'Sale completed successfully #POS-TRX-04B'
+      },
+      error: 'Transaction failed'
+    })
+  }, [billItems.length])
+
   // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -127,28 +143,14 @@ export default function POSPage() {
   const total = subtotal + tax - discount
   const balance = received ? Math.max(0, parseFloat(received) - total) : 0
 
-  const handleCompleteSale = () => {
-    if (billItems.length === 0) {
-      toast.error('Cannot complete empty sale')
-      return
-    }
-    toast.promise(new Promise(resolve => setTimeout(resolve, 1500)), {
-      loading: 'Processing transaction...',
-      success: () => {
-        setBillItems([])
-        setReceived('')
-        return 'Sale completed successfully #POS-TRX-04B'
-      },
-      error: 'Transaction failed'
-    })
-  }
+
 
   return (
-    <div className="flex h-[calc(100vh-130px)] gap-8 overflow-hidden font-sans">
+    <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-130px)] gap-6 lg:gap-8 font-sans pb-20 lg:pb-0">
       {/* LEFT: BILLING ENGINE (70%) */}
-      <div className="flex-[0.7] flex flex-col gap-6 h-full">
+      <div className="w-full lg:flex-[0.7] flex flex-col gap-4 lg:gap-6 lg:h-full lg:overflow-hidden">
         {/* TOP BAR: SEARCH/SCAN */}
-        <form onSubmit={handleQuerySubmit} className="relative group">
+        <form onSubmit={handleQuerySubmit} className="relative group shrink-0">
           <Input 
             ref={searchRef}
             icon={<Search className="w-6 h-6 text-gray-400" />}
@@ -164,7 +166,7 @@ export default function POSPage() {
         </form>
 
         {/* BILL TABLE */}
-        <div className="flex-1 bg-white rounded-3xl border border-border-main flex flex-col overflow-hidden shadow-sm">
+        <div className="flex-1 min-h-[400px] lg:min-h-0 bg-white rounded-3xl border border-border-main flex flex-col overflow-hidden shadow-sm">
           <div className="overflow-x-auto flex-1 custom-scrollbar">
             <table className="w-full text-left">
               <thead className="sticky top-0 bg-white z-10">
@@ -233,8 +235,8 @@ export default function POSPage() {
           </div>
           
           {/* BOTTOM BAR */}
-          <div className="p-8 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between">
-            <div className="flex items-center gap-12 font-black text-[11px] uppercase tracking-widest italic opacity-60">
+          <div className="p-4 lg:p-8 bg-gray-50/50 border-t border-gray-100 flex flex-col xs:flex-row items-center justify-between gap-4">
+            <div className="flex items-center justify-center xs:justify-start gap-6 lg:gap-12 font-black text-[10px] lg:text-[11px] uppercase tracking-widest italic opacity-60 w-full xs:w-auto">
                <div className="flex items-center gap-3">
                  <span className="text-gray-400">Total Items:</span>
                  <span className="text-primary">{billItems.length}</span>
@@ -244,14 +246,14 @@ export default function POSPage() {
                  <span className="text-primary">{billItems.reduce((acc, i) => acc + i.qty, 0)}</span>
                </div>
             </div>
-            <div className="flex gap-4">
-              <Button variant="secondary" className="px-8 rounded-xl font-black text-[10px] tracking-widest uppercase italic bg-white border-gray-200">
+            <div className="flex gap-2 lg:gap-4 w-full xs:w-auto mt-2 xs:mt-0">
+              <Button variant="secondary" className="flex-1 xs:flex-none px-4 lg:px-8 rounded-xl font-black text-[10px] tracking-widest uppercase italic bg-white border-gray-200">
                  Hold Bill
               </Button>
               <Button 
                 variant="ghost" 
                 onClick={clearBill}
-                className="px-8 rounded-xl font-black text-[10px] tracking-widest uppercase italic text-red-500 hover:bg-red-50"
+                className="flex-1 xs:flex-none px-4 lg:px-8 rounded-xl font-black text-[10px] tracking-widest uppercase italic text-red-500 hover:bg-red-50"
               >
                  Clear Bill
               </Button>
@@ -261,7 +263,7 @@ export default function POSPage() {
       </div>
 
       {/* RIGHT: SUMMARY + PAYMENT (30%) */}
-      <div className="flex-[0.3] flex flex-col gap-6 overflow-y-auto pr-2 custom-scrollbar">
+      <div className="w-full lg:flex-[0.3] flex flex-col gap-6 lg:overflow-y-auto custom-scrollbar lg:pr-2">
         {/* CUSTOMER SECTION */}
         <div className="bg-white rounded-3xl p-6 border border-border-main shadow-sm flex flex-col gap-4">
           <div className="flex justify-between items-center px-1">

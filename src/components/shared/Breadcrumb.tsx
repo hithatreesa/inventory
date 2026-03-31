@@ -1,6 +1,6 @@
 "use client"
 
-import React from 'react'
+import React, { Suspense } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
@@ -25,7 +25,7 @@ const formatText = (text: string | null) => {
     .replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-export function Breadcrumb() {
+function BreadcrumbContent() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   
@@ -70,5 +70,13 @@ export function Breadcrumb() {
         </>
       )}
     </nav>
+  )
+}
+
+export function Breadcrumb() {
+  return (
+    <Suspense fallback={<div className="h-4 w-20 bg-gray-50 animate-pulse rounded" />}>
+      <BreadcrumbContent />
+    </Suspense>
   )
 }

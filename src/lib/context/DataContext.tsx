@@ -9,7 +9,7 @@ interface DataContextType {
   logs: typeof auditLogs
   addItem: (item: Item) => void
   updateItem: (id: string, updates: Partial<Item>) => void
-  addSale: (sale: any) => void
+  addSale: (sale: unknown) => void
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined)
@@ -27,8 +27,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setItems(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item))
   }, [])
 
-  const addSale = useCallback((sale: any) => {
+  const addSale = useCallback((sale: unknown) => {
     // Shared state logic for sales would go here
+    console.log(sale)
   }, [])
 
   const value = useMemo(() => ({

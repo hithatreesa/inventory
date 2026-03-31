@@ -55,9 +55,9 @@ export function SectionHeader({
           </p>
         )}
       </div>
-      
+
       {actions && (
-        <div className="flex items-center gap-4 animate-in fade-in slide-up duration-1000 delay-200">
+        <div className="flex flex-wrap items-center gap-4 animate-in fade-in slide-up duration-1000 delay-200 w-full md:w-auto justify-start md:justify-end">
           {actions}
         </div>
       )}

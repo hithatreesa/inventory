@@ -1,9 +1,8 @@
 "use client"
-
-import React, { useState, useEffect } from 'react'
-import { 
-  Search, 
-  Bell, 
+import React, { useState, useEffect, Suspense } from 'react'
+import {
+  Search,
+  Bell,
   Menu,
   ChevronRight
 } from 'lucide-react'
@@ -20,10 +19,9 @@ export function Navbar() {
   const [time, setTime] = useState<Date | null>(null)
 
   useEffect(() => {
-    setTime(new Date())
-    const timer = setInterval(() => {
-      setTime(new Date())
-    }, 1000)
+    const updateTime = () => setTime(new Date())
+    updateTime()
+    const timer = setInterval(updateTime, 1000)
     return () => clearInterval(timer)
   }, [])
 
@@ -60,23 +58,25 @@ export function Navbar() {
     )}>
       {/* Left: Menu & Breadcrumbs */}
       <div className="flex items-center gap-2 sm:gap-6 text-text-main">
-        <Button 
-          variant="secondary" 
-          size="icon" 
+        <Button
+          variant="secondary"
+          size="icon"
           className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl border-gray-100 flex items-center justify-center shrink-0"
           onClick={toggleSidebar}
         >
           <Menu className="w-4 h-4 sm:w-5 sm:h-5 text-text-main" />
         </Button>
-        
+
         <div className="flex items-center gap-1.5 sm:gap-3">
-          <Breadcrumb />
-          
+          <Suspense fallback={<div className="h-4 w-20 bg-gray-50 animate-pulse rounded" />}>
+            <Breadcrumb />
+          </Suspense>
+
           <div className="hidden xs:block h-4 w-[1px] bg-gray-100 mx-0.5 sm:mx-1" />
-          
+
           <div className="hidden xs:flex items-center gap-1.5 sm:gap-2 bg-gray-50 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-gray-100 shadow-sm cursor-default group">
-             <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-primary/40 group-hover:bg-primary transition-colors" />
-             <span className="text-[8px] sm:text-[10px] font-black text-text-secondary uppercase tracking-widest leading-none">FY 24-25</span>
+            <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-primary/40 group-hover:bg-primary transition-colors" />
+            <span className="text-[8px] sm:text-[10px] font-black text-text-secondary uppercase tracking-widest leading-none">FY 24-25</span>
           </div>
         </div>
       </div>
@@ -85,10 +85,10 @@ export function Navbar() {
       {/* Center: Search (Hidden on Mobile) */}
       <div className="hidden md:flex flex-1 max-w-xl px-12">
         <div className="relative group w-full">
-          <Input 
-            type="text" 
+          <Input
+            type="text"
             icon={<Search className="w-4 h-4" />}
-            placeholder="Search..." 
+            placeholder="Search..."
             className="rounded-2xl bg-gray-50/50 border-gray-100 h-11 placeholder:italic placeholder:font-bold placeholder:text-[10px] placeholder:uppercase placeholder:tracking-widest"
             onKeyDown={handleSearch}
           />
@@ -108,9 +108,9 @@ export function Navbar() {
 
         <div className="hidden md:block h-8 w-[1px] bg-gray-100" />
 
-        <Button 
-          variant="secondary" 
-          size="icon" 
+        <Button
+          variant="secondary"
+          size="icon"
           className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl border-gray-100 relative group"
           onClick={() => toast.info('No new notifications', {
             description: 'Your inbox is clear for today.'

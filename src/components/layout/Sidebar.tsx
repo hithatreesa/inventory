@@ -3,14 +3,14 @@
 import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { 
-  LayoutDashboard, 
-  Package, 
-  ShoppingCart, 
-  TrendingUp, 
-  FileText, 
-  Settings, 
-  LogOut, 
+import {
+  LayoutDashboard,
+  Package,
+  ShoppingCart,
+  TrendingUp,
+  FileText,
+  Settings,
+  LogOut,
   Zap,
   User
 } from 'lucide-react'
@@ -37,7 +37,7 @@ export function Sidebar() {
       description: 'You will be redirected momentarily.',
       duration: 2000,
     })
-    
+
     // Simulate short delay for "logout process"
     setTimeout(() => {
       toast.success('Successfully logged out')
@@ -48,17 +48,20 @@ export function Sidebar() {
     <>
       {/* Mobile Backdrop */}
       {isMobileOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm transition-opacity"
           onClick={closeMobileSidebar}
         />
       )}
 
-      <aside className={cn(
-        "h-screen bg-sidebar-bg border-r border-border-main flex flex-col fixed left-0 top-0 z-50 shadow-2xl transition-all duration-300 ease-in-out overflow-hidden",
-        isCollapsed ? "w-20" : "w-72",
-        isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-      )}>
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex flex-col bg-sidebar-bg border-r border-border-main shadow-2xl overflow-hidden",
+          isCollapsed ? "w-20" : "w-72",
+          isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        )}
+        style={{ transition: "width 300ms ease-in-out, transform 300ms ease-in-out" }}
+      >
         <div className={cn("p-10 transition-all duration-300", isCollapsed && "p-4")}>
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-black/5 overflow-hidden p-1.5 border border-gray-100 shrink-0">
@@ -91,7 +94,7 @@ export function Sidebar() {
                 title={isCollapsed ? item.name : ""}
               >
                 <item.icon className={cn(
-                  "w-5 h-5 transition-transform group-hover:scale-110 shrink-0", 
+                  "w-5 h-5 transition-transform group-hover:scale-110 shrink-0",
                   isActive ? "text-white" : "text-text-secondary group-hover:text-primary"
                 )} />
                 {!isCollapsed && (
@@ -126,7 +129,7 @@ export function Sidebar() {
           </div>
 
           <div className="space-y-1">
-            <button 
+            <button
               onClick={handleLogout}
               className={cn(
                 "flex items-center gap-4 px-4 py-2.5 text-warning hover:text-warning/80 transition-all group w-full text-left",

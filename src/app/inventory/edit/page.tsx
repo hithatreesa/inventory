@@ -1,12 +1,12 @@
 "use client"
 
 import React, { useState } from 'react'
-import { 
-  ChevronRight, 
-  Package, 
-  IndianRupee, 
-  Lock, 
-  MapPin, 
+import {
+  ChevronRight,
+  Package,
+  IndianRupee,
+  Lock,
+  MapPin,
   History,
   Info,
   Barcode,
@@ -30,20 +30,20 @@ export default function ItemDetailPage() {
   ])
 
   const headerActions = (
-    <>
-      <Button variant="secondary" className="px-8 h-10">
+    <div className="flex flex-wrap gap-4 w-full sm:w-auto justify-end">
+      <Button variant="secondary" className="flex-1 sm:flex-none px-8 h-10">
         Discard
       </Button>
-      <Button className="px-10 h-10 italic">
+      <Button className="flex-1 sm:flex-none px-10 h-10 italic">
         Save Changes
       </Button>
-    </>
+    </div>
   )
 
   return (
     <div className="space-y-8 pb-12">
-      <SectionHeader 
-        title="Industrial Power Module X-1" 
+      <SectionHeader
+        title="Industrial Power Module X-1"
         breadcrumbs={[
           { label: 'Inventory', href: '/inventory' },
           { label: 'Edit Item' }
@@ -64,7 +64,7 @@ export default function ItemDetailPage() {
                 <label className="text-[10px] font-bold text-text-secondary pl-1 uppercase tracking-wider">Product Name</label>
                 <input type="text" defaultValue="Industrial Power Module X-1" className="w-full bg-sidebar-bg border border-border-main rounded-xl px-4 py-3 text-sm font-bold text-text-main focus:outline-primary transition-all" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-text-secondary pl-1 uppercase tracking-wider">Category</label>
                   <select className="w-full bg-sidebar-bg border border-border-main rounded-xl px-4 py-3 text-sm font-bold text-text-main focus:outline-primary transition-all">
@@ -89,7 +89,7 @@ export default function ItemDetailPage() {
             <h3 className="text-lg font-bold text-text-main flex items-center gap-3 lowercase italic font-black">
               <IndianRupee className="w-5 h-5 text-primary" /> Pricing Architecture
             </h3>
-            <div className="grid grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               <PricingInput label="Base Cost (INR)" value="1250.00" />
               <PricingInput label="MSRP (INR)" value="1899.99" />
               <div className="space-y-2">
@@ -99,7 +99,7 @@ export default function ItemDetailPage() {
                 </div>
               </div>
             </div>
-            
+
             <div className="mt-8 border-t border-border-main pt-6">
               <div className="flex justify-between items-center mb-4">
                 <h4 className="text-[10px] font-extrabold text-text-secondary uppercase tracking-[0.2em]">TIERED PRICING SCHEDULE</h4>
@@ -108,7 +108,7 @@ export default function ItemDetailPage() {
               <div className="space-y-3">
                 {tieredPricing.map((tier, i) => (
                   <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-gray-50/80 border border-border-main group hover:bg-white hover:shadow-sm transition-all">
-                    <div className="grid grid-cols-3 flex-1 gap-8">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 flex-1 gap-4 sm:gap-8">
                       <div>
                         <p className="text-[9px] font-bold text-text-secondary uppercase mb-1">Quantity Range</p>
                         <p className="text-sm font-extrabold text-text-main">{tier.range}</p>
@@ -194,12 +194,12 @@ export default function ItemDetailPage() {
           </section>
         </div>
       </div>
-      
+
       {/* Media & Activity Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
         <section className="bg-white p-8 rounded-3xl border border-border-main shadow-sm space-y-6">
           <h3 className="text-lg font-bold text-text-main">Product Media</h3>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="aspect-square bg-gray-100 rounded-2xl border border-border-main overflow-hidden flex items-center justify-center">
               <ImageIcon className="text-text-secondary opacity-30" size={40} />
             </div>
@@ -218,20 +218,20 @@ export default function ItemDetailPage() {
             <span className="bg-primary/5 text-primary text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-tighter">Live</span>
           </div>
           <ActivityStream>
-            <HistoryItem 
-              active 
-              title="Inventory level updated" 
-              sub="Automated synchronization • 2 hours ago" 
+            <HistoryItem
+              active
+              title="Inventory level updated"
+              sub="Automated synchronization • 2 hours ago"
               icon={<RefreshCw className="w-4 h-4" />}
             />
-            <HistoryItem 
-              title="Metadata adjusted by Admin" 
-              sub="Manufacturer SKU updated • 5 hours ago" 
+            <HistoryItem
+              title="Metadata adjusted by Admin"
+              sub="Manufacturer SKU updated • 5 hours ago"
               icon={<SettingsIcon className="w-4 h-4" />}
             />
-            <HistoryItem 
-              title="Compliance certification verified" 
-              sub="RoHS 3 documentation validated • Yesterday" 
+            <HistoryItem
+              title="Compliance certification verified"
+              sub="RoHS 3 documentation validated • Yesterday"
               icon={<CheckCircle2 className="w-4 h-4" />}
             />
           </ActivityStream>
@@ -241,7 +241,7 @@ export default function ItemDetailPage() {
   )
 }
 
-function PricingInput({ label, value }: any) {
+function PricingInput({ label, value }: { label: string, value: string | number }) {
   return (
     <div className="space-y-2">
       <label className="text-[10px] font-bold text-text-secondary pl-1 uppercase tracking-wider">{label}</label>
@@ -253,7 +253,7 @@ function PricingInput({ label, value }: any) {
   )
 }
 
-function ToggleRow({ label, desc, active }: any) {
+function ToggleRow({ label, desc, active }: { label: string, desc: string, active?: boolean }) {
   return (
     <div className="flex justify-between items-center p-4 rounded-xl hover:bg-gray-50 transition-colors">
       <div>
@@ -267,7 +267,7 @@ function ToggleRow({ label, desc, active }: any) {
   )
 }
 
-function WarehouseRow({ name, qty, color }: any) {
+function WarehouseRow({ name, qty, color }: { name: string, qty: number, color: string }) {
   return (
     <div className="space-y-2 p-2 rounded-xl hover:bg-gray-50 transition-colors">
       <div className="flex justify-between text-xs font-bold">

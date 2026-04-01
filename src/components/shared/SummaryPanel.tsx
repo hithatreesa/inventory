@@ -3,7 +3,6 @@
 import React from 'react'
 import { Info, CreditCard, ChevronRight, Paperclip, Printer, FileUp } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
 import { cn } from '@/lib/utils'
 
 interface SummaryRowProps {

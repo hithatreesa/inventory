@@ -44,7 +44,6 @@ import {
 } from 'recharts'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { Badge } from '@/components/ui/Badge'
 import { MetricCard } from '@/components/shared/MetricCard'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -194,7 +193,7 @@ export default function ReportsPage() {
                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-2">Dynamic Velocity Map &rarr; Past 30 Days</p>
                   </div>
                   <div className="flex items-center gap-3">
-                     <Badge variant="secondary" className="italic font-black text-[9px] uppercase border-[#003366]/10 bg-[#003366]/5 text-[#003366] h-6 px-3">Live Processing</Badge>
+                     <span className="italic font-black text-[9px] uppercase text-[#003366] h-6 px-3 flex items-center justify-center opacity-40">Live Processing</span>
                      <LayoutGrid className="w-5 h-5 text-gray-200" />
                   </div>
                </div>
@@ -377,7 +376,10 @@ export default function ReportsPage() {
                               ₹{row.amt.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                            </td>
                            <td className="px-8 py-6 text-right">
-                              <Badge variant={row.id % 2 === 0 ? 'success' : 'neutral'} className="h-6 px-3 rounded-lg font-black italic text-[9px] uppercase tracking-tighter">{row.id % 2 === 0 ? 'Verified' : 'Pending'}</Badge>
+                              <span className={cn(
+                                 "h-6 px-3 rounded-lg font-black italic text-[9px] uppercase tracking-tighter flex items-center justify-center border border-transparent",
+                                 row.id % 2 === 0 ? "bg-green-50 text-green-600" : "bg-gray-50 text-gray-400"
+                               )}>{row.id % 2 === 0 ? 'Verified' : 'Pending'}</span>
                            </td>
                         </tr>
                      ))}

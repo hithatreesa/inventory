@@ -15,9 +15,9 @@ import {
 import Link from 'next/link'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { Badge } from '@/components/ui/Badge'
 import { DataTable, Column } from '@/components/tables/DataTable'
 import { MetricCard } from '@/components/shared/MetricCard'
+import { cn } from '@/lib/utils'
 
 interface PurchaseOrder {
   id: string
@@ -74,13 +74,16 @@ export default function PurchaseDashboard() {
       header: 'STATUS',
       align: 'right',
       cell: (order) => (
-        <Badge
-          variant={order.status === 'Completed' ? 'success' : order.status === 'Approved' ? 'secondary' : 'warning'}
-          dot
-          className="italic"
-        >
-          {order.status.toUpperCase()}
-        </Badge>
+        <span className={cn(
+          "inline-flex items-center gap-2 font-black italic text-[10px] tracking-tight uppercase",
+          order.status === 'Completed' ? 'text-green-600' : order.status === 'Approved' ? 'text-blue-600' : 'text-orange-600'
+        )}>
+          <div className={cn(
+            "w-1.5 h-1.5 rounded-full",
+            order.status === 'Completed' ? 'bg-green-600' : order.status === 'Approved' ? 'bg-blue-600' : 'bg-orange-600'
+          )} />
+          {order.status}
+        </span>
       )
     }
   ]
@@ -163,7 +166,6 @@ export default function PurchaseDashboard() {
       <div className="space-y-4">
         <div className="flex justify-between items-center px-6">
           <h3 className="text-xl font-black text-text-main italic tracking-tight uppercase leading-none">Recent Procurement History</h3>
-          <Badge variant="secondary" className="italic px-3">BETA-2 SYSTEM</Badge>
         </div>
         <DataTable columns={columns} data={mockOrders} />
       </div>

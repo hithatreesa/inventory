@@ -15,7 +15,6 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { Badge } from '@/components/ui/Badge'
 import { Select } from '@/components/ui/Select'
 import { SectionHeader } from '@/components/shared/SectionHeader'
 import { cn } from '@/lib/utils'
@@ -104,7 +103,7 @@ export default function SettingsPage() {
                       <p className="text-xs sm:text-sm font-black italic uppercase tracking-widest text-text-main">Multi-Factor Authentication (MFA)</p>
                       <p className="text-[10px] font-black uppercase tracking-widest text-text-secondary opacity-50 mt-1">Required for high-privilege accounts 💎</p>
                     </div>
-                    <Badge variant="success" className="px-4 py-1.5 rounded-full text-[9px] font-black italic uppercase tracking-widest sm:self-center">Enforced</Badge>
+                    <span className="text-success text-[9px] font-black italic uppercase tracking-widest sm:self-center">Enforced</span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
@@ -120,7 +119,7 @@ export default function SettingsPage() {
                         <p className="text-[10px] font-black uppercase tracking-widest text-text-secondary opacity-60">Login History Auditing</p>
                         <p className="text-[9px] font-black uppercase tracking-widest text-text-secondary mt-1">Store metadata for security scans</p>
                       </div>
-                      <Badge variant="success" className="text-[8px] font-black uppercase tracking-widest">ENABLED</Badge>
+                      <span className="text-success text-[8px] font-black uppercase tracking-widest">ENABLED</span>
                     </div>
                   </div>
                 </div>
@@ -157,7 +156,7 @@ export default function SettingsPage() {
                       <p className="text-sm font-black italic uppercase tracking-widest text-text-main">Multi-Warehouse System</p>
                       <p className="text-[10px] text-text-secondary mt-1 font-bold uppercase opacity-60">Enable multiple warehouses per company</p>
                     </div>
-                    <Badge variant="success" className="italic font-black text-[9px] uppercase tracking-widest">ENABLED</Badge>
+                    <span className="text-success italic font-black text-[9px] uppercase tracking-widest">ENABLED</span>
                   </div>
 
                   <div className="space-y-3">
@@ -173,7 +172,7 @@ export default function SettingsPage() {
                       <p className="text-sm font-black italic uppercase tracking-widest text-text-main">Rack Management</p>
                       <p className="text-[10px] text-text-secondary mt-1 font-bold uppercase opacity-60">Enable rack-level tracking per item</p>
                     </div>
-                    <Badge variant="secondary" className="italic font-black text-[9px] uppercase tracking-widest">OPTIONAL</Badge>
+                    <span className="text-text-secondary italic font-black text-[9px] uppercase tracking-widest">OPTIONAL</span>
                   </div>
 
                   <div className="flex items-center justify-between p-6 bg-warning/5 rounded-2xl border border-warning/20">
@@ -181,7 +180,7 @@ export default function SettingsPage() {
                       <p className="text-sm font-black italic uppercase tracking-widest text-warning">Negative Stock Control</p>
                       <p className="text-[10px] text-text-secondary mt-1 font-bold uppercase opacity-60">Block sales if stock is unavailable</p>
                     </div>
-                    <Badge variant="success" className="italic font-black text-[9px] uppercase tracking-widest">BLOCKED</Badge>
+                    <span className="text-success italic font-black text-[9px] uppercase tracking-widest">BLOCKED</span>
                   </div>
 
                   <div className="flex items-center justify-between p-6 bg-gray-50/50 rounded-2xl border border-gray-100">
@@ -189,7 +188,7 @@ export default function SettingsPage() {
                       <p className="text-sm font-black italic uppercase tracking-widest text-text-main">Stock Transfer Approval</p>
                       <p className="text-[10px] text-text-secondary mt-1 font-bold uppercase opacity-60">Require approval before transfer</p>
                     </div>
-                    <Badge variant="secondary" className="italic font-black text-[9px] uppercase tracking-widest">DISABLED</Badge>
+                    <span className="text-text-secondary italic font-black text-[9px] uppercase tracking-widest">DISABLED</span>
                   </div>
 
                   <div className="p-6 bg-primary/5 rounded-2xl border border-primary/10">
@@ -229,7 +228,7 @@ export default function SettingsPage() {
                       <p className="text-sm font-black italic uppercase tracking-widest text-primary">GST Auto Calculation</p>
                       <p className="text-[10px] text-text-secondary mt-1 font-bold uppercase opacity-60">Auto apply CGST/SGST or IGST based on state</p>
                     </div>
-                    <Badge variant="success" className="italic font-black text-[9px] uppercase tracking-widest">ENABLED</Badge>
+                    <span className="text-success italic font-black text-[9px] uppercase tracking-widest">ENABLED</span>
                   </div>
 
                   <div className="space-y-3">
@@ -242,7 +241,7 @@ export default function SettingsPage() {
                       <p className="text-sm font-black italic uppercase tracking-widest text-warning">Previous FY Lock</p>
                       <p className="text-[10px] text-text-secondary mt-1 font-bold uppercase opacity-60">Prevent edits in closed financial year</p>
                     </div>
-                    <Badge variant="secondary" className="italic font-black text-[9px] uppercase tracking-widest bg-warning/10 text-warning border-none">LOCKED</Badge>
+                    <span className="italic font-black text-[9px] uppercase tracking-widest text-warning">LOCKED</span>
                   </div>
                 </div>
               </Section>
@@ -258,7 +257,7 @@ export default function SettingsPage() {
                       <p className="text-sm font-black italic uppercase tracking-widest text-text-main">Email Notifications</p>
                       <p className="text-[10px] text-text-secondary mt-1 font-bold uppercase opacity-60">Send invoice & alerts via email</p>
                     </div>
-                    <Badge variant="success" className="italic font-black text-[9px] uppercase tracking-widest">ACTIVE</Badge>
+                    <span className="text-success italic font-black text-[9px] uppercase tracking-widest">ACTIVE</span>
                   </div>
 
                   <div className="flex items-center justify-between p-6 bg-gray-50/50 rounded-2xl border border-gray-100">
@@ -266,7 +265,7 @@ export default function SettingsPage() {
                       <p className="text-sm font-black italic uppercase tracking-widest text-text-main">WhatsApp Integration</p>
                       <p className="text-[10px] text-text-secondary mt-1 font-bold uppercase opacity-60">Send invoices to customers</p>
                     </div>
-                    <Badge variant="secondary" className="italic font-black text-[9px] uppercase tracking-widest">NOT CONNECTED</Badge>
+                    <span className="text-text-secondary italic font-black text-[9px] uppercase tracking-widest">NOT CONNECTED</span>
                   </div>
 
                   <div className="space-y-3">
@@ -304,7 +303,7 @@ export default function SettingsPage() {
                     </div>
 
                     <div className="p-8 border-2 border-primary rounded-3xl text-center space-y-4 shadow-2xl shadow-primary/10 relative scale-105 bg-white">
-                      <Badge variant="success" className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 shadow-lg border-none italic">CURRENT ACTIVE</Badge>
+                      <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 italic text-success font-black text-[10px]">CURRENT ACTIVE</span>
                       <p className="text-[10px] font-black uppercase tracking-widest text-primary">Professional</p>
                       <p className="text-3xl font-black italic text-[#003366]">₹1999<span className="text-[10px] text-gray-300">/mo</span></p>
                       <Button className="w-full h-10 text-[9px] font-black uppercase tracking-[0.2em] italic shadow-lg shadow-primary/20">MANAGE PLAN</Button>
@@ -322,7 +321,7 @@ export default function SettingsPage() {
                       <p className="text-sm font-black italic uppercase tracking-widest text-text-main">Billing Cycle Status</p>
                       <p className="text-[10px] text-text-secondary mt-1 font-bold uppercase opacity-60">Auto-renew subscription for next fiscal period</p>
                     </div>
-                    <Badge variant="secondary" className="italic font-black text-[9px] uppercase tracking-widest border-gray-100 text-text-secondary">MONTHLY_RECURRING</Badge>
+                    <span className="italic font-black text-[9px] uppercase tracking-widest text-text-secondary">MONTHLY_RECURRING</span>
                   </div>
                 </div>
               </Section>

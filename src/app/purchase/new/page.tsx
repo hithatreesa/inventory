@@ -13,7 +13,6 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { Badge } from '@/components/ui/Badge'
 import { useData } from '@/lib/context/DataContext'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -152,7 +151,7 @@ export default function PurchaseEntryPage() {
               <h1 className="text-3xl font-black text-[#003366] tracking-tighter italic uppercase">Purchase Entry</h1>
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Inbound Stock Registration Engine</p>
            </div>
-           <Badge variant="secondary" className="h-10 px-6 rounded-2xl border-primary/20 bg-primary/5 text-primary font-black italic">PO-PR-240812</Badge>
+           <span className="h-10 px-6 rounded-2xl flex items-center justify-center border border-primary/20 bg-primary/5 text-primary font-black italic text-[11px]">PO-PR-240812</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-8">

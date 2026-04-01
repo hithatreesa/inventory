@@ -1,10 +1,10 @@
 "use client"
 
 import React, { useState, useMemo } from 'react'
-import { 
-  Save, 
-  CheckCircle2, 
-  UserPlus, 
+import {
+  Save,
+  CheckCircle2,
+  UserPlus,
   Plus,
   Info,
   FileUp,
@@ -50,15 +50,15 @@ export default function SalesPage() {
       )
     },
     { header: 'QTY', accessorKey: 'qty', align: 'center', className: 'font-bold' },
-    { 
-      header: 'UNIT PRICE', 
+    {
+      header: 'UNIT PRICE',
       align: 'right',
       className: 'font-bold',
       cell: (item) => `₹${item.unitPrice.toLocaleString()}`
     },
     { header: 'TAX (%)', accessorKey: 'tax', align: 'center', className: 'text-text-secondary font-bold' },
-    { 
-      header: 'TOTAL', 
+    {
+      header: 'TOTAL',
       align: 'right',
       className: 'font-black text-primary italic',
       cell: (item) => `₹${(item.qty * item.unitPrice).toLocaleString()}`
@@ -78,9 +78,9 @@ export default function SalesPage() {
 
   return (
     <div className="space-y-8 pb-12">
-      <SectionHeader 
-        title="Draft Invoice" 
-        prefix="SALES MANAGEMENT" 
+      <SectionHeader
+        title="Draft Invoice"
+        prefix="SALES MANAGEMENT"
         subtitle={`Document Identifier: #INV-2024-00892`}
         actions={headerActions}
       />
@@ -89,7 +89,7 @@ export default function SalesPage() {
         <div className="lg:col-span-2 space-y-8">
           {/* Form Top Row */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="bg-white p-8 rounded-[32px] border border-border-main shadow-sm flex flex-col justify-between h-[220px]">
+            <div className="glass p-8 rounded-[32px] shadow-sm flex flex-col justify-between min-h-[240px]">
               <div className="flex justify-between items-center mb-6">
                 <span className="text-[10px] font-black text-text-secondary uppercase tracking-[0.2em] pl-1">CUSTOMER DETAILS</span>
                 <Button variant="ghost" className="p-0 h-auto text-[10px] font-black uppercase text-primary tracking-widest">+ NEW CUSTOMER</Button>
@@ -107,19 +107,19 @@ export default function SalesPage() {
               <p className="text-[10px] text-text-secondary font-bold mt-6 uppercase tracking-widest opacity-60">128 Business Plaza, Suite 400, NY 10001</p>
             </div>
 
-            <div className="bg-white p-8 rounded-[32px] border border-border-main shadow-sm h-[220px]">
+            <div className="glass p-8 rounded-[32px] shadow-sm min-h-[240px] flex flex-col">
               <span className="text-[10px] font-black text-text-secondary uppercase tracking-[0.2em] pl-1">ORDER LOGISTICS</span>
               <div className="grid grid-cols-2 gap-6 mt-6">
                 <div className="space-y-1">
-                   <label className="text-[10px] font-black text-text-secondary pl-1 uppercase tracking-widest">Entry Date</label>
-                   <Input type="date" defaultValue="2024-05-24" className="h-11" />
+                  <label className="text-[10px] font-black text-text-secondary pl-1 uppercase tracking-widest">Entry Date</label>
+                  <Input type="date" defaultValue="2024-05-24" className="h-11" />
                 </div>
                 <div className="space-y-1">
-                   <label className="text-[10px] font-black text-text-secondary pl-1 uppercase tracking-widest">Due Date</label>
-                   <Input type="date" defaultValue="2024-06-24" className="h-11" />
+                  <label className="text-[10px] font-black text-text-secondary pl-1 uppercase tracking-widest">Due Date</label>
+                  <Input type="date" defaultValue="2024-06-24" className="h-11" />
                 </div>
               </div>
-              <div className="mt-6 flex gap-4 items-end">
+              <div className="mt-auto pt-6 flex gap-4 items-end">
                 <Select label="PAYMENT TERMS" options={['Net 30 Days', 'Net 15 Days', 'Immediate']} />
               </div>
             </div>
@@ -139,7 +139,7 @@ export default function SalesPage() {
 
         {/* Totals Sidebar */}
         <div className="space-y-6">
-          <SummaryPanel 
+          <SummaryPanel
             title="Summary"
             subtotal={subtotal}
             taxTotal={taxTotal}
@@ -149,13 +149,13 @@ export default function SalesPage() {
             footerNote="Authorized signature required for approval. Digital copies sent to secondary billing."
           />
 
-          <SummaryActionCard 
+          <SummaryActionCard
             icon={ExternalLink}
             title="Global Currency: Indian Rupee"
             subtitle="Base Currency: INR"
           />
 
-          <SummaryActionCard 
+          <SummaryActionCard
             variant="dashed"
             icon={FileUp}
             title="Attach External Files"

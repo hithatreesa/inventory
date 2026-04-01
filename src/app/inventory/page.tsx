@@ -20,13 +20,11 @@ import {
    ChevronRight,
    Archive,
    Hash,
-   Info,
-   Warehouse
+   Info
 } from 'lucide-react'
 import { useData } from '@/lib/context/DataContext'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { Badge } from '@/components/ui/Badge'
 import { MetricCard } from '@/components/shared/MetricCard'
 import { cn } from '@/lib/utils'
 
@@ -112,27 +110,43 @@ export default function InventoryPage() {
       <div className="space-y-6 pb-24 animate-in fade-in duration-500 text-text-main">
          {/* TOP HEADER BAR */}
          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-8 rounded-3xl border border-border-main shadow-sm gap-6">
-            <div>
+            <div className="w-full sm:w-auto">
                <div className="flex items-center gap-3">
-                  <h1 className="text-3xl font-black text-[#003366] tracking-tighter italic uppercase underline decoration-primary/20 decoration-4">Inventory</h1>
-                  <Badge variant="secondary" className="h-6 px-3 rounded-full border-primary/20 bg-primary/5 text-primary text-[9px] font-black italic">FY_2425</Badge>
+                  <h1 className="text-3xl font-black text-[#003366] tracking-tighter italic uppercase underline decoration-primary/20 decoration-4">Inventory Management</h1>
                </div>
             </div>
-            <div className="flex flex-wrap gap-4 w-full sm:w-auto">
-               <Button variant="secondary" className="flex-1 sm:flex-none h-12 px-6 rounded-xl font-black text-[10px] tracking-widest uppercase italic bg-white border-gray-100 hover:bg-gray-50 flex items-center justify-center gap-2">
+            <div className="flex items-center gap-2">
+               <Button variant="secondary" className="hidden sm:flex h-9 px-3 rounded-xl font-black text-[9px] tracking-widest uppercase italic bg-white border-gray-100 hover:bg-gray-50 items-center justify-center gap-2">
                   <Plus className="w-4 h-4 text-primary" /> Import
                </Button>
-               <Button variant="secondary" className="flex-1 sm:flex-none h-12 px-6 rounded-xl font-black text-[10px] tracking-widest uppercase italic bg-white border-gray-100 hover:bg-gray-50 flex items-center justify-center gap-2">
+               <Button variant="secondary" className="hidden sm:flex h-9 px-3 rounded-xl font-black text-[9px] tracking-widest uppercase italic bg-white border-gray-100 hover:bg-gray-50 items-center justify-center gap-2">
                   <Download className="w-4 h-4 text-primary" /> Export
                </Button>
-               <Button className="flex-1 sm:flex-none h-12 px-8 rounded-xl font-black text-[10px] tracking-widest uppercase italic shadow-lg shadow-primary/20 flex items-center justify-center gap-2">
+               <Button className="h-9 px-5 rounded-xl font-black text-[9px] tracking-widest uppercase italic shadow-lg shadow-primary/20 flex items-center justify-center gap-2">
                   <Plus className="w-4 h-4" /> Add Item
                </Button>
             </div>
          </div>
 
+         {/* ACTION ROW - ONLY MOBILE */}
+         <div className="flex sm:hidden flex-row gap-2 px-4">
+            <Button
+               variant="secondary"
+               onClick={() => document.getElementById('filter-section')?.scrollIntoView({ behavior: 'smooth' })}
+               className="flex-1 h-9 px-2 rounded-xl font-black text-[9px] tracking-widest uppercase italic bg-white border border-gray-100 hover:bg-gray-50 flex items-center justify-center gap-2"
+            >
+               <Filter className="w-3 h-3 text-primary" /> Filters
+            </Button>
+            <Button variant="secondary" className="flex-1 h-9 px-2 rounded-xl font-black text-[9px] tracking-widest uppercase italic bg-white border border-gray-100 hover:bg-gray-50 flex items-center justify-center gap-2">
+               <Plus className="w-3 h-3 text-primary" /> Import
+            </Button>
+            <Button variant="secondary" className="flex-1 h-9 px-2 rounded-xl font-black text-[9px] tracking-widest uppercase italic bg-white border border-gray-100 hover:bg-gray-50 flex items-center justify-center gap-2">
+               <Download className="w-3 h-3 text-primary" /> Export
+            </Button>
+         </div>
+
          {/* Section 2: KPI Grid */}
-         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6">
+         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
             <MetricCard
                title="Total Items Count"
                value={stats.totalItems}
@@ -166,7 +180,7 @@ export default function InventoryPage() {
          </div>
 
          {/* FILTER SECTION */}
-         <div className="bg-white p-6 rounded-3xl border border-border-main shadow-sm space-y-6">
+         <div id="filter-section" className="bg-white p-6 rounded-3xl border border-border-main shadow-sm space-y-6">
             <div className="flex items-center justify-between border-b border-gray-50 pb-4">
                <div className="flex items-center gap-2">
                   <Filter className="w-4 h-4 text-primary" />
@@ -268,7 +282,7 @@ export default function InventoryPage() {
                            <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-center">Reserved Stock</th>
                            <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-right">Price</th>
                            <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-center">GST %</th>
-                           <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-center">Status Badge</th>
+                           <th className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-center">Status</th>
                            <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-right">Actions</th>
                         </tr>
                      </thead>
@@ -291,7 +305,7 @@ export default function InventoryPage() {
                                  <p className="text-[10px] font-mono font-black text-gray-300 uppercase tracking-widest mt-1.5">{item.sku}</p>
                               </td>
                               <td className="px-6 py-6">
-                                 <Badge variant="secondary" className="text-[9px] font-black tracking-widest italic uppercase border-primary/10 bg-primary/5 text-primary/60">{item.category}</Badge>
+                                 <span className="text-[9px] font-black tracking-widest italic uppercase text-primary/60">{item.category}</span>
                               </td>
                               <td className="px-6 py-6">
                                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic">{item.warehouse || 'Central Facility'}</p>
@@ -313,15 +327,18 @@ export default function InventoryPage() {
                                  <p className="text-sm font-black text-gray-300 tabular-nums italic">{Math.floor(item.stock * 0.12)}</p>
                               </td>
                               <td className="px-6 py-6 text-right font-black italic text-sm text-[#003366] tabular-nums tracking-tighter">
-                                 ₹{item.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                 {'₹'}{item.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                               </td>
                               <td className="px-6 py-6 text-center text-[10px] font-black text-gray-400 italic">
                                  {item.category === 'Hardware' ? '18%' : '12%'}
                               </td>
                               <td className="px-6 py-6 text-center">
-                                 <Badge variant={item.status === 'In Stock' ? 'success' : item.status === 'Low Stock' ? 'warning' : 'error'} className="italic font-black text-[9px] tracking-tighter uppercase px-2.5 h-6 rounded-lg shadow-sm">
+                                 <span className={cn(
+                                    "italic font-black text-[9px] tracking-tighter uppercase px-2.5 h-6 flex items-center justify-center rounded-lg shadow-sm border border-transparent",
+                                    item.status === 'In Stock' ? 'bg-green-50 text-green-600' : item.status === 'Low Stock' ? 'bg-orange-50 text-orange-600' : 'bg-red-50 text-red-600'
+                                 )}>
                                     {item.status}
-                                 </Badge>
+                                 </span>
                               </td>
                               <td className="px-8 py-6 text-right" onClick={(e) => e.stopPropagation()}>
                                  <div className="flex items-center justify-end gap-1">
@@ -422,7 +439,7 @@ export default function InventoryPage() {
                   <div className="bg-primary/5 rounded-[40px] p-10 border border-primary/10 relative overflow-hidden group">
                      <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-1000" />
                      <div className="relative z-10">
-                        <Badge variant="secondary" className="mb-6 font-black italic tracking-widest border-primary/20 bg-white/50 text-primary uppercase text-[9px]">{activeItem.category}</Badge>
+                        <span className="inline-block mb-6 font-black italic tracking-widest text-primary uppercase text-[9px]">{activeItem.category}</span>
                         <h3 className="text-4xl font-black text-[#003366] italic tracking-tighter uppercase leading-tight mb-4">{activeItem.name}</h3>
                         <div className="flex gap-8">
                            <div>
@@ -432,7 +449,10 @@ export default function InventoryPage() {
                            <div className="w-[1px] h-8 bg-[#003366]/10" />
                            <div>
                               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic mb-1">Status</p>
-                              <Badge variant={activeItem.status === 'In Stock' ? 'success' : 'warning'} className="font-black italic px-3 rounded-lg shadow-sm border-none uppercase text-[9px] h-6">{activeItem.status}</Badge>
+                              <span className={cn(
+                                 "font-black italic px-3 rounded-lg shadow-sm uppercase text-[9px] h-6 flex items-center justify-center border border-transparent",
+                                 activeItem.status === 'In Stock' ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'
+                              )}>{activeItem.status}</span>
                            </div>
                         </div>
                      </div>
@@ -510,7 +530,7 @@ export default function InventoryPage() {
                               <span className="text-[10px] font-black text-gray-300 tracking-tighter mr-2">#{i + 1}</span>
                               <span className="text-sm font-black text-[#003366] font-mono tracking-[0.15em] uppercase italic">{activeItem?.sku?.replace('SKU-', '')}-SN{1024 + i}</span>
                            </div>
-                           <Badge variant="success" className="h-5 px-2 rounded-md text-[8px] font-black uppercase italic shadow-sm">In Stock</Badge>
+                           <span className="h-5 px-2 rounded-md text-[8px] font-black uppercase italic shadow-sm bg-green-50 text-green-600 flex items-center justify-center">In Stock</span>
                         </div>
                      ))}
                   </div>

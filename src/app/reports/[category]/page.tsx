@@ -31,7 +31,6 @@ import {
 import { Breadcrumbs } from '@/components/shared/Breadcrumbs'
 import { MetricCard } from '@/components/shared/MetricCard'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -100,7 +99,6 @@ function DetailedReportContent() {
                <div>
                   <div className="flex items-center gap-3 mb-1">
                      <h1 className="text-3xl font-black text-[#003366] tracking-tighter italic uppercase">{reportInfo}</h1>
-                     <Badge variant="secondary" className="h-6 px-3 rounded-full border-primary/20 bg-primary/5 text-primary text-[9px] font-black italic">FILTERED_VIEW</Badge>
                   </div>
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1 italic">Scoped Analytics &rarr; {type.replace('-', ' ')}</p>
                </div>
@@ -153,7 +151,6 @@ function DetailedReportContent() {
          <div className="bg-white rounded-[40px] border border-border-main p-4 sm:p-8 shadow-sm space-y-8 overflow-hidden">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-gray-50 pb-6 gap-4">
                <h3 className="text-xl font-black text-[#003366] italic tracking-tight uppercase leading-none">Diagnostic Ledger</h3>
-               <Badge variant="secondary" className="italic font-black text-[9px] border-primary/10 bg-primary/5 text-primary h-6 px-3">Live Result Set</Badge>
             </div>
 
             <div className="overflow-x-auto min-h-[400px]">
@@ -189,9 +186,12 @@ function DetailedReportContent() {
                               ₹{row.amount}
                            </td>
                            <td className="px-8 py-6 text-right">
-                              <Badge variant={row.status === 'Critical' ? 'error' : row.status === 'Verified' ? 'success' : 'secondary'} className="h-6 px-3 rounded-lg font-black italic text-[9px] uppercase tracking-tighter shadow-sm border-none">
+                              <span className={cn(
+                                 "h-6 px-3 rounded-lg font-black italic text-[9px] uppercase tracking-tighter flex items-center justify-center border border-transparent shadow-sm",
+                                 row.status === 'Critical' ? 'bg-red-50 text-red-600' : row.status === 'Verified' ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-400'
+                               )}>
                                  {row.status}
-                              </Badge>
+                              </span>
                            </td>
                         </tr>
                      ))}

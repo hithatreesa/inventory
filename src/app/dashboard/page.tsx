@@ -29,7 +29,6 @@ import {
    Cell
 } from 'recharts'
 import { useData } from '@/lib/context/DataContext'
-import { Badge } from '@/components/ui/Badge'
 import { MetricCard } from '@/components/shared/MetricCard'
 import { QuickEntryModal } from '@/components/modals/QuickEntryModal'
 import { toast } from 'sonner'

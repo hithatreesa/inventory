@@ -27,9 +27,9 @@ import {
   Pie
 } from 'recharts'
 import { Button } from '@/components/ui/Button'
-import { Badge } from '@/components/ui/Badge'
 import { DataTable, Column } from '@/components/tables/DataTable'
 import { MetricCard } from '@/components/shared/MetricCard'
+import { cn } from '@/lib/utils'
 
 const trendData = [
   { name: 'Mon', electronics: 4000, raw: 2400 },
@@ -85,8 +85,18 @@ export default function StockReportPage() {
       header: 'STATUS',
       align: 'center',
       cell: (item) => {
-        const variant = item.status === 'IN STOCK' ? 'success' : item.status === 'LOW STOCK' ? 'warning' : 'error'
-        return <Badge variant={variant} dot>{item.status}</Badge>
+        return (
+          <span className={cn(
+            "inline-flex items-center gap-2 font-black italic text-[10px] uppercase tracking-widest",
+            item.status === 'IN STOCK' ? 'text-green-600' : item.status === 'LOW STOCK' ? 'text-orange-600' : 'text-red-600'
+          )}>
+            <div className={cn(
+              "w-2 h-2 rounded-full",
+              item.status === 'IN STOCK' ? 'bg-green-600 animate-pulse' : item.status === 'LOW STOCK' ? 'bg-orange-600' : 'bg-red-600'
+            )} />
+            {item.status}
+          </span>
+        )
       }
     },
     {

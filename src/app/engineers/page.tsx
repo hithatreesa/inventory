@@ -27,7 +27,7 @@ export default function EngineerPage() {
       let issued = 0;
       let returned = 0;
       engTransactions.forEach(t => {
-        if (t.type === 'OUTWARD') issued += Number(t.quantity);
+        if (t.type === 'OUTWARD' || t.type === 'ISSUE') issued += Number(t.quantity);
         if (t.type === 'RETURN') returned += Number(t.quantity);
       });
 
@@ -58,7 +58,7 @@ export default function EngineerPage() {
         itemMap[t.item_id] = { taken: 0, returned: 0, name: itemName };
       }
 
-      if (t.type === 'OUTWARD') itemMap[t.item_id].taken += Number(t.quantity);
+      if (t.type === 'OUTWARD' || t.type === 'ISSUE') itemMap[t.item_id].taken += Number(t.quantity);
       if (t.type === 'RETURN') itemMap[t.item_id].returned += Number(t.quantity);
     });
 
@@ -231,7 +231,7 @@ export default function EngineerPage() {
                              <td className="px-6 py-4">
                                 <span className={cn(
                                   "text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md border",
-                                  tx.type === 'OUTWARD' ? "bg-orange-50 text-orange-600 border-orange-100" :
+                                  (tx.type === 'OUTWARD' || tx.type === 'ISSUE') ? "bg-orange-50 text-orange-600 border-orange-100" :
                                   tx.type === 'RETURN' ? "bg-green-50 text-green-600 border-green-100" :
                                   "bg-blue-50 text-blue-600 border-blue-100"
                                 )}>
@@ -239,7 +239,7 @@ export default function EngineerPage() {
                                 </span>
                              </td>
                              <td className="px-6 py-4 font-black text-sm text-[#003366] text-right tabular-nums">
-                                {tx.type === 'OUTWARD' ? '+' : '-'}{tx.quantity}
+                                { (tx.type === 'OUTWARD' || tx.type === 'ISSUE') ? '+' : '-'}{tx.quantity}
                              </td>
                           </tr>
                         )

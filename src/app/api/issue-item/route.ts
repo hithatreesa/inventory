@@ -17,7 +17,8 @@ export async function POST(req: Request) {
       type: 'ISSUE',
       from_warehouse: 'MAIN_STORE',
       to_warehouse: 'ENGINEER',
-      reference: reference || `CHALLAN-${Date.now()}`
+      reference: reference || `CHALLAN-${Date.now()}`,
+      date: new Date().toISOString().split("T")[0]
     })
 
     return NextResponse.json({ success: true, txn })

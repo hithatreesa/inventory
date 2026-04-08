@@ -40,7 +40,7 @@ import { toast } from 'sonner'
 import { useDashboardData } from '@/utils/useDashboardData'
 
 export default function DashboardPage() {
-   const { inventory, logs, transactions } = useData()
+   const { inventory, logs, transactions, engineers } = useData()
    const [isQuickEntryOpen, setIsQuickEntryOpen] = useState(false)
    const [activeMetric, setActiveMetric] = useState<string | null>(null)
 
@@ -70,6 +70,23 @@ export default function DashboardPage() {
 
    const stats = useDashboardData({ data });
 
+   // Aggregate Engineer Stats for the new Status Section
+   const engineerStats = useMemo(() => {
+      return (engineers || []).map(eng => {
+         let taken = 0;
+         let returned = 0;
+         transactions.filter(t => t.engineer_id === eng.id).forEach(t => {
+            if (t.type === 'OUTWARD' || t.type === 'ISSUE') taken += Number(t.quantity);
+            if (t.type === 'RETURN') returned += Number(t.quantity);
+         });
+         return {
+            ...eng,
+            taken,
+            pending: taken - returned
+         };
+      }).filter(eng => eng.taken > 0);
+   }, [engineers, transactions]);
+
    const totalCatSales = stats.categorySales.reduce((sum: number, c: any) => sum + c.value, 0);
    const categorySalesWithPercent = stats.categorySales.map((c: any) => ({
       ...c,
@@ -97,6 +114,7 @@ export default function DashboardPage() {
 
          <QuickEntryModal isOpen={isQuickEntryOpen} onClose={() => setIsQuickEntryOpen(false)} />
 
+         {/* KPI GRID */}
          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
             <MetricCard
                title="Today Sales"
@@ -150,6 +168,48 @@ export default function DashboardPage() {
                onClick={() => setActiveMetric("stock-value")}
             />
          </div>
+
+         {/* NEW: PERSONNEL DEPLOYMENT SECTION (AS REQUESTED) */}
+         {engineerStats.length > 0 && (
+            <div className="w-full">
+               <div className="flex items-center justify-between mb-3 px-1">
+                  <h3 className="text-[10px] font-black text-[#003366] uppercase tracking-[0.2em] italic flex items-center gap-2 opacity-60">
+                     <Activity className="w-3 h-3" /> Personnel Deployment Awareness
+                  </h3>
+               </div>
+               <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar snap-x">
+                  {engineerStats.map((eng, idx) => (
+                     <div key={eng.id || idx} className="min-w-[280px] bg-[#003366] rounded-[24px] p-5 shadow-xl shadow-blue-900/10 flex flex-col justify-between relative overflow-hidden group snap-start">
+                        {/* Decorative Icon */}
+                        <div className="absolute top-4 right-4 w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex flex-col items-center justify-center">
+                           <Package className="w-4 h-4 text-blue-300 opacity-60" />
+                           <span className="text-[9px] font-black text-white leading-none mt-1">{eng.pending}</span>
+                        </div>
+
+                        <div className="relative z-10">
+                           <h2 className="text-xl font-black text-white italic tracking-tight uppercase leading-tight mb-1">
+                              {eng.name}
+                           </h2>
+                           <p className="flex items-center gap-1.5 text-[9px] font-black text-blue-300/80 uppercase tracking-widest italic">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" /> Standby & Active
+                           </p>
+                        </div>
+
+                        <div className="mt-8 pt-4 border-t border-white/10 flex items-center gap-6">
+                           <div className="flex items-baseline gap-2">
+                              <span className="text-[9px] font-black text-blue-300 uppercase tracking-widest italic opacity-60">Taken</span>
+                              <span className="text-lg font-black text-white tabular-nums italic leading-none">{eng.taken}</span>
+                           </div>
+                           <div className="flex items-baseline gap-2">
+                              <span className="text-[9px] font-black text-blue-300 uppercase tracking-widest italic opacity-60">Pending</span>
+                              <span className="text-lg font-black text-yellow-400 tabular-nums italic leading-none">{eng.pending}</span>
+                           </div>
+                        </div>
+                     </div>
+                  ))}
+               </div>
+            </div>
+         )}
 
          {/* SECTION 3: ANALYTICS & MONITORING */}
          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">

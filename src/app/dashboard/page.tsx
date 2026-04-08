@@ -18,7 +18,9 @@ import {
    Boxes,
    PieChart,
    TrendingUp,
-   ShoppingCart
+   ShoppingCart,
+   X,
+   ArrowRight
 } from 'lucide-react'
 import {
    BarChart,
@@ -40,6 +42,7 @@ import { useDashboardData } from '@/utils/useDashboardData'
 export default function DashboardPage() {
    const { inventory, logs, transactions } = useData()
    const [isQuickEntryOpen, setIsQuickEntryOpen] = useState(false)
+   const [activeMetric, setActiveMetric] = useState<string | null>(null)
 
    // Construction of safeData payload formatted for user-provided DashboardDataLayer
    const data = useMemo(() => {
@@ -101,7 +104,7 @@ export default function DashboardPage() {
                trend={`${stats.profitMargin}% margin`}
                icon={<ArrowUpRight className="w-5 h-5" />}
                variant="success"
-               onClick={() => toast.info("Quick View: Today Sales details coming soon")}
+               onClick={() => setActiveMetric("today-sales")}
             />
             <MetricCard
                title="Today Purchases"
@@ -110,7 +113,7 @@ export default function DashboardPage() {
                period="Inbound Value"
                icon={<Boxes className="w-5 h-5" />}
                variant="primary"
-               onClick={() => toast.info("Quick View: Today Purchase details coming soon")}
+               onClick={() => setActiveMetric("today-purchases")}
             />
             <MetricCard
                title="Approvals"
@@ -119,7 +122,7 @@ export default function DashboardPage() {
                period="Pending"
                icon={<Package className="w-5 h-5" />}
                variant="primary"
-               onClick={() => toast.info("Quick View: Pending Approvals coming soon")}
+               onClick={() => setActiveMetric("approvals")}
             />
             <MetricCard
                title="Low Stock"
@@ -128,7 +131,7 @@ export default function DashboardPage() {
                period="Needs reorder"
                icon={<AlertCircle className="w-5 h-5" />}
                variant="warning"
-               onClick={() => toast.info("Quick View: Low Stock details coming soon")}
+               onClick={() => setActiveMetric("low-stock")}
             />
             <MetricCard
                title="Profit"
@@ -136,7 +139,7 @@ export default function DashboardPage() {
                period="Net Today"
                icon={<Zap className="w-5 h-5" />}
                variant="success"
-               onClick={() => toast.info("Quick View: Profit Breakdown coming soon")}
+               onClick={() => setActiveMetric("profit")}
             />
             <MetricCard
                title="Stock Value"
@@ -144,7 +147,7 @@ export default function DashboardPage() {
                period="Inventory worth"
                icon={<Package2 className="w-5 h-5" />}
                variant="primary"
-               onClick={() => toast.info("Quick View: Valuation details coming soon")}
+               onClick={() => setActiveMetric("stock-value")}
             />
          </div>
 
@@ -329,6 +332,225 @@ export default function DashboardPage() {
                </div>
             </div>
          </div>
+
+         <DashboardMetricModal 
+            type={activeMetric} 
+            onClose={() => setActiveMetric(null)} 
+            data={data}
+            stats={stats}
+         />
       </div>
    )
+}
+
+/* ==========================================================================
+   DRILL-DOWN MODAL COMPONENT
+   ========================================================================== */
+
+function DashboardMetricModal({ type, onClose, data, stats }: any) {
+   if (!type) return null;
+
+   const title = type.replace(/-/g, ' ').toUpperCase();
+
+   const renderContent = () => {
+      switch (type) {
+         case 'today-sales': return <SalesDetailView data={data} />;
+         case 'today-purchases': return <PurchasesDetailView data={data} />;
+         case 'approvals': return <ApprovalsDetailView data={data} />;
+         case 'low-stock': return <LowStockDetailView stats={stats} />;
+         case 'profit': return <ProfitDetailView stats={stats} data={data} />;
+         case 'stock-value': return <ValuationDetailView stats={stats} />;
+         default: return null;
+      }
+   }
+
+   return (
+      <div className="fixed inset-0 bg-[#003366]/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+         <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[80vh] animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="p-6 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
+               <div>
+                  <h2 className="text-xl font-black text-[#003366] italic tracking-tight uppercase flex items-center gap-3">
+                     <Zap className="w-5 h-5 opacity-40" /> {title} DRILL-DOWN
+                  </h2>
+               </div>
+               <button onClick={onClose} className="w-10 h-10 rounded-xl hover:bg-gray-100 flex items-center justify-center transition-colors">
+                  <X className="w-5 h-5 text-gray-400" />
+               </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-auto p-6 custom-scrollbar">
+               {renderContent()}
+            </div>
+         </div>
+      </div>
+   );
+}
+
+function SalesDetailView({ data }: any) {
+   return (
+      <div className="space-y-4">
+         <table className="w-full text-left">
+            <thead>
+               <tr className="border-b border-gray-100">
+                  <th className="py-2 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Item Info</th>
+                  <th className="py-2 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-center">Qty</th>
+                  <th className="py-2 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-right">Revenue</th>
+               </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+               {data.sales.length > 0 ? data.sales.map((sale: any, idx: number) => (
+                  <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
+                     <td className="py-4">
+                        <p className="text-xs font-black text-[#003366] italic uppercase">{sale.items[0]?.name || 'Unknown'}</p>
+                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-1">Ref: {sale.date}</p>
+                     </td>
+                     <td className="py-4 text-center">
+                        <span className="text-xs font-black tabular-nums">{sale.items[0]?.qty}</span>
+                     </td>
+                     <td className="py-4 text-right">
+                        <span className="text-xs font-black text-green-600 tabular-nums">₹{sale.total.toLocaleString()}</span>
+                     </td>
+                  </tr>
+               )) : (
+                  <tr>
+                     <td colSpan={3} className="py-12 text-center opacity-30 text-[10px] font-black uppercase tracking-[0.2em] italic">No sales recorded today</td>
+                  </tr>
+               )}
+            </tbody>
+         </table>
+      </div>
+   );
+}
+
+function PurchasesDetailView({ data }: any) {
+   return (
+      <div className="space-y-4">
+         <table className="w-full text-left">
+            <thead>
+               <tr className="border-b border-gray-100">
+                  <th className="py-2 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Batch Info</th>
+                  <th className="py-2 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-right">Value</th>
+               </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+               {data.purchases.length > 0 ? data.purchases.map((p: any, idx: number) => (
+                  <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
+                     <td className="py-4">
+                        <p className="text-xs font-black text-[#003366] italic uppercase">PO BATCH #{idx + 1}</p>
+                        <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-1">Date: {p.date}</p>
+                     </td>
+                     <td className="py-4 text-right">
+                        <span className="text-xs font-black text-[#003366] tabular-nums">₹{p.total.toLocaleString()}</span>
+                     </td>
+                  </tr>
+               )) : (
+                  <tr>
+                     <td colSpan={2} className="py-12 text-center opacity-30 text-[10px] font-black uppercase tracking-[0.2em] italic">No purchases recorded today</td>
+                  </tr>
+               )}
+            </tbody>
+         </table>
+      </div>
+   );
+}
+
+function ApprovalsDetailView({ data }: any) {
+   return (
+      <div className="space-y-4">
+         {data.approvals.length > 0 ? data.approvals.map((app: any, idx: number) => (
+            <div key={idx} className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100 flex justify-between items-center group hover:bg-white hover:shadow-lg transition-all">
+               <div>
+                  <p className="text-xs font-black text-[#003366] italic uppercase">{app.type} APPROVAL REQUIRED</p>
+                  <p className="text-[8px] font-black text-blue-600/70 uppercase tracking-widest mt-1">Ref: {app.reference || 'N/A'}</p>
+               </div>
+               <button className="px-4 py-2 bg-[#003366] text-white text-[8px] font-black uppercase tracking-widest italic rounded-xl opacity-0 group-hover:opacity-100 transition-opacity">
+                  Review
+               </button>
+            </div>
+         )) : (
+            <div className="py-12 text-center opacity-30 text-[10px] font-black uppercase tracking-[0.2em] italic">No approvals pending</div>
+         )}
+      </div>
+   );
+}
+
+function LowStockDetailView({ stats }: any) {
+   return (
+      <div className="space-y-4">
+         {stats.reorderItems.length > 0 ? stats.reorderItems.map((item: any, idx: number) => (
+            <div key={idx} className="p-4 bg-orange-50/50 rounded-2xl border border-orange-100 flex justify-between items-center bg-white hover:shadow-md transition-all">
+               <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600">
+                     <AlertCircle className="w-5 h-5" />
+                  </div>
+                  <div>
+                     <p className="text-xs font-black text-[#003366] italic uppercase">{item.name}</p>
+                     <p className="text-[8px] font-black text-orange-600 uppercase tracking-widest mt-1">Current Stock: {item.qty} / Min: {item.reorderLevel}</p>
+                  </div>
+               </div>
+               <button className="px-4 py-2 bg-orange-600 text-white text-[8px] font-black uppercase tracking-widest italic rounded-xl shadow-lg shadow-orange-600/20">
+                  Reorder
+               </button>
+            </div>
+         )) : (
+            <div className="py-12 text-center opacity-30 text-[10px] font-black uppercase tracking-[0.2em] italic">All stock levels healthy</div>
+         )}
+      </div>
+   );
+}
+
+function ProfitDetailView({ stats, data }: any) {
+   return (
+      <div className="space-y-6">
+         <div className="grid grid-cols-2 gap-4">
+            <div className="p-6 bg-green-50 rounded-3xl border border-green-100">
+               <p className="text-[10px] font-black text-green-600 uppercase tracking-widest italic mb-2">Total Revenue</p>
+               <p className="text-3xl font-black text-[#003366] italic tracking-tighter tabular-nums">₹{stats.todaySales.toLocaleString()}</p>
+            </div>
+            <div className="p-6 bg-blue-50 rounded-3xl border border-blue-100">
+               <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest italic mb-2">Net Profit Today</p>
+               <p className="text-3xl font-black text-[#003366] italic tracking-tighter tabular-nums">₹{stats.profitToday.toLocaleString()}</p>
+            </div>
+         </div>
+         <div className="p-4 bg-gray-50/50 rounded-2xl border border-gray-100">
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic mb-4">Daily Margin Analysis</p>
+            <div className="h-4 bg-white rounded-full overflow-hidden border border-gray-100">
+               <div 
+                  className="h-full bg-green-500 rounded-full" 
+                  style={{ width: `${stats.profitMargin}%` }}
+               />
+            </div>
+            <div className="flex justify-between mt-2">
+               <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Efficiency: {stats.profitMargin}%</span>
+               <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Target: 30%</span>
+            </div>
+         </div>
+      </div>
+   );
+}
+
+function ValuationDetailView({ stats }: any) {
+   return (
+      <div className="space-y-4">
+         <div className="p-8 bg-primary text-white rounded-[32px] overflow-hidden relative mb-4">
+            <div className="absolute right-0 top-0 w-32 h-32 bg-white/5 rounded-full blur-2xl -mr-10 -mt-10" />
+            <p className="text-[10px] font-black uppercase tracking-widest italic opacity-60">Total Inventory Worth</p>
+            <h3 className="text-5xl font-black italic tracking-tighter mt-2 tabular-nums">₹{stats.stockValuation.toLocaleString()}</h3>
+         </div>
+         
+         <div className="grid grid-cols-1 gap-2">
+            {stats.categorySales.map((cat: any, idx: number) => (
+               <div key={idx} className="p-4 bg-white rounded-2xl border border-gray-100 flex justify-between items-center group hover:border-primary/20 transition-all">
+                  <div className="flex items-center gap-3">
+                     <div className="w-2 h-2 rounded-full bg-primary/40 group-hover:bg-primary transition-colors" />
+                     <span className="text-xs font-black text-[#003366] italic uppercase">{cat.name}</span>
+                  </div>
+                  <span className="text-xs font-black tabular-nums text-gray-600">Contribution: High</span>
+               </div>
+            ))}
+         </div>
+      </div>
+   );
 }

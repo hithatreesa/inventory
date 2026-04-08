@@ -195,14 +195,14 @@ export default function DashboardPage() {
                            </p>
                         </div>
 
-                        <div className="mt-8 pt-4 border-t border-white/10 flex items-center gap-3">
-                           <div className="flex items-center text-[9px] font-black text-blue-300 uppercase tracking-widest italic">
-                              <span className="opacity-50">TAKEN:</span>
-                              <span className="text-white text-base font-black tabular-nums lowercase">{eng.taken}</span>
+                        <div className="mt-8 pt-4 border-t border-white/10 flex items-center justify-between">
+                           <div className="flex items-center gap-2">
+                              <span className="text-lg font-black text-white tabular-nums italic leading-none">{eng.taken}</span>
+                              <span className="text-[9px] font-black text-blue-300 uppercase tracking-widest italic opacity-50">Taken</span>
                            </div>
-                           <div className="flex items-center text-[9px] font-black text-blue-300 uppercase tracking-widest italic translate-x-1">
-                              <span className="opacity-50 ml-2">PENDING:</span>
-                              <span className="text-yellow-400 text-base font-black tabular-nums lowercase">{eng.pending}</span>
+                           <div className="flex items-center gap-2">
+                              <span className="text-lg font-black text-yellow-400 tabular-nums italic leading-none">{eng.pending}</span>
+                              <span className="text-[9px] font-black text-blue-300 uppercase tracking-widest italic opacity-50">Pending</span>
                            </div>
                         </div>
                      </div>

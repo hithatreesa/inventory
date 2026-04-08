@@ -215,106 +215,106 @@ export default function DashboardPage() {
          )}
 
          {/* SECTION 3: ANALYTICS & MONITORING */}
-<div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
 
-   {/* Sales vs Purchase Trend */}
-   <div className="lg:col-span-8 bg-white rounded-2xl border border-border-main shadow-sm flex flex-col overflow-hidden">
-      <div className="p-4 border-b border-gray-50 flex items-center justify-between bg-gray-50/20">
-         <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-primary/10 rounded-2xl flex items-center justify-center text-primary"><BarChart3 className="w-5 h-5" /></div>
-            <div>
-               <h4 className="text-sm font-black text-[#003366] italic tracking-tight uppercase">Operational Dynamics</h4>
-               <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">Category-wise Sales Volume</p>
+            {/* Sales vs Purchase Trend */}
+            <div className="lg:col-span-8 bg-white rounded-2xl border border-border-main shadow-sm flex flex-col overflow-hidden">
+               <div className="p-4 border-b border-gray-50 flex items-center justify-between bg-gray-50/20">
+                  <div className="flex items-center gap-4">
+                     <div className="w-10 h-10 bg-primary/10 rounded-2xl flex items-center justify-center text-primary"><BarChart3 className="w-5 h-5" /></div>
+                     <div>
+                        <h4 className="text-sm font-black text-[#003366] italic tracking-tight uppercase">Operational Dynamics</h4>
+                        <p className="text-sm font-bold text-gray-400 uppercase tracking-widest">Category-wise Sales Volume</p>
+                     </div>
+                  </div>
+                  <div className="flex gap-4">
+                     <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-[#003366]" />
+                        <span className="text-sm font-black text-gray-400 uppercase tracking-widest">Sales Distribution</span>
+                     </div>
+                  </div>
+               </div>
+               <div className="p-4 flex-1 min-h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                     <BarChart data={categorySalesWithPercent} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                        <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#F1F5F9" />
+                        <XAxis
+                           dataKey="nameWithPercent"
+                           axisLine={false}
+                           tickLine={false}
+                           tick={{ fill: '#94A3B8', fontSize: 10, fontWeight: 900 }}
+                           interval={0}
+                        />
+                        <YAxis
+                           axisLine={false}
+                           tickLine={false}
+                           tick={{ fill: '#94A3B8', fontSize: 12, fontWeight: 900 }}
+                        />
+                        <Tooltip
+                           cursor={{ fill: 'rgba(0, 51, 102, 0.03)' }}
+                           contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', fontStyle: 'italic', fontWeight: 900 }}
+                        />
+                        <Bar dataKey="value" radius={[8, 8, 0, 0]} barSize={32}>
+                           {stats.categorySales.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill="#003366" />)}
+                        </Bar>
+                     </BarChart>
+                  </ResponsiveContainer>
+               </div>
+            </div>
+
+            {/* ATTENTION NEEDED PANEL */}
+            <div className="lg:col-span-4 bg-[#fff9f2] rounded-2xl border border-orange-100 shadow-sm flex flex-col overflow-hidden">
+               <div className="p-4 border-b border-orange-100/50 bg-orange-50/30">
+                  <h4 className="text-sm font-black text-orange-800 italic tracking-tight uppercase">Attention Needed</h4>
+                  <p className="text-[10px] font-bold text-orange-600/60 uppercase tracking-widest">Immediate Action Items</p>
+               </div>
+               <div className="p-3 flex-1 overflow-y-auto max-h-[300px] custom-scrollbar">
+                  <div className="space-y-2">
+                     {stats.lowStockCount > 0 && (
+                        <div className="flex gap-4 group p-3 bg-white rounded-xl border border-orange-100 hover:shadow-md transition-all cursor-pointer">
+                           <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center text-orange-600">
+                              <AlertCircle className="w-4 h-4" />
+                           </div>
+                           <div className="flex-1">
+                              <p className="text-xs font-black text-orange-900 italic uppercase leading-none">{stats.lowStockCount} Items Low Stock</p>
+                              <p className="text-[8px] font-black text-orange-600/70 uppercase tracking-widest mt-1">Review inventory limits</p>
+                           </div>
+                        </div>
+                     )}
+                     {stats.pendingApprovals > 0 && (
+                        <div className="flex gap-4 group p-3 bg-white rounded-xl border border-blue-100 hover:shadow-md transition-all cursor-pointer">
+                           <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
+                              <FileText className="w-4 h-4" />
+                           </div>
+                           <div className="flex-1">
+                              <p className="text-xs font-black text-blue-900 italic uppercase leading-none">{stats.pendingApprovals} Approvals Pending</p>
+                              <p className="text-[8px] font-black text-blue-600/70 uppercase tracking-widest mt-1">Pending clearance</p>
+                           </div>
+                        </div>
+                     )}
+                     {stats.deadStock.length > 0 && (
+                        <div className="flex gap-4 group p-3 bg-white rounded-xl border border-red-100 hover:shadow-md transition-all cursor-pointer">
+                           <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center text-red-600">
+                              <Zap className="w-4 h-4" />
+                           </div>
+                           <div className="flex-1">
+                              <p className="text-xs font-black text-red-900 italic uppercase leading-none">{stats.deadStock.length} Dead Stock Detected</p>
+                              <p className="text-[8px] font-black text-red-600/70 uppercase tracking-widest mt-1">Idle &gt; 30 days</p>
+                           </div>
+                        </div>
+                     )}
+                     {stats.lowStockCount === 0 && stats.pendingApprovals === 0 && stats.deadStock.length === 0 && (
+                        <div className="flex flex-col items-center justify-center p-8 text-center text-green-600/60">
+                           <ClipboardCheck className="w-12 h-12 mb-4 text-green-500" />
+                           <p className="text-sm font-black uppercase italic tracking-widest">All clear! No urgent actions required.</p>
+                        </div>
+                     )}
+                  </div>
+               </div>
             </div>
          </div>
-         <div className="flex gap-4">
-            <div className="flex items-center gap-2">
-               <div className="w-2 h-2 rounded-full bg-[#003366]" />
-               <span className="text-sm font-black text-gray-400 uppercase tracking-widest">Sales Distribution</span>
-            </div>
-         </div>
-      </div>
-      <div className="p-4 flex-1 min-h-[300px]">
-         <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={categorySalesWithPercent} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-               <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#F1F5F9" />
-               <XAxis
-                  dataKey="nameWithPercent"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#94A3B8', fontSize: 10, fontWeight: 900 }}
-                  interval={0}
-               />
-               <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#94A3B8', fontSize: 12, fontWeight: 900 }}
-               />
-               <Tooltip
-                  cursor={{ fill: 'rgba(0, 51, 102, 0.03)' }}
-                  contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', fontStyle: 'italic', fontWeight: 900 }}
-               />
-               <Bar dataKey="value" radius={[8, 8, 0, 0]} barSize={32}>
-                  {stats.categorySales.map((entry: any, index: number) => <Cell key={`cell-${index}`} fill="#003366" />)}
-               </Bar>
-            </BarChart>
-         </ResponsiveContainer>
-      </div>
-   </div>
 
-   {/* ATTENTION NEEDED PANEL */}
-   <div className="lg:col-span-4 bg-[#fff9f2] rounded-2xl border border-orange-100 shadow-sm flex flex-col overflow-hidden">
-      <div className="p-4 border-b border-orange-100/50 bg-orange-50/30">
-         <h4 className="text-sm font-black text-orange-800 italic tracking-tight uppercase">Attention Needed</h4>
-         <p className="text-[10px] font-bold text-orange-600/60 uppercase tracking-widest">Immediate Action Items</p>
-      </div>
-      <div className="p-3 flex-1 overflow-y-auto max-h-[300px] custom-scrollbar">
-         <div className="space-y-2">
-            {stats.lowStockCount > 0 && (
-               <div className="flex gap-4 group p-3 bg-white rounded-xl border border-orange-100 hover:shadow-md transition-all cursor-pointer">
-                  <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center text-orange-600">
-                     <AlertCircle className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1">
-                     <p className="text-xs font-black text-orange-900 italic uppercase leading-none">{stats.lowStockCount} Items Low Stock</p>
-                     <p className="text-[8px] font-black text-orange-600/70 uppercase tracking-widest mt-1">Review inventory limits</p>
-                  </div>
-               </div>
-            )}
-            {stats.pendingApprovals > 0 && (
-               <div className="flex gap-4 group p-3 bg-white rounded-xl border border-blue-100 hover:shadow-md transition-all cursor-pointer">
-                  <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
-                     <FileText className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1">
-                     <p className="text-xs font-black text-blue-900 italic uppercase leading-none">{stats.pendingApprovals} Approvals Pending</p>
-                     <p className="text-[8px] font-black text-blue-600/70 uppercase tracking-widest mt-1">Pending clearance</p>
-                  </div>
-               </div>
-            )}
-            {stats.deadStock.length > 0 && (
-               <div className="flex gap-4 group p-3 bg-white rounded-xl border border-red-100 hover:shadow-md transition-all cursor-pointer">
-                  <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center text-red-600">
-                     <Zap className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1">
-                     <p className="text-xs font-black text-red-900 italic uppercase leading-none">{stats.deadStock.length} Dead Stock Detected</p>
-                     <p className="text-[8px] font-black text-red-600/70 uppercase tracking-widest mt-1">Idle &gt; 30 days</p>
-                  </div>
-               </div>
-            )}
-            {stats.lowStockCount === 0 && stats.pendingApprovals === 0 && stats.deadStock.length === 0 && (
-               <div className="flex flex-col items-center justify-center p-8 text-center text-green-600/60">
-                  <ClipboardCheck className="w-12 h-12 mb-4 text-green-500" />
-                  <p className="text-sm font-black uppercase italic tracking-widest">All clear! No urgent actions required.</p>
-               </div>
-            )}
-         </div>
-      </div>
-   </div>
-</div>
-
-{/* SECTION 5: ACTION PANELS (TOP SELLING & DEAD STOCK) */ }
+         {/* SECTION 5: ACTION PANELS (TOP SELLING & DEAD STOCK) */}
          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pb-8">
             {/* Top Selling */}
             <div className="bg-white rounded-2xl border border-border-main p-4 shadow-sm">

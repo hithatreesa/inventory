@@ -16,7 +16,8 @@ export async function POST(req: Request) {
       type: 'ADJUSTMENT',
       from_warehouse: null,
       to_warehouse: null,
-      reference: reference || `ADJ-${Date.now()}`
+      reference: reference || `ADJ-${Date.now()}`,
+      date: new Date().toISOString().split("T")[0]
     })
 
     return NextResponse.json({ success: true, txn })

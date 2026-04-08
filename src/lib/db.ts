@@ -22,8 +22,9 @@ export interface DbEngineer {
 export interface DbTransaction {
   id: string
   item_id: string
-  type: "PURCHASE" | "ISSUE" | "RETURN" | "ADJUSTMENT"
+  type: "PURCHASE" | "ISSUE" | "RETURN" | "ADJUSTMENT" | "SALE"
   quantity: number
+  price?: number
   from_warehouse: string | null
   to_warehouse: string | null
   engineer_id?: string

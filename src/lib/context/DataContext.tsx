@@ -52,6 +52,7 @@ interface DataContextType {
   addItem: (item: any) => Promise<void>
   editItem: (id: string, updates: any) => Promise<void>
   deleteItems: (ids: string[]) => Promise<void>
+  createTransaction: (txn: any) => Promise<void>
   // Legacy aliases
   issueAsset: (itemId: string, engineerId: string, quantity: number) => Promise<void>
   returnAsset: (txnId: string) => Promise<void>
@@ -168,6 +169,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const createTransaction = async (txn: any) => {
+    const res = await fetch('/api/transactions', {
+      method: 'POST',
+      body: JSON.stringify(txn)
+    })
+    if (res.ok) {
+      addLog(`${txn.type}: Item ${txn.item_id} (Qty: ${txn.quantity})`)
+      await fetchData()
+    } else {
+      const data = await res.json()
+      throw new Error(data.error || 'Failed to record transaction')
+    }
+  }
+
   const deleteItems = async (ids: string[]) => {
     const res = await fetch('/api/items', {
       method: 'DELETE',
@@ -195,6 +210,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     addItem,
     editItem,
     deleteItems,
+    createTransaction,
     issueAsset: (itemId: string, engineerId: string, quantity: number) => outwardItem(itemId, engineerId, quantity),
     returnAsset: async (txnId: string) => {
       const t = transactions.find(tx => tx.id === txnId)

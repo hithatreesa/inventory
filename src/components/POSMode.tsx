@@ -46,6 +46,7 @@ export default function POSMode({ onExit }: POSModeProps) {
         item_id: item.id,
         quantity: item.qty,
         price: item.selling_price,
+        date: new Date().toISOString().split("T")[0],
         created_at: new Date()
       });
     });

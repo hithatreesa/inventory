@@ -20,12 +20,12 @@ import { toast } from 'sonner'
 
 const navItems = [
   { name: 'DASHBOARD', icon: LayoutDashboard, href: '/dashboard' },
+  { name: 'ENGINEERS', icon: User, href: '/engineers' },
   { name: 'INVENTORY', icon: Package, href: '/inventory' },
   { name: 'POS', icon: Zap, href: '/pos' },
   { name: 'PURCHASES', icon: ShoppingCart, href: '/purchase' },
   { name: 'SALES', icon: TrendingUp, href: '/sales' },
   { name: 'REPORTS', icon: FileText, href: '/reports' },
-  { name: 'SETTINGS', icon: Settings, href: '/settings' },
 ]
 
 export function Sidebar() {
@@ -98,7 +98,7 @@ export function Sidebar() {
                   isActive ? "text-white" : "text-text-secondary group-hover:text-primary"
                 )} />
                 {!isCollapsed && (
-                  <span className="text-[10px] font-black tracking-[0.2em] whitespace-nowrap animate-in fade-in duration-300">{item.name}</span>
+                  <span className="text-sm font-black tracking-[0.2em] whitespace-nowrap animate-in fade-in duration-300">{item.name}</span>
                 )}
                 {isActive && !isCollapsed && (
                   <div className="absolute right-0 top-0 bottom-0 w-1 bg-white/20" />
@@ -114,14 +114,14 @@ export function Sidebar() {
             "flex items-center gap-3 p-4 bg-white rounded-[20px] border border-gray-100 shadow-sm cursor-pointer hover:bg-white/80 transition-all overflow-hidden",
             isCollapsed && "p-2 justify-center"
           )}>
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-white font-black text-xs shadow-lg shadow-primary/20 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-white font-black text-sm shadow-lg shadow-primary/20 shrink-0">
               AT
             </div>
             {!isCollapsed && (
               <>
                 <div className="flex-1 min-w-0 animate-in fade-in duration-500">
-                  <p className="text-[11px] font-black text-text-main truncate italic">Alexander Terait</p>
-                  <p className="text-[9px] font-bold text-text-secondary uppercase tracking-tighter opacity-60">System Admin</p>
+                  <p className="text-sm font-black text-text-main truncate italic">Alexander Terait</p>
+                  <p className="text-sm font-bold text-text-secondary uppercase tracking-tighter opacity-60">System Admin</p>
                 </div>
                 <Settings className="w-3.5 h-3.5 text-text-secondary" />
               </>
@@ -138,7 +138,7 @@ export function Sidebar() {
             >
               <LogOut className="w-4 h-4 group-hover:-translate-x-1 transition-transform shrink-0" />
               {!isCollapsed && (
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] animate-in fade-in duration-300">LOGOUT</span>
+                <span className="text-sm font-black uppercase tracking-[0.2em] animate-in fade-in duration-300">LOGOUT</span>
               )}
             </button>
           </div>

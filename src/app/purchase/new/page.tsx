@@ -32,7 +32,7 @@ interface PurchaseLine {
 }
 
 export default function PurchaseEntryPage() {
-  const { items } = useData()
+  const { inventory } = useData()
   const [header, setHeader] = useState({
     supplier: '',
     date: new Date().toISOString().split('T')[0],
@@ -65,10 +65,10 @@ export default function PurchaseEntryPage() {
   }, [lines])
 
   const addLine = (productId?: string) => {
-    const item = items.find(i => i.id === productId)
+    const item = inventory.find(i => i.id === productId)
     const newLine: PurchaseLine = {
       id: Math.random().toString(36).substr(2, 9),
-      productId: item?.id || '',
+      productId: item?.id?.toString() || '',
       name: item?.name || '',
       sku: item?.sku || '',
       qty: 1,
@@ -245,9 +245,9 @@ export default function PurchaseEntryPage() {
                           <select 
                             value={line.productId}
                             onChange={(e) => {
-                              const item = items.find(i => i.id === e.target.value)
+                              const item = inventory.find(i => i.id === e.target.value)
                               updateLine(line.id, { 
-                                productId: item?.id, 
+                                productId: item?.id?.toString(), 
                                 name: item?.name, 
                                 sku: item?.sku,
                                 pPrice: item?.price || 0,
@@ -259,7 +259,7 @@ export default function PurchaseEntryPage() {
                             className="bg-transparent font-black italic text-sm text-[#003366] focus:outline-none w-full appearance-none"
                           >
                             <option value="">Select Item...</option>
-                            {items.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
+                            {inventory.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                           </select>
                           <p className="text-[10px] text-gray-400 font-mono mt-1 font-bold">{line.sku || 'SKU_UNKNOWN'}</p>
                           {line.isSerialized && (

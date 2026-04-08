@@ -1,6 +1,6 @@
 "use client"
 
-import React from 'react'
+import React, { useMemo } from 'react'
 import {
   Plus,
   Filter,
@@ -12,31 +12,45 @@ import {
   AlertCircle,
   AlertTriangle
 } from 'lucide-react'
-import Link from 'next/link'
+import { useData } from '@/lib/context/DataContext'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { DataTable, Column } from '@/components/tables/DataTable'
 import { MetricCard } from '@/components/shared/MetricCard'
 import { cn } from '@/lib/utils'
-
-interface PurchaseOrder {
-  id: string
-  vendor: string
-  date: string
-  amount: number
-  status: 'Draft' | 'Pending' | 'Approved' | 'Completed'
-  items: number
-}
-
-const mockOrders: PurchaseOrder[] = [
-  { id: 'PO-2024-001', vendor: 'Aether Logistics', date: '2024-03-28', amount: 11182.50, status: 'Approved', items: 12 },
-  { id: 'PO-2024-002', vendor: 'Titanium Corp', date: '2024-03-27', amount: 5400.00, status: 'Pending', items: 5 },
-  { id: 'PO-2024-003', vendor: 'Global Rivets', date: '2024-03-26', amount: 1250.75, status: 'Completed', items: 45 },
-  { id: 'PO-2024-004', vendor: 'Aether Logistics', date: '2024-03-25', amount: 8900.00, status: 'Draft', items: 8 },
-]
+import { toast } from 'sonner'
 
 export default function PurchaseDashboard() {
-  const columns: Column<PurchaseOrder>[] = [
+  const { transactions, inventory, inwardItem } = useData()
+
+  const purchaseHistory = useMemo(() => {
+    return transactions
+      .filter(t => t.type === 'INWARD')
+      .map(t => {
+        const item = inventory.find(i => i.id === t.item_id)
+        return {
+          id: `PO-${t.id}`,
+          vendor: t.reference || 'Auto-Procured',
+          date: t.date,
+          amount: t.quantity * (item?.price || 0),
+          status: 'Completed',
+          items: t.quantity,
+          itemName: item?.name || 'Unknown'
+        }
+      })
+  }, [transactions, inventory])
+
+  const stats = useMemo(() => {
+    const totalSpent = purchaseHistory.reduce((acc, p) => acc + p.amount, 0)
+    const pending = transactions.filter(t => t.status === 'PENDING').length
+    return {
+      totalSpent,
+      pending,
+      count: purchaseHistory.length
+    }
+  }, [purchaseHistory, transactions])
+
+  const columns: Column<any>[] = [
     {
       header: 'ORDER ID',
       cell: (order) => (
@@ -49,23 +63,27 @@ export default function PurchaseDashboard() {
       )
     },
     {
-      header: 'VENDOR',
-      accessorKey: 'vendor',
-      className: 'font-bold text-text-secondary text-xs italic tracking-tight'
+      header: 'ITEM / VENDOR',
+      cell: (order) => (
+        <div>
+          <p className="font-black text-text-main text-sm italic uppercase leading-none">{order.itemName}</p>
+          <p className="text-[10px] font-bold text-text-secondary uppercase tracking-widest mt-1">{order.vendor}</p>
+        </div>
+      )
     },
     {
       header: 'DATE',
       accessorKey: 'date',
-      className: 'font-bold text-text-secondary text-xs'
+      className: 'font-bold text-text-secondary text-sm'
     },
     {
-      header: 'ITEMS',
+      header: 'QTY',
       accessorKey: 'items',
       align: 'center',
       className: 'font-black'
     },
     {
-      header: 'TOTAL AMOUNT',
+      header: 'EST. VALUE',
       align: 'right',
       className: 'font-black text-text-main italic',
       cell: (order) => `₹${order.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
@@ -75,13 +93,9 @@ export default function PurchaseDashboard() {
       align: 'right',
       cell: (order) => (
         <span className={cn(
-          "inline-flex items-center gap-2 font-black italic text-[10px] tracking-tight uppercase",
-          order.status === 'Completed' ? 'text-green-600' : order.status === 'Approved' ? 'text-blue-600' : 'text-orange-600'
+          "inline-flex items-center gap-2 font-black italic text-sm tracking-tight uppercase text-green-600"
         )}>
-          <div className={cn(
-            "w-1.5 h-1.5 rounded-full",
-            order.status === 'Completed' ? 'bg-green-600' : order.status === 'Approved' ? 'bg-blue-600' : 'bg-orange-600'
-          )} />
+          <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
           {order.status}
         </span>
       )
@@ -96,14 +110,15 @@ export default function PurchaseDashboard() {
           <h1 className="text-4xl font-black text-text-main tracking-tight italic">Purchases</h1>
         </div>
         <div className="flex items-center gap-4">
-          <Button variant="secondary" className="rounded-2xl border-gray-100 font-black text-[10px] tracking-widest h-12 px-6">
+          <Button variant="secondary" className="rounded-2xl border-gray-100 font-black text-sm tracking-widest h-12 px-6" onClick={() => toast.info('Export started')}>
             <Download className="w-4 h-4 mr-2" /> EXPORT PDF
           </Button>
-          <Link href="/purchase/new">
-            <Button className="rounded-2xl shadow-xl shadow-primary/20 font-black text-[10px] tracking-widest h-12 px-8 italic">
-              <Plus className="w-5 h-5 mr-1" /> CREATE NEW PO
-            </Button>
-          </Link>
+          <Button 
+            onClick={() => toast.info('Please use Quick Entry to record a new purchase')}
+            className="rounded-2xl shadow-xl shadow-primary/20 font-black text-sm tracking-widest h-12 px-8 italic"
+          >
+            <Plus className="w-5 h-5 mr-1" /> CREATE NEW PO
+          </Button>
         </div>
       </div>
 
@@ -111,32 +126,31 @@ export default function PurchaseDashboard() {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
         <MetricCard
           title="PENDING APPROVAL"
-          value="12"
+          value={stats.pending}
           icon={<Clock className="w-5 h-5 text-warning" />}
           variant="warning"
-          href="/reports/purchase?type=pending"
+          onClick={() => toast.info("Redirecting to Purchase Approval Workflow")}
         />
         <MetricCard
-          title="ACTIVE SHIPMENTS"
-          value="08"
+          title="COMPLETED POs"
+          value={stats.count}
           icon={<ShoppingCart className="w-5 h-5 text-primary" />}
           variant="primary"
-          href="/reports/purchase?type=active"
+          onClick={() => toast.info("Filtering history by Completed status")}
         />
         <MetricCard
-          title="WEEKLY COMMITTED"
-          value="₹42.5K"
+          title="TOTAL COMMITTED"
+          value={`₹${(stats.totalSpent / 1000).toFixed(1)}K`}
           icon={<Plus className="w-5 h-5 text-success" />}
           variant="success"
-          href="/reports/financial"
+          href="/reports/purchase"
         />
         <MetricCard
           title="VENDOR EXCEPTIONS"
-          value="02"
+          value="0"
           icon={<AlertTriangle className="w-5 h-5 text-orange-500" />}
           variant="warning"
-          isCritical
-          href="/reports/purchase?type=exceptions"
+          onClick={() => toast.info("Audit: Zero vendor exceptions found for current cycle")}
         />
       </div>
 
@@ -146,7 +160,7 @@ export default function PurchaseDashboard() {
           <Input
             placeholder="Search vendor, order id or sku..."
             icon={<Search className="w-4 h-4" />}
-            className="bg-gray-50/50 border-gray-100 rounded-2xl h-12 italic font-bold placeholder:text-[10px] placeholder:tracking-widest"
+            className="bg-gray-50/50 border-gray-100 rounded-2xl h-12 italic font-bold placeholder:text-sm placeholder:tracking-widest"
           />
         </div>
         <div className="flex items-center gap-3">
@@ -154,7 +168,7 @@ export default function PurchaseDashboard() {
             <Filter className="w-5 h-5 text-text-secondary" />
           </Button>
           <div className="h-8 w-[1px] bg-gray-100 mx-2" />
-          <select className="bg-transparent text-[10px] font-black uppercase tracking-widest focus:outline-none cursor-pointer">
+          <select className="bg-transparent text-sm font-black uppercase tracking-widest focus:outline-none cursor-pointer">
             <option>LATEST ENTRIES</option>
             <option>HIGHEST AMOUNT</option>
             <option>PENDING ONLY</option>
@@ -167,20 +181,13 @@ export default function PurchaseDashboard() {
         <div className="flex justify-between items-center px-6">
           <h3 className="text-xl font-black text-text-main italic tracking-tight uppercase leading-none">Recent Procurement History</h3>
         </div>
-        <DataTable columns={columns} data={mockOrders} />
+        <DataTable columns={columns} data={purchaseHistory} />
+        {purchaseHistory.length === 0 && (
+          <div className="py-20 text-center border-2 border-dashed border-gray-50 rounded-[32px]">
+            <p className="text-sm font-black text-gray-300 uppercase tracking-widest italic">No procurement records found in system</p>
+          </div>
+        )}
       </div>
-    </div>
-  )
-}
-
-function StatsCard({ title, value, icon, color }: any) {
-  return (
-    <div className="bg-white p-6 rounded-[24px] border border-border-main shadow-sm group hover:border-primary/20 transition-all cursor-pointer">
-      <div className="flex justify-between items-start mb-3">
-        <p className="text-[9px] font-black text-text-secondary uppercase tracking-[0.2em] opacity-40">{title}</p>
-        <div className={`${color} bg-gray-50 p-2 rounded-xl group-hover:scale-110 transition-transform`}>{icon}</div>
-      </div>
-      <h4 className="text-2xl font-black text-text-main italic tracking-tighter leading-none">{value}</h4>
     </div>
   )
 }

@@ -29,7 +29,7 @@ export function HistoryItem({ active, title, sub, icon }: HistoryItemProps) {
         )}>
           {title}
         </p>
-        <p className="text-[10px] font-black text-primary uppercase tracking-[0.1em] mt-2 opacity-60">
+        <p className="text-sm font-black text-primary uppercase tracking-[0.1em] mt-2 opacity-60">
           {sub}
         </p>
       </div>

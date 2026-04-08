@@ -34,7 +34,7 @@ function DataTable<T extends { id: string | number }>({
       <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead>
-            <tr className="text-[10px] font-black text-text-secondary bg-gray-50/20 uppercase tracking-[0.2em] border-b border-gray-50">
+            <tr className="text-sm font-black text-text-secondary bg-gray-50/20 uppercase tracking-[0.2em] border-b border-gray-50">
               {columns.map((col, i) => (
                 <th
                   key={i}
@@ -64,13 +64,13 @@ function DataTable<T extends { id: string | number }>({
 
       {/* Pagination Placeholder */}
       <div className="p-8 bg-gray-50/10 flex justify-between items-center border-t border-gray-50/50">
-        <p className="text-[10px] font-black text-text-secondary uppercase">
+        <p className="text-sm font-black text-text-secondary uppercase">
           Showing {data.length} records
         </p>
         <div className="flex gap-2">
-          <button className="w-8 h-8 rounded-lg border border-border-main flex items-center justify-center text-text-secondary text-xs font-black transition-all hover:bg-gray-100 italic">{'<'}</button>
-          <button className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center text-xs font-black shadow-lg shadow-primary/20">1</button>
-          <button className="w-8 h-8 rounded-lg border border-border-main flex items-center justify-center text-text-secondary text-xs font-black transition-all hover:bg-gray-100 italic">{'>'}</button>
+          <button className="w-8 h-8 rounded-lg border border-border-main flex items-center justify-center text-text-secondary text-sm font-black transition-all hover:bg-gray-100 italic">{'<'}</button>
+          <button className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center text-sm font-black shadow-lg shadow-primary/20">1</button>
+          <button className="w-8 h-8 rounded-lg border border-border-main flex items-center justify-center text-text-secondary text-sm font-black transition-all hover:bg-gray-100 italic">{'>'}</button>
         </div>
       </div>
     </div>

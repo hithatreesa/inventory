@@ -30,12 +30,12 @@ export function SectionHeader({
     <div className={cn("flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-8 animate-in fade-in slide-up duration-700", className)}>
       <div className="space-y-1">
         {prefix && (
-          <p className="text-[10px] font-black text-primary uppercase tracking-[0.3em] mb-2 leading-none animate-in fade-in duration-1000">
+          <p className="text-sm font-black text-primary uppercase tracking-[0.3em] mb-2 leading-none animate-in fade-in duration-1000">
             {prefix}
           </p>
         )}
         {breadcrumbs && (
-          <nav className="flex items-center gap-2 text-[10px] font-extrabold text-text-secondary uppercase tracking-widest mb-2 animate-in fade-in duration-700">
+          <nav className="flex items-center gap-2 text-sm font-extrabold text-text-secondary uppercase tracking-widest mb-2 animate-in fade-in duration-700">
             {breadcrumbs.map((crumb, idx) => (
               <React.Fragment key={crumb.label}>
                 <span className={idx === breadcrumbs.length - 1 ? "text-primary" : ""}>

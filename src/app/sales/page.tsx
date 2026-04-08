@@ -18,6 +18,7 @@ import { Select } from '@/components/ui/Select'
 import { DataTable, Column } from '@/components/tables/DataTable'
 import { SectionHeader } from '@/components/shared/SectionHeader'
 import { SummaryPanel, SummaryActionCard, SummaryRow } from '@/components/shared/SummaryPanel'
+import POSMode from '@/components/POSMode'
 
 interface SalesItem {
   id: number
@@ -28,7 +29,8 @@ interface SalesItem {
 }
 
 export default function SalesPage() {
-  const { items: globalItems } = useData()
+  const { inventory: globalItems } = useData()
+  const [mode, setMode] = useState<"ERP" | "POS">("ERP")
   const [items, setItems] = useState<SalesItem[]>([
     { id: 1, desc: 'Cloud Architecture Consultation', qty: 40, unitPrice: 185, tax: 21 },
     { id: 2, desc: 'Pro License: Executive Suite', qty: 1, unitPrice: 2499, tax: 21 },
@@ -45,7 +47,7 @@ export default function SalesPage() {
       cell: (item) => (
         <div>
           <p className="text-sm font-black text-text-main italic">{item.desc}</p>
-          <p className="text-[10px] text-text-secondary font-bold mt-1 uppercase tracking-tighter opacity-60">Professional Service / Phase 1</p>
+          <p className="text-sm text-text-secondary font-bold mt-1 uppercase tracking-tighter opacity-60">Professional Service / Phase 1</p>
         </div>
       )
     },
@@ -67,6 +69,9 @@ export default function SalesPage() {
 
   const headerActions = (
     <>
+      <Button variant="secondary" onClick={() => setMode(mode === "ERP" ? "POS" : "ERP")} className="px-6 h-10 font-black tracking-widest uppercase text-blue-600 bg-blue-50 hover:bg-blue-100 border-blue-200 shadow-sm mr-auto block lg:inline-flex">
+        {mode === "ERP" ? "Launch POS" : "EXIT POS"}
+      </Button>
       <Button variant="secondary" className="px-6 h-10">
         <Save className="w-4 h-4 mr-2" /> Save Draft
       </Button>
@@ -75,6 +80,10 @@ export default function SalesPage() {
       </Button>
     </>
   )
+
+  if (mode === "POS") {
+    return <POSMode onExit={() => setMode("ERP")} />
+  }
 
   return (
     <div className="space-y-8 pb-12">
@@ -91,8 +100,8 @@ export default function SalesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="glass p-8 rounded-[32px] shadow-sm flex flex-col justify-between min-h-[240px]">
               <div className="flex justify-between items-center mb-6">
-                <span className="text-[10px] font-black text-text-secondary uppercase tracking-[0.2em] pl-1">CUSTOMER DETAILS</span>
-                <Button variant="ghost" className="p-0 h-auto text-[10px] font-black uppercase text-primary tracking-widest">+ NEW CUSTOMER</Button>
+                <span className="text-sm font-black text-text-secondary uppercase tracking-[0.2em] pl-1">CUSTOMER DETAILS</span>
+                <Button variant="ghost" className="p-0 h-auto text-sm font-black uppercase text-primary tracking-widest">+ NEW CUSTOMER</Button>
               </div>
               <div className="bg-primary/5 p-5 rounded-[24px] flex items-center gap-5 cursor-pointer hover:bg-primary/10 transition-all group border border-primary/10">
                 <div className="w-12 h-12 bg-primary text-white rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20">
@@ -100,22 +109,22 @@ export default function SalesPage() {
                 </div>
                 <div className="flex-1">
                   <p className="text-base font-black text-text-main italic tracking-tight">Global Dynamics Inc.</p>
-                  <p className="text-[10px] text-text-secondary font-black uppercase tracking-widest mt-1">VAT: EU882910293</p>
+                  <p className="text-sm text-text-secondary font-black uppercase tracking-widest mt-1">VAT: EU882910293</p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-primary group-hover:translate-x-1 transition-transform" />
               </div>
-              <p className="text-[10px] text-text-secondary font-bold mt-6 uppercase tracking-widest opacity-60">128 Business Plaza, Suite 400, NY 10001</p>
+              <p className="text-sm text-text-secondary font-bold mt-6 uppercase tracking-widest opacity-60">128 Business Plaza, Suite 400, NY 10001</p>
             </div>
 
             <div className="glass p-8 rounded-[32px] shadow-sm min-h-[240px] flex flex-col">
-              <span className="text-[10px] font-black text-text-secondary uppercase tracking-[0.2em] pl-1">ORDER LOGISTICS</span>
+              <span className="text-sm font-black text-text-secondary uppercase tracking-[0.2em] pl-1">ORDER LOGISTICS</span>
               <div className="grid grid-cols-2 gap-6 mt-6">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-text-secondary pl-1 uppercase tracking-widest">Entry Date</label>
+                  <label className="text-sm font-black text-text-secondary pl-1 uppercase tracking-widest">Entry Date</label>
                   <Input type="date" defaultValue="2024-05-24" className="h-11" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-text-secondary pl-1 uppercase tracking-widest">Due Date</label>
+                  <label className="text-sm font-black text-text-secondary pl-1 uppercase tracking-widest">Due Date</label>
                   <Input type="date" defaultValue="2024-06-24" className="h-11" />
                 </div>
               </div>

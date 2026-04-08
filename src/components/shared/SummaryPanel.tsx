@@ -15,7 +15,7 @@ interface SummaryRowProps {
 export function SummaryRow({ label, value, isWarning, className }: SummaryRowProps) {
   return (
     <div className={cn("flex justify-between items-center group cursor-pointer", className)}>
-      <span className="text-[11px] font-black text-text-secondary uppercase tracking-[0.2em] group-hover:text-text-main transition-colors">
+      <span className="text-sm font-black text-text-secondary uppercase tracking-[0.2em] group-hover:text-text-main transition-colors">
         {label}
       </span>
       <span className={cn(
@@ -77,10 +77,10 @@ export function SummaryPanel({
       
       <div className="pt-8">
         <div className="flex justify-between items-end mb-2">
-          <span className="text-[10px] font-black text-text-secondary uppercase tracking-[0.3em]">
+          <span className="text-sm font-black text-text-secondary uppercase tracking-[0.3em]">
             PAYABLE AMOUNT
           </span>
-          <span className="text-[10px] font-black text-primary">
+          <span className="text-sm font-black text-primary">
             {currency}
           </span>
         </div>
@@ -92,7 +92,7 @@ export function SummaryPanel({
       {footerNote && (
         <div className="mt-10 bg-primary/5 border border-primary/10 p-6 rounded-3xl flex gap-4">
           <Info className="w-6 h-6 text-primary shrink-0" />
-          <p className="text-[11px] font-bold text-text-main leading-relaxed italic opacity-80">
+          <p className="text-sm font-bold text-text-main leading-relaxed italic opacity-80">
             {footerNote}
           </p>
         </div>
@@ -132,7 +132,7 @@ export function SummaryActionCard({ icon: Icon, title, subtitle, onClick, varian
         <div className={variant === 'dashed' ? "text-center" : ""}>
           <p className="text-sm font-black text-text-main italic">{title}</p>
           {subtitle && (
-            <p className="text-[10px] text-text-secondary font-bold uppercase tracking-widest mt-1 opacity-60">
+            <p className="text-sm text-text-secondary font-bold uppercase tracking-widest mt-1 opacity-60">
               {subtitle}
             </p>
           )}

@@ -41,10 +41,6 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
             <div className="p-8 max-h-[80vh] overflow-y-auto">
               {children}
             </div>
-            <div className="p-8 pt-4 flex justify-end gap-4 border-t border-gray-100 bg-gray-50/50">
-              <button onClick={onClose} className="px-6 py-2.5 rounded-xl font-bold text-text-secondary hover:bg-gray-100 transition-all">Cancel</button>
-              <button className="px-8 py-2.5 bg-primary text-white rounded-xl font-extrabold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all">Save Changes</button>
-            </div>
           </motion.div>
         </>
       )}

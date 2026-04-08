@@ -36,7 +36,7 @@ function BreadcrumbContent() {
     <nav className="flex items-center gap-3 animate-in fade-in slide-in-from-left-2 duration-500">
       <Link 
         href="/dashboard" 
-        className="text-[10px] font-black tracking-[0.2em] opacity-40 uppercase italic hover:opacity-100 hover:text-primary transition-all underline decoration-transparent hover:decoration-primary/30"
+        className="text-sm font-black tracking-[0.2em] opacity-40 uppercase italic hover:opacity-100 hover:text-primary transition-all underline decoration-transparent hover:decoration-primary/30"
       >
         Portal
       </Link>
@@ -51,7 +51,7 @@ function BreadcrumbContent() {
             <ChevronRight className="w-3 h-3 opacity-20 shrink-0" />
             <Link 
               href={href}
-              className={`text-[10px] font-black tracking-[0.2em] uppercase italic transition-all underline decoration-transparent hover:decoration-primary/30 ${
+              className={`text-sm font-black tracking-[0.2em] uppercase italic transition-all underline decoration-transparent hover:decoration-primary/30 ${
                 isLast ? 'text-primary' : 'opacity-40 hover:opacity-100 hover:text-primary'
               }`}
             >
@@ -64,7 +64,7 @@ function BreadcrumbContent() {
       {type && (
         <>
           <ChevronRight className="w-3 h-3 opacity-20 shrink-0" />
-          <span className="text-[10px] font-black tracking-[0.2em] uppercase italic text-primary underline decoration-primary/10">
+          <span className="text-sm font-black tracking-[0.2em] uppercase italic text-primary underline decoration-primary/10">
             {formatText(type)}
           </span>
         </>

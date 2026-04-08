@@ -16,6 +16,7 @@ interface MetricCardProps {
   className?: string
   variant?: 'default' | 'primary' | 'success' | 'warning'
   href?: string
+  onClick?: () => void
 }
 
 const Sparkline = ({ color }: { color: string }) => (
@@ -40,7 +41,8 @@ export function MetricCard({
   isCritical,
   className,
   variant = 'default',
-  href
+  href,
+  onClick
 }: MetricCardProps) {
   const isWarning = isCritical || isNegative
 
@@ -54,9 +56,11 @@ export function MetricCard({
   const currentColors = colors[variant] || colors.default
 
   const content = (
-    <div className={cn(
+    <div 
+      onClick={onClick}
+      className={cn(
       "bg-white p-3 sm:p-6 rounded-[24px] border border-border-main shadow-sm h-full flex flex-col justify-between relative overflow-hidden transition-all duration-300 group",
-      href ? "cursor-pointer hover:shadow-xl hover:-translate-y-1 hover:border-primary/20" : "",
+      (href || onClick) ? "cursor-pointer hover:shadow-xl hover:-translate-y-1 hover:border-primary/20" : "",
       className
     )}>
       {/* Top Section: Icon & Trend */}
@@ -71,7 +75,7 @@ export function MetricCard({
 
         {trend && (
           <div className="flex flex-col items-end gap-1">
-            <div className="flex items-center gap-1.5 p-1 px-1.5 sm:px-2 rounded-lg bg-transparent text-[9px] sm:text-[10px] font-black italic whitespace-nowrap">
+            <div className="flex items-center gap-1.5 p-1 px-1.5 sm:px-2 rounded-lg bg-transparent text-sm font-black italic whitespace-nowrap">
               <Sparkline color={currentColors.stroke} />
               <span className={cn(
                 "ml-1 flex items-center gap-0.5 transition-colors",
@@ -94,7 +98,7 @@ export function MetricCard({
 
       {/* Bottom Section: Title & Value */}
       <div className="space-y-1 relative z-10">
-        <p className="text-[8px] sm:text-[10px] font-black text-[#003366]/60 uppercase tracking-[0.15em] sm:tracking-[0.25em] leading-tight transition-colors group-hover:text-primary">
+        <p className="text-sm font-black text-[#003366]/60 uppercase tracking-[0.15em] sm:tracking-[0.25em] leading-tight transition-colors group-hover:text-primary">
           {title}
         </p>
         <div className="flex items-baseline gap-2">
@@ -103,7 +107,7 @@ export function MetricCard({
           </h3>
         </div>
         {period && (
-          <p className="text-[7px] sm:text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-1 opacity-60">
+          <p className="text-sm font-bold text-gray-400 uppercase tracking-widest mt-1 opacity-60">
             {period}
           </p>
         )}

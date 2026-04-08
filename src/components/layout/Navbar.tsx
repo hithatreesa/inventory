@@ -76,7 +76,7 @@ export function Navbar() {
 
           <div className="hidden xs:flex items-center gap-1.5 sm:gap-2 bg-gray-50 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border border-gray-100 shadow-sm cursor-default group">
             <div className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-primary/40 group-hover:bg-primary transition-colors" />
-            <span className="text-[8px] sm:text-[10px] font-black text-text-secondary uppercase tracking-widest leading-none">FY 24-25</span>
+            <span className="text-sm font-black text-text-secondary uppercase tracking-widest leading-none">FY 24-25</span>
           </div>
         </div>
       </div>
@@ -89,7 +89,7 @@ export function Navbar() {
             type="text"
             icon={<Search className="w-4 h-4" />}
             placeholder="Search..."
-            className="rounded-2xl bg-gray-50/50 border-gray-100 h-11 placeholder:italic placeholder:font-bold placeholder:text-[10px] placeholder:uppercase placeholder:tracking-widest"
+            className="rounded-2xl bg-gray-50/50 border-gray-100 h-11 placeholder:italic placeholder:font-bold placeholder:text-sm placeholder:uppercase placeholder:tracking-widest"
             onKeyDown={handleSearch}
           />
         </div>
@@ -101,7 +101,7 @@ export function Navbar() {
           <p className="text-sm font-black text-primary italic tracking-tight leading-none mb-1.5 min-h-[1.25rem]">
             {time ? formatTime(time) : '--:--:-- --'}
           </p>
-          <p className="text-[9px] font-black text-text-secondary uppercase tracking-[0.2em] opacity-40 leading-none min-h-[0.75rem]">
+          <p className="text-sm font-black text-text-secondary uppercase tracking-[0.2em] opacity-40 leading-none min-h-[0.75rem]">
             {time ? formatDate(time) : '---, --- --'}
           </p>
         </div>

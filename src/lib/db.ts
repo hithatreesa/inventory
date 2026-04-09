@@ -19,6 +19,22 @@ export interface DbEngineer {
   name: string
 }
 
+export interface DbTicketRequirement {
+  id: string
+  ticket_id: string
+  item_id: string
+  quantity: number
+}
+
+export interface DbTicket {
+  id: string
+  title: string
+  description: string
+  status: "OPEN" | "ASSIGNED" | "REQUIREMENT_IDENTIFIED" | "PO_RAISED" | "COMPLETED"
+  assigned_engineer_id?: string
+  created_at: string
+}
+
 export interface DbTransaction {
   id: string
   item_id: string
@@ -37,6 +53,8 @@ interface DbData {
   items: DbItem[]
   engineers: DbEngineer[]
   transactions: DbTransaction[]
+  tickets: DbTicket[]
+  ticket_requirements: DbTicketRequirement[]
 }
 
 const DATA_FILE = path.join(process.cwd(), '.data.json')
@@ -95,7 +113,9 @@ const initialData: DbData = {
 
     // Engineer 6: Deepak Verma (Power / Electrical)
     { id: "TXN-E6-001", item_id: "ITM009", type: "ISSUE", quantity: 2, from_warehouse: "Electrical Room", to_warehouse: null, engineer_id: "ENG006", reference: "REQ-601", date: "2024-03-25", created_at: "2024-03-25T14:00:00Z" }
-  ]
+  ],
+  tickets: [],
+  ticket_requirements: []
 }
 
 // ---- Core Logic ----
@@ -105,7 +125,10 @@ function getDb(): DbData {
     return initialData
   }
   const data = fs.readFileSync(DATA_FILE, 'utf-8')
-  return JSON.parse(data)
+  const parsed = JSON.parse(data) as DbData
+  if (!parsed.tickets) parsed.tickets = []
+  if (!parsed.ticket_requirements) parsed.ticket_requirements = []
+  return parsed
 }
 
 function saveDb(data: DbData) {
@@ -221,4 +244,49 @@ export function addEngineer(engineer: Omit<DbEngineer, 'id'>) {
   db.engineers.push(newEng)
   saveDb(db)
   return newEng
+}
+
+// ==== Ticketing Logic ====
+
+export function getTickets() {
+  return getDb().tickets || []
+}
+
+export function getTicketRequirements(ticketId?: string) {
+  const db = getDb()
+  if (ticketId) return (db.ticket_requirements || []).filter(r => r.ticket_id === ticketId)
+  return db.ticket_requirements || []
+}
+
+export function createTicket(ticket: Omit<DbTicket, 'id' | 'created_at'>) {
+  const db = getDb()
+  const newTicket: DbTicket = {
+    ...ticket,
+    id: `TCK-${Date.now()}`,
+    created_at: new Date().toISOString()
+  }
+  db.tickets.push(newTicket)
+  saveDb(db)
+  return newTicket
+}
+
+export function updateTicket(id: string, updates: Partial<DbTicket>) {
+  const db = getDb()
+  const index = db.tickets.findIndex(t => t.id === id)
+  if (index === -1) throw new Error(`Ticket ${id} not found`)
+  
+  db.tickets[index] = { ...db.tickets[index], ...updates }
+  saveDb(db)
+  return db.tickets[index]
+}
+
+export function addTicketRequirement(req: Omit<DbTicketRequirement, 'id'>) {
+  const db = getDb()
+  const newReq: DbTicketRequirement = {
+    ...req,
+    id: `REQ-${Date.now()}`
+  }
+  db.ticket_requirements.push(newReq)
+  saveDb(db)
+  return newReq
 }

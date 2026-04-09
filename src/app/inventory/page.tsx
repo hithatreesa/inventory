@@ -68,7 +68,7 @@ function SidePanel({
 }
 
 export default function InventoryPage() {
-   const { inventory, transactions, issueAsset, returnAsset, deleteItems } = useData()
+   const { inventory, transactions, engineers, issueAsset, returnAsset, deleteItems } = useData()
    const [selectedIds, setSelectedIds] = useState<string[]>([])
    const [filters, setFilters] = useState({
       search: '',
@@ -80,6 +80,64 @@ export default function InventoryPage() {
    const [activePanel, setActivePanel] = useState<{ type: 'detail' | 'serials', id: string } | null>(null)
    const [isItemModalOpen, setIsItemModalOpen] = useState(false)
    const [editingItem, setEditingItem] = useState<any>(null)
+   const [exportMenuOpen, setExportMenuOpen] = useState<'top' | 'mobile' | 'bulk' | null>(null)
+
+   const handleExport = (type: 'company' | 'engineer' | 'inhand') => {
+      import('jspdf').then(jsPDFModule => {
+         import('jspdf-autotable').then(autoTableModule => {
+            const jsPDF = jsPDFModule.default;
+            const autoTable = autoTableModule.default;
+    
+            const doc = new jsPDF();
+            const dateStr = new Date().toLocaleDateString();
+    
+            if (type === 'company') {
+               doc.text(`Company Inventory Report - ${dateStr}`, 14, 15);
+               const tableData = inventory.map(item => [
+                  item.name, item.sku || 'N/A', item.category, item.total_qty.toString(), item.assigned_qty.toString(), `Rs. ${item.price || 0}`
+               ]);
+               autoTable(doc, {
+                  startY: 20,
+                  head: [['Item Name', 'SKU', 'Category', 'Total Qty', 'In Use', 'Price']],
+                  body: tableData,
+               });
+               doc.save(`Company_Inventory_${dateStr}.pdf`);
+            } else if (type === 'engineer') {
+               doc.text(`Engineer Asset Assignment Report - ${dateStr}`, 14, 15);
+               const inUseTxns = transactions.filter((t: any) => t.status === 'In Use');
+               const tableData = inUseTxns.map((t: any) => {
+                  const item = inventory.find(i => i.id == t.item_id);
+                  const eng = (engineers || []).find((e: any) => e.id == t.engineer_id);
+                  return [
+                     eng ? eng.name : t.engineer_id,
+                     item ? item.name : 'Unknown Item',
+                     item ? (item.sku || 'N/A') : 'N/A',
+                     t.quantity.toString()
+                  ];
+               });
+               autoTable(doc, {
+                  startY: 20,
+                  head: [['Engineer', 'Item Name', 'SKU', 'Qty Assigned']],
+                  body: tableData,
+               });
+               doc.save(`Engineer_Assets_${dateStr}.pdf`);
+            } else if (type === 'inhand') {
+               doc.text(`In-Hand Stock Report - ${dateStr}`, 14, 15);
+               const inhandItems = inventory.filter(i => (i.total_qty - i.assigned_qty) > 0);
+               const tableData = inhandItems.map(item => [
+                  item.name, item.sku || 'N/A', item.category, item.location || 'N/A', (item.total_qty - item.assigned_qty).toString()
+               ]);
+               autoTable(doc, {
+                  startY: 20,
+                  head: [['Item Name', 'SKU', 'Category', 'Warehouse', 'In-Hand Qty']],
+                  body: tableData,
+               });
+               doc.save(`InHand_Stock_${dateStr}.pdf`);
+            }
+         });
+      });
+      setExportMenuOpen(null);
+   };
 
    const filteredItems = useMemo(() => {
       return inventory.filter(item => {
@@ -159,13 +217,22 @@ export default function InventoryPage() {
                >
                   <Plus className="w-4 h-4 text-primary" /> Import
                </Button>
-               <Button 
-                variant="secondary" 
-                className="hidden sm:flex h-9 px-3 rounded-xl font-black text-sm tracking-widest uppercase italic bg-white border-gray-100 hover:bg-gray-50 items-center justify-center gap-2"
-                onClick={() => toast.info('Export functionality coming soon')}
-               >
-                  <Download className="w-4 h-4 text-primary" /> Export
-               </Button>
+               <div className="relative">
+                  <Button 
+                   variant="secondary" 
+                   className="hidden sm:flex h-9 px-3 rounded-xl font-black text-sm tracking-widest uppercase italic bg-white border-gray-100 hover:bg-gray-50 items-center justify-center gap-2"
+                   onClick={() => setExportMenuOpen(exportMenuOpen === 'top' ? null : 'top')}
+                  >
+                     <Download className="w-4 h-4 text-primary" /> Export
+                  </Button>
+                  {exportMenuOpen === 'top' && (
+                     <div className="absolute top-full mt-2 right-0 w-36 bg-white border border-gray-100 rounded-xl shadow-lg z-50 flex flex-col py-1 overflow-hidden" onMouseLeave={() => setExportMenuOpen(null)}>
+                        <button className="px-4 py-2.5 hover:bg-gray-50 text-left font-black text-xs text-[#003366] uppercase tracking-widest italic" onClick={() => handleExport('company')}>Company</button>
+                        <button className="px-4 py-2.5 hover:bg-gray-50 text-left font-black text-xs text-[#003366] uppercase tracking-widest italic" onClick={() => handleExport('engineer')}>Engineer</button>
+                        <button className="px-4 py-2.5 hover:bg-gray-50 text-left font-black text-xs text-[#003366] uppercase tracking-widest italic" onClick={() => handleExport('inhand')}>Inhand</button>
+                     </div>
+                  )}
+               </div>
                <Button 
                 className="h-9 px-5 rounded-xl font-black text-sm tracking-widest uppercase italic shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
                 onClick={openAddModal}
@@ -193,9 +260,22 @@ export default function InventoryPage() {
             <Button variant="secondary" className="flex-1 h-9 px-2 rounded-xl font-black text-sm tracking-widest uppercase italic bg-white border border-gray-100 hover:bg-gray-50 flex items-center justify-center gap-2">
                <Plus className="w-3 h-3 text-primary" /> Import
             </Button>
-            <Button variant="secondary" className="flex-1 h-9 px-2 rounded-xl font-black text-sm tracking-widest uppercase italic bg-white border border-gray-100 hover:bg-gray-50 flex items-center justify-center gap-2">
-               <Download className="w-3 h-3 text-primary" /> Export
-            </Button>
+            <div className="flex-1 relative flex">
+               <Button 
+                  variant="secondary" 
+                  onClick={() => setExportMenuOpen(exportMenuOpen === 'mobile' ? null : 'mobile')}
+                  className="flex-1 h-9 px-2 rounded-xl font-black text-sm tracking-widest uppercase italic bg-white border border-gray-100 hover:bg-gray-50 flex items-center justify-center gap-2"
+               >
+                  <Download className="w-3 h-3 text-primary" /> Export
+               </Button>
+               {exportMenuOpen === 'mobile' && (
+                  <div className="absolute top-full mt-2 right-0 w-36 bg-white border border-gray-100 rounded-xl shadow-lg z-50 flex flex-col py-1 overflow-hidden" onMouseLeave={() => setExportMenuOpen(null)}>
+                     <button className="px-4 py-2.5 hover:bg-gray-50 text-left font-black text-xs text-[#003366] uppercase tracking-widest italic" onClick={() => handleExport('company')}>Company</button>
+                     <button className="px-4 py-2.5 hover:bg-gray-50 text-left font-black text-xs text-[#003366] uppercase tracking-widest italic" onClick={() => handleExport('engineer')}>Engineer</button>
+                     <button className="px-4 py-2.5 hover:bg-gray-50 text-left font-black text-xs text-[#003366] uppercase tracking-widest italic" onClick={() => handleExport('inhand')}>Inhand</button>
+                  </div>
+               )}
+            </div>
          </div>
 
          {/* Section 2: KPI Grid */}
@@ -452,9 +532,21 @@ export default function InventoryPage() {
                   </p>
                </div>
                <div className="flex gap-2">
-                  <button className="h-12 px-6 rounded-2xl bg-white/5 text-white font-black text-sm tracking-widest uppercase italic flex items-center gap-2 hover:bg-white/10 hover:translate-y-[-2px] transition-all" onClick={() => toast.info('Export functionality coming soon')}>
-                     <Download className="w-4 h-4 text-primary" /> Export
-                  </button>
+                  <div className="relative">
+                     <button 
+                        className="h-12 px-6 rounded-2xl bg-white/5 text-white font-black text-sm tracking-widest uppercase italic flex items-center gap-2 hover:bg-white/10 hover:translate-y-[-2px] transition-all" 
+                        onClick={() => setExportMenuOpen(exportMenuOpen === 'bulk' ? null : 'bulk')}
+                     >
+                        <Download className="w-4 h-4 text-primary" /> Export
+                     </button>
+                     {exportMenuOpen === 'bulk' && (
+                        <div className="absolute bottom-full mb-2 right-0 w-36 bg-white border border-gray-100 rounded-xl shadow-xl z-50 flex flex-col py-1 overflow-hidden" onMouseLeave={() => setExportMenuOpen(null)}>
+                           <button className="px-4 py-2.5 hover:bg-gray-50 text-left font-black text-xs text-[#003366] uppercase tracking-widest italic transition-colors" onClick={() => handleExport('company')}>Company</button>
+                           <button className="px-4 py-2.5 hover:bg-gray-50 text-left font-black text-xs text-[#003366] uppercase tracking-widest italic transition-colors" onClick={() => handleExport('engineer')}>Engineer</button>
+                           <button className="px-4 py-2.5 hover:bg-gray-50 text-left font-black text-xs text-[#003366] uppercase tracking-widest italic transition-colors" onClick={() => handleExport('inhand')}>Inhand</button>
+                        </div>
+                     )}
+                  </div>
                   <button className="h-12 px-6 rounded-2xl bg-white/5 text-white font-black text-sm tracking-widest uppercase italic flex items-center gap-2 hover:bg-white/10 hover:translate-y-[-2px] transition-all" onClick={() => toast.info('Transfer functionality coming soon')}>
                      <ArrowRightLeft className="w-4 h-4 text-primary" /> Transfer Stock
                   </button>

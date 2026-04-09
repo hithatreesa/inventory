@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
   Plus,
   Filter,
@@ -17,11 +17,13 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { DataTable, Column } from '@/components/tables/DataTable'
 import { MetricCard } from '@/components/shared/MetricCard'
+import { ItemModal } from '@/components/modals/ItemModal'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
 export default function PurchaseDashboard() {
   const { transactions, inventory, inwardItem } = useData()
+  const [isItemModalOpen, setIsItemModalOpen] = useState(false)
 
   const purchaseHistory = useMemo(() => {
     return transactions
@@ -113,14 +115,26 @@ export default function PurchaseDashboard() {
           <Button variant="secondary" className="rounded-2xl border-gray-100 font-black text-sm tracking-widest h-12 px-6" onClick={() => toast.info('Export started')}>
             <Download className="w-4 h-4 mr-2" /> EXPORT PDF
           </Button>
-          <Button 
-            onClick={() => toast.info('Please use Quick Entry to record a new purchase')}
+          <Button
+            onClick={() => setIsItemModalOpen(true)}
             className="rounded-2xl shadow-xl shadow-primary/20 font-black text-sm tracking-widest h-12 px-8 italic"
+          >
+            <Plus className="w-5 h-5 mr-1" /> ADD ITEM
+          </Button>
+          <Button
+            onClick={() => toast.info('Please use Quick Entry to record a new purchase')}
+            className="rounded-2xl shadow-xl shadow-primary/20 font-black text-sm tracking-widest h-12 px-8 italic bg-[#003366] text-white"
           >
             <Plus className="w-5 h-5 mr-1" /> CREATE NEW PO
           </Button>
         </div>
       </div>
+
+      <ItemModal
+        isOpen={isItemModalOpen}
+        onClose={() => setIsItemModalOpen(false)}
+        item={null}
+      />
 
       {/* Stats Summary */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">

@@ -1,17 +1,19 @@
 import { NextResponse } from 'next/server'
 import { getTicketRequirements, addTicketRequirement } from '../../../../../lib/db'
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const requirements = getTicketRequirements(params.id)
+    const { id } = await params
+    const requirements = getTicketRequirements(id)
     return NextResponse.json({ requirements })
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params
     const body = await req.json()
     const { item_id, quantity } = body
 
@@ -20,7 +22,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
 
     const requirement = addTicketRequirement({
-      ticket_id: params.id,
+      ticket_id: id,
       item_id,
       quantity: Number(quantity)
     })

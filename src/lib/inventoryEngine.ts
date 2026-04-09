@@ -13,6 +13,16 @@ export interface Transaction {
 let transactions: Transaction[] = [];
 let serialCounters: Record<string, number> = {};
 
+export interface SerialState {
+  status: "IN_STOCK" | "ASSIGNED" | "CONSUMED"
+  item_id: string
+  engineer_id?: string
+}
+
+// Cache for derivation
+let _cachedTxnsLength = -1;
+let _cachedState: { serialMap: Record<string, SerialState> } | null = null;
+
 // Seed Data
 serialCounters["ITM001"] = 2;
 serialCounters["ITM002"] = 1;
@@ -103,25 +113,41 @@ export function consumeItem(serial: string) {
 // DERIVATION ENGINE
 // --------------------------------------------------
 
-export function buildState(txns: Transaction[]) {
-  const serialMap: Record<string, { status: "IN_STOCK" | "ASSIGNED" | "CONSUMED", item_id: string, engineer_id?: string }> = {};
+export function buildState(txns: Transaction[]): { serialMap: Record<string, SerialState> } {
+  // Simple module-level cache to prevent multiple O(N) scans per render
+  if (txns === transactions && txns.length === _cachedTxnsLength && _cachedState) {
+    return _cachedState;
+  }
+
+  const serialMap: Record<string, SerialState> = {};
 
   for (const t of txns) {
     if (t.type === "INWARD") {
       serialMap[t.serial] = { status: "IN_STOCK", item_id: t.item_id };
     } else if (t.type === "ASSIGN") {
-      serialMap[t.serial].status = "ASSIGNED";
-      serialMap[t.serial].engineer_id = t.engineer_id;
+      const item = serialMap[t.serial];
+      if (item) {
+        item.status = "ASSIGNED";
+        item.engineer_id = t.engineer_id;
+      }
     } else if (t.type === "RETURN") {
-      serialMap[t.serial].status = "IN_STOCK";
-      serialMap[t.serial].engineer_id = undefined;
+      const item = serialMap[t.serial];
+      if (item) {
+        item.status = "IN_STOCK";
+        item.engineer_id = undefined;
+      }
     } else if (t.type === "CONSUMED") {
-      serialMap[t.serial].status = "CONSUMED";
-      serialMap[t.serial].engineer_id = undefined;
+      const item = serialMap[t.serial];
+      if (item) {
+        item.status = "CONSUMED";
+        item.engineer_id = undefined;
+      }
     }
   }
 
-  return { serialMap };
+  _cachedTxnsLength = txns.length;
+  _cachedState = { serialMap };
+  return _cachedState;
 }
 
 // --------------------------------------------------

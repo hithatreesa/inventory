@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, Activity, Package, Check, X, Clock, Navigation, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -8,15 +8,15 @@ import { useData } from '@/lib/context/DataContext';
 
 export default function EngineerPage() {
   const router = useRouter();
-  const { engineers, inventory, getEngineerSerials, getEngineerTickets } = useData();
+  const { engineers, inventory, transactions, getEngineerSerials, getEngineerTickets } = useData();
   const [selectedEngineerId, setSelectedEngineerId] = useState<string>('');
 
   // Initial selection
-  useMemo(() => {
+  useEffect(() => {
     if (!selectedEngineerId && engineers.length > 0) {
       setSelectedEngineerId(engineers[0].id);
     }
-  }, [engineers]);
+  }, [engineers, selectedEngineerId]);
 
   const selectedEngineer = useMemo(() => {
     return engineers.find(e => e.id === selectedEngineerId);
@@ -26,17 +26,22 @@ export default function EngineerPage() {
   const engineersWithStats = useMemo(() => {
     return engineers.map(eng => {
       const serials = getEngineerSerials ? getEngineerSerials(eng.id) : [];
+      const engTxns = (transactions || []).filter(t => t.engineer_id === eng.id);
+      
+      const taken = engTxns.filter(t => t.type === 'ASSIGN').length;
+      const returned = engTxns.filter(t => t.type === 'RETURN').length;
+
       return {
         ...eng,
         stats: {
-          taken: serials.length,
-          returned: 0,
+          taken,
+          returned,
           pending: serials.length,
-          onDuty: false
+          onDuty: serials.length > 0
         }
       };
     });
-  }, [engineers, getEngineerSerials]);
+  }, [engineers, getEngineerSerials, transactions]);
 
   const engineerSerials = useMemo(() => {
     if (!selectedEngineerId || !getEngineerSerials) return [];
@@ -59,7 +64,7 @@ export default function EngineerPage() {
               <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
                 <User className="w-5 h-5" />
               </div>
-              <h2 className="text-xl font-black text-[s#003366] italic uppercase tracking-tight">Active Engineers</h2>
+              <h2 className="text-xl font-black text-[#003366] italic uppercase tracking-tight">Active Engineers</h2>
             </div>
             <button
               onClick={() => router.push('/engineers/add')}

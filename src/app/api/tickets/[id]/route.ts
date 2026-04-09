@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import { updateTicket } from '../../../../lib/db'
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params
     const body = await req.json()
-    const { id } = params
     
     if (!id) {
        return NextResponse.json({ error: 'Ticket ID is required' }, { status: 400 })

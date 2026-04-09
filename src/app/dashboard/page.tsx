@@ -87,11 +87,14 @@ export default function DashboardPage() {
       }).filter(eng => eng.taken > 0);
    }, [engineers, transactions]);
 
-   const totalCatSales = stats.categorySales.reduce((sum: number, c: any) => sum + c.value, 0);
-   const categorySalesWithPercent = stats.categorySales.map((c: any) => ({
-      ...c,
-      nameWithPercent: `${c.name} (${totalCatSales ? ((c.value / totalCatSales) * 100).toFixed(0) : 0}%)`
-   })).sort((a: any, b: any) => b.value - a.value);
+   const totalCatSales = useMemo(() => stats.categorySales.reduce((sum: number, c: any) => sum + c.value, 0), [stats.categorySales]);
+   
+   const categorySalesWithPercent = useMemo(() => {
+      return stats.categorySales.map((c: any) => ({
+         ...c,
+         nameWithPercent: `${c.name} (${totalCatSales ? ((c.value / totalCatSales) * 100).toFixed(0) : 0}%)`
+      })).sort((a: any, b: any) => b.value - a.value);
+   }, [stats.categorySales, totalCatSales]);
 
    return (
       <div className="space-y-4 pb-8 animate-in fade-in duration-500">
@@ -236,9 +239,9 @@ export default function DashboardPage() {
                      </div>
                   </div>
                </div>
-               <div className="p-4 flex-1 min-h-[300px]">
+               <div className="h-[300px] w-full min-h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
-                     <BarChart data={categorySalesWithPercent} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                     <BarChart data={categorySalesWithPercent} margin={{ top: 20, right: 30, left: 0, bottom: 20 }} barSize={32}>
                         <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#F1F5F9" />
                         <XAxis
                            dataKey="nameWithPercent"

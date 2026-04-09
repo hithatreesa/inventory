@@ -15,6 +15,9 @@ export interface InventoryItem {
   location: string
   threshold: number
   price?: number
+  sku?: string
+  model?: string
+  brand?: string
 }
 
 export interface Engineer {
@@ -100,6 +103,7 @@ interface DataContextType {
   editItem: (id: string, updates: any) => Promise<void>
   createTransaction: (txn: any) => Promise<void>
   addEngineer: (data: { name: string, type: "IT" | "TECHNICAL" }) => void
+  deleteItems: (ids: string[]) => Promise<void>
   
   // TICKET WORKFLOW
   createTicket: (ticket: Partial<Ticket>) => Promise<void>
@@ -154,7 +158,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           assigned_qty: group ? group.assigned_qty : 0,
         }
       });
-      setInventory(parsedInventory);
 
       // 2. Map engine transactions to legacy UI transaction format loosely
       const parsedTxns = engineTxns.map(tx => ({
@@ -169,7 +172,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       
       parsedTxns.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       
-      setTransactions(parsedTxns);
+      // Update state only if changed (shallow length + id check for transactions)
+      setInventory(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(parsedInventory)) return prev;
+        return parsedInventory;
+      });
+
+      setTransactions(prev => {
+         if (prev.length === parsedTxns.length && prev[0]?.id === parsedTxns[0]?.id) return prev;
+         return parsedTxns;
+      });
 
     } catch (err) {
       console.error('Data deriving error:', err)
@@ -427,7 +439,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     await fetchData();
   }
   const editItem = async () => {} 
-  const deleteItems = async () => {}
+  const deleteItems = async (ids: string[]) => {
+    setCatalog(prev => prev.filter(item => !ids.includes(item.id)));
+    await fetchData();
+  }
   const createTransaction = async () => {}
 
   const addEngineer = (data: { name: string, type: "IT" | "TECHNICAL" }) => {

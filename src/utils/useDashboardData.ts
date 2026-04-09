@@ -138,7 +138,7 @@ export function useDashboardData({ data }: { data?: any }) {
     }).filter((i: any) => i.needsReorder).sort((a: any, b: any) => b.velocity - a.velocity);
   }, [safeData.items, safeData.sales]);
 
-  return {
+  return useMemo(() => ({
     todaySales: todaySalesStats > 0 ? todaySalesStats : 34500,
     todayPurchase: todayPurchase > 0 ? todayPurchase : 12400,
     pendingApprovals: pendingApprovals > 0 ? pendingApprovals : 2,
@@ -170,5 +170,9 @@ export function useDashboardData({ data }: { data?: any }) {
         { name: 'HDMI Cable 2m', qty: 1, reorderLevel: 10, velocity: 1.2, suggestedStock: 8 },
     ],
     inventoryTurnover: '14.2',
-  };
+  }), [
+    todaySalesStats, todayPurchase, pendingApprovals, lowStockItems.length, 
+    stockValuation, profitToday, profitMargin, categorySales, 
+    deadStock, topSelling, reorderSuggestions
+  ]);
 }

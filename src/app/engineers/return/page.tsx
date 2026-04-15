@@ -9,7 +9,7 @@ import {
     Barcode,
     User,
     ArrowLeft,
-    Activity,
+
     AlertCircle
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
@@ -146,9 +146,6 @@ function EngineerReturnContent() {
                             <ArrowLeft className="w-3 h-3" /> Back to Dashboard
                         </button>
                         <h1 className="text-3xl sm:text-5xl font-black text-[#1A1C21] tracking-tight italic">Return Registry</h1>
-                        <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.3em] flex items-center gap-2">
-                            <Activity className="w-3 h-3 text-orange-500 animate-pulse" /> Inward Recovery Mode
-                        </p>
                     </div>
                     <div className="flex gap-4">
                         <Button
@@ -196,16 +193,11 @@ function EngineerReturnContent() {
                                     <div className="w-20 h-20 bg-orange-500/20 rounded-full flex items-center justify-center mx-auto border border-orange-500/30 animate-pulse">
                                         <Scan className="w-10 h-10 text-orange-500" />
                                     </div>
-                                    <p className="text-white/20 font-black uppercase tracking-[0.5em] text-[10px] italic">Recovery Interface Active</p>
+
                                 </div>
 
                                 {/* In-scanner progress */}
-                                <div className="absolute bottom-8 left-8 right-8 flex justify-between items-end">
-                                    <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10">
-                                        <p className="text-white/40 text-[9px] font-black uppercase tracking-widest mb-1">Session Capture</p>
-                                        <p className="text-white text-3xl font-black italic tabular-nums">{scannedItems.length}</p>
-                                    </div>
-                                </div>
+
                             </div>
 
                             <input
@@ -240,7 +232,7 @@ function EngineerReturnContent() {
                     <div className="lg:col-span-12 xl:col-span-7 bg-white rounded-[48px] shadow-sm border border-gray-100 flex flex-col min-h-[600px] overflow-hidden">
                         <div className="px-10 py-8 border-b border-gray-50 flex justify-between items-center bg-[#F8F9FC]/50">
                             <h2 className="text-sm font-black text-[#1A1C21] uppercase tracking-[0.2em] italic">Return Manifest</h2>
-                            <span className="bg-orange-50 text-orange-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse">Live Batch Tracking</span>
+
                         </div>
 
                         <div className="flex-1 overflow-y-auto custom-scrollbar">

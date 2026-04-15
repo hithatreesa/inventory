@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useMemo, useEffect, useRef, useCallback, Suspense } from 'react'
 import {
     Plus,
     Trash2,
@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/Button'
 import { useData, InventoryItem, PurchaseLine, ScanEntry } from '@/lib/context/DataContext'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 // Point 13: UI Enhancement Sounds (Synthesized via Web Audio)
 const playBeep = (freq = 880, duration = 0.1) => {
@@ -45,8 +45,17 @@ const playSuccess = () => playBeep(880, 0.1);
 
 
 export default function PurchaseEntryPage() {
+    return (
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center bg-[#F8F9FC] font-black text-[#003366] italic animate-pulse">SYSTEM_INITIALIZING...</div>}>
+            <PurchaseEntryContent />
+        </Suspense>
+    )
+}
+
+function PurchaseEntryContent() {
     const { inventory, processPO } = useData()
     const router = useRouter()
+    const searchParams = useSearchParams()
 
     // Header State
     const [header, setHeader] = useState({
@@ -59,6 +68,37 @@ export default function PurchaseEntryPage() {
 
     // Invoice Lines
     const [lines, setLines] = useState<PurchaseLine[]>([])
+
+    // Point: Handle Reorder Redirection
+    useEffect(() => {
+        const reorderParam = searchParams.get('reorder');
+        if (reorderParam && inventory.length > 0) {
+            try {
+                const data = JSON.parse(decodeURIComponent(reorderParam));
+                const item = inventory.find(i => i.id === data.id || i.name === data.name);
+                
+                if (item) {
+                    const newLine: PurchaseLine = {
+                        id: `po_reorder_${Date.now()}`,
+                        productId: item.id,
+                        name: item.name,
+                        brand: item.brand || 'N/A',
+                        model: item.model || 'N/A',
+                        qty: data.qty || 1,
+                        price: item.price || 0,
+                        gstRate: item.gst_rate || 18,
+                        isSerialized: item.is_serialized || false,
+                        serials: [],
+                        isLocked: false
+                    };
+                    setLines([newLine]);
+                    toast.success(`AUTO_REORDER_INIT: ${item.name} pre-filled.`);
+                }
+            } catch (err) {
+                console.error("Failed to parse reorder metadata", err);
+            }
+        }
+    }, [searchParams, inventory]);
 
     // Pending Entry Flow
     const [pendingRow, setPendingRow] = useState<{
@@ -133,10 +173,10 @@ export default function PurchaseEntryPage() {
             }, lines), {
                 loading: 'Committing Procurement Ledger...',
                 success: 'Purchase Successful | Stock Updated',
-                error: (err: Error) => err.message || 'Procurement Failed'
+                error: (err: { message?: string }) => err.message || 'Procurement Failed'
             })
             router.push('/purchase');
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error(err);
         }
     }, [scanSession, lines, header, processPO, router]);
@@ -248,11 +288,26 @@ export default function PurchaseEntryPage() {
 
     // --- Actions ---
 
-    const startAdding = () => {
+    const startAdding = useCallback(() => {
         setPendingRow({ item: null, name: '', price: 0, qty: 1, isSerialized: false, model: 'N/A', brand: 'N/A' })
-    }
+    }, []);
 
-    const commitLine = (autoScan = false) => {
+    const triggerScan = useCallback((lineId: string, customLines?: PurchaseLine[]) => {
+        const source = customLines || lines;
+        const target = source.find(l => l.id === lineId);
+        if (!target || !target.isSerialized) return;
+
+        setLines(prev => prev.map(l => l.id === target.id ? { ...l, isLocked: true } : l));
+        setScanSession({
+            lineId: target.id,
+            item: target,
+            requiredQty: target.qty,
+            scanned: []
+        });
+        toast.info(`HARD_LOCK: Capturing ${target.qty} serials for ${target.name}`);
+    }, [lines]);
+
+    const commitLine = useCallback((autoScan = false) => {
         if (!pendingRow || !pendingRow.name || pendingRow.qty <= 0) {
             playError();
             toast.error("HARD_FAIL: INVALID_ENTRY_DATA");
@@ -292,24 +347,9 @@ export default function PurchaseEntryPage() {
             // Delay slightly to ensure state is committed or use direct target
             setTimeout(() => triggerScan(newLine.id, updatedLines), 10);
         }
-    }
+    }, [pendingRow, lines, triggerScan]);
 
-    const triggerScan = (lineId: string, customLines?: PurchaseLine[]) => {
-        const source = customLines || lines;
-        const target = source.find(l => l.id === lineId);
-        if (!target || !target.isSerialized) return;
-
-        setLines(prev => prev.map(l => l.id === target.id ? { ...l, isLocked: true } : l));
-        setScanSession({
-            lineId: target.id,
-            item: target,
-            requiredQty: target.qty,
-            scanned: []
-        });
-        toast.info(`HARD_LOCK: Capturing ${target.qty} serials for ${target.name}`);
-    }
-
-    const rescanLine = (lineId: string) => {
+    const rescanLine = useCallback((lineId: string) => {
         const line = lines.find(l => l.id === lineId);
         if (!line) return;
 
@@ -322,9 +362,9 @@ export default function PurchaseEntryPage() {
         });
         playBeep(440, 0.1);
         toast.info(`RESCAN: Previous data cleared. Repositary open.`);
-    }
+    }, [lines]);
 
-    const handleSessionScan = (barcode: string) => {
+    const handleSessionScan = useCallback((barcode: string) => {
         if (!scanSession || !barcode) return;
 
         // 1. Check duplicate in current session
@@ -383,7 +423,7 @@ export default function PurchaseEntryPage() {
         } else {
             setScanSession(prev => prev ? { ...prev, scanned: updatedScanned } : null);
         }
-    }
+    }, [scanSession, lines, inventory]);
 
 
 
@@ -505,7 +545,7 @@ export default function PurchaseEntryPage() {
                                             {l.isSerialized && l.serials.length === l.qty ? (
                                                 <span className="text-[#0066FF] text-[10px] font-black uppercase tracking-widest italic">Verified</span>
                                             ) : l.isSerialized && l.serials.length > 0 ? (
-                                                <span className="text-amber-500 text-[10px] font-black uppercase tracking-widest italic">Syncing</span>
+                                                <span className="text-amber-500 text-[10px] font-black uppercase tracking-widest italic">Partial</span>
                                             ) : l.isSerialized ? (
                                                 <span className="text-red-500 text-[10px] font-black uppercase tracking-widest italic">Error</span>
                                             ) : (
@@ -710,8 +750,6 @@ export default function PurchaseEntryPage() {
                         <div className="px-6 sm:px-12 py-6 sm:py-8 border-b border-gray-100 flex flex-col justify-between bg-white gap-6">
                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
                                 <div className="flex flex-wrap items-center gap-4 sm:gap-6">
-                                    <span className="bg-[#0066FF]/10 text-[#0066FF] px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-[0.2em] italic">Live Mode</span>
-                                    <span className="text-gray-300 font-bold text-xs">Batch #8821-X</span>
                                     <h1 className="text-2xl sm:text-4xl font-black text-[#1A1C21] italic tracking-tight">Batch Scanner</h1>
                                 </div>
                                 <div className="flex gap-4">
@@ -805,11 +843,7 @@ export default function PurchaseEntryPage() {
                                             <div className="w-3/4 h-[2px] bg-red-500 shadow-[0_0_20px_rgba(239,68,68,1)] animate-scan-line" />
                                         </div>
 
-                                        {/* Camera Metadata Overlays */}
-                                        <div className="absolute top-8 left-8 bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/20 flex items-center gap-3">
-                                            <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-                                            <span className="text-[9px] font-black text-white uppercase tracking-widest">Cam 01: Active</span>
-                                        </div>
+
                                         <div className="absolute top-8 right-8 bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/20 flex items-center gap-3">
                                             <span className="text-[9px] font-black text-white uppercase tracking-widest">{scanSession.scanned.length} / {scanSession.requiredQty}</span>
                                         </div>
@@ -894,11 +928,9 @@ export default function PurchaseEntryPage() {
                                             <span className="text-gray-300 font-black italic text-base sm:text-lg ml-2">/ {scanSession.requiredQty}</span>
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-10 pt-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-1 gap-6 sm:gap-10 pt-4">
                                         {[
                                             { label: "Items Scanned", val: scanSession.scanned.length },
-                                            { label: "Success Rate", val: "99.2%" },
-                                            { label: "Time Elapsed", val: "12:44" },
                                         ].map((stat, i) => (
                                             <div key={i} className="border-l border-gray-100 pl-8 space-y-2">
                                                 <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest">{stat.label}</p>
@@ -941,10 +973,10 @@ export default function PurchaseEntryPage() {
                                     </Button>
                                 </div>
 
-                                {/* Activity Log / Live Stream */}
+                                {/* Scan Activity */}
                                 <div className="flex-1 flex flex-col overflow-hidden min-h-[300px]">
                                     <div className="px-6 sm:px-10 py-6 sm:py-8 border-b border-gray-100 bg-gray-50/30">
-                                        <h3 className="text-xs font-black text-gray-400 font-black uppercase tracking-[0.2em] italic">Live Scan Table</h3>
+                                        <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] italic">Scan Table</h3>
                                     </div>
                                     <div className="flex-1 overflow-auto custom-scrollbar bg-white">
                                         <div className="min-w-[500px] lg:min-w-0">

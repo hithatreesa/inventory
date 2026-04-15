@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react'
 import {
-  Package,
   IndianRupee,
   MapPin,
   Info,
@@ -20,7 +19,7 @@ import { HistoryItem, ActivityStream } from '@/components/shared/ActivityStream'
 import { Button } from '@/components/ui/Button'
 
 export default function ItemDetailPage() {
-  const [tieredPricing, setTieredPricing] = useState([
+  const [tieredPricing] = useState([
     { range: '10 - 49 units', discount: '5% Off', netPrice: 1804.99 },
     { range: '50+ units', discount: '12% Off', netPrice: 1671.99 },
   ])
@@ -211,7 +210,6 @@ export default function ItemDetailPage() {
         <section className="bg-white p-8 rounded-3xl border border-border-main shadow-sm space-y-6">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-bold text-text-main">Recent Activity Stream</h3>
-            <span className="bg-primary/5 text-primary text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-tighter">Live</span>
           </div>
           <ActivityStream>
             <HistoryItem

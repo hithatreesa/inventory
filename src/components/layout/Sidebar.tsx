@@ -9,7 +9,6 @@ import {
   ShoppingCart,
   TrendingUp,
   FileText,
-  Settings,
   LogOut,
   Zap,
   User
@@ -123,7 +122,6 @@ export function Sidebar() {
                   <p className="text-sm font-black text-text-main truncate italic">Alexander Terait</p>
                   <p className="text-sm font-bold text-text-secondary uppercase tracking-tighter opacity-60">System Admin</p>
                 </div>
-                <Settings className="w-3.5 h-3.5 text-text-secondary" />
               </>
             )}
           </div>

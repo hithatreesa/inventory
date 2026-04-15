@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { User, Activity, Package, Clock, Navigation, Plus } from 'lucide-react';
+import { User, Package, Clock, Plus, Activity } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useData, Engineer, Transaction } from '@/lib/context/DataContext';
 
@@ -130,30 +130,15 @@ export default function EngineerPage() {
 
         {/* Detail Header & Active Services */}
         <div className="bg-white rounded-[32px] border border-border-main p-6 lg:p-8 shadow-sm flex flex-col xl:flex-row gap-8 items-start xl:items-center justify-between overflow-hidden relative">
-          <div className="absolute right-0 top-0 opacity-5 pointer-events-none translate-x-1/3 -translate-y-1/4">
-            <User className="w-96 h-96" />
-          </div>
 
           <div className="relative z-10">
             <h1 className="text-4xl font-black text-[#003366] italic tracking-tighter uppercase mb-2">
               {selectedEngineer?.name || 'Select Engineer'}
             </h1>
-            <p className="text-xs font-black text-primary uppercase tracking-[0.2em] italic flex items-center gap-2">
-              <Activity className="w-3 h-3" /> Execution & Inventory Profile
-            </p>
           </div>
 
           <div className="relative z-10 flex-1 w-full xl:max-w-md">
-            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-center justify-between gap-6">
-              <div className="flex-1">
-                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 italic flex items-center gap-2">
-                  <Navigation className="w-3 h-3" /> System Status
-                </h4>
-                <div className="flex items-center gap-3">
-                  <span className="flex w-3 h-3 bg-green-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]"></span>
-                  <span className="text-sm font-black text-[#003366] italic uppercase">Profile Synced</span>
-                </div>
-              </div>
+            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-center justify-end gap-6">
               <div className="flex gap-3">
                 <button
                   onClick={() => router.push(`/engineers/issue?id=${selectedEngineerId}`)}
@@ -209,7 +194,6 @@ export default function EngineerPage() {
         <div className="bg-white rounded-[32px] border border-border-main overflow-hidden shadow-sm flex flex-col">
           <div className="p-6 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
             <h3 className="text-lg font-black text-[#003366] italic uppercase tracking-tight">Assigned Tickets</h3>
-            <span className="text-[10px] font-black tracking-widest uppercase text-gray-400 flex items-center gap-1.5"><Clock className="w-3 h-3" /> Active Workflows</span>
           </div>
           <div className="overflow-x-auto min-h-[200px]">
             {engineerTickets.length > 0 ? (

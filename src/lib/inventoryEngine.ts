@@ -78,6 +78,32 @@ let serialCounters: Record<string, number> = {};
 let _cachedTxnsLength = -1;
 let _cachedState: { serialMap: Record<string, SerialState>; summaryCounts: SummaryCounts } | null = null;
 
+// Persistence
+const STORAGE_KEY = 'inventory_ledger_v1';
+
+function saveLedger() {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
+  }
+}
+
+function loadLedger() {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        transactions = JSON.parse(saved);
+        debugLog(`LOADED LEDGER: ${transactions.length} txns`);
+      } catch (e) {
+        debugLog("FAILED TO LOAD LEDGER", e);
+      }
+    }
+  }
+}
+
+// Initial load
+loadLedger();
+
 // --------------------------------------------------
 // SEED DATA
 // --------------------------------------------------
@@ -250,6 +276,7 @@ export function executeInward(params: {
 
   debugLog("LEDGER_INWARD:", txn);
   transactions.push(txn);
+  saveLedger();
   return serial;
 }
 
@@ -281,6 +308,7 @@ export function executeInwardBulk(params: {
 
   debugLog("LEDGER_INWARD_BULK:", txn);
   transactions.push(txn);
+  saveLedger();
   return serial;
 }
 
@@ -298,6 +326,7 @@ export function executeInwardBatch(batch: Transaction[]) {
 
   debugLog(`COMMITTING BATCH: ${batch.length} items`);
   transactions.push(...batch);
+  saveLedger();
 }
 
 export function executeOutward(params: {
@@ -330,6 +359,7 @@ export function executeOutward(params: {
 
   debugLog("LEDGER_OUTWARD:", txn);
   transactions.push(txn);
+  saveLedger();
   return serial;
 }
 
@@ -359,6 +389,7 @@ export function executeOutwardBulk(params: {
 
   debugLog("LEDGER_OUTWARD_BULK:", txn);
   transactions.push(txn);
+  saveLedger();
   return serial;
 }
 
@@ -385,6 +416,7 @@ export function sellItem(serial: string, customer_id: string, metadata?: Partial
 
   debugLog("SELL:", txn);
   transactions.push(txn);
+  saveLedger();
 }
 
 export function assignItem(serial: string, engineer_id: string, metadata?: Partial<Transaction>) {
@@ -407,6 +439,7 @@ export function assignItem(serial: string, engineer_id: string, metadata?: Parti
 
   debugLog("ASSIGN:", txn);
   transactions.push(txn);
+  saveLedger();
 }
 
 export function returnItem(serial: string, engineer_id: string, metadata?: Partial<Transaction>) {
@@ -436,6 +469,7 @@ export function returnItem(serial: string, engineer_id: string, metadata?: Parti
 
   debugLog("RETURN:", txn);
   transactions.push(txn);
+  saveLedger();
 }
 
 export function consumeItem(serial: string, engineer_id: string, metadata?: Partial<Transaction>) {
@@ -464,6 +498,7 @@ export function consumeItem(serial: string, engineer_id: string, metadata?: Part
 
   debugLog("CONSUMED:", txn);
   transactions.push(txn);
+  saveLedger();
 }
 
 export function adjustStock(item_id: string, qty: number, metadata?: Partial<Transaction>): string[] {
@@ -488,6 +523,7 @@ export function adjustStock(item_id: string, qty: number, metadata?: Partial<Tra
     transactions.push(txn);
     serials.push(serial);
   }
+  saveLedger();
 
   debugLog(`ADJUSTMENT: ${qty} units for ${item_id}`);
   return serials;

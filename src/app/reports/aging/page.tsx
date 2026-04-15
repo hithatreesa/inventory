@@ -58,9 +58,6 @@ export default function EngineerAgingReportPage() {
                             <ArrowLeft className="w-3 h-3" /> Back to Dashboard
                         </button>
                         <h1 className="text-3xl sm:text-5xl font-black text-[#1A1C21] tracking-tight italic uppercase decoration-blue-500/10 decoration-8">Asset Aging Index</h1>
-                        <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.3em] flex items-center gap-2">
-                            <Clock className="w-3 h-3 text-orange-500 animate-pulse" /> Live Possession Lifecycle
-                        </p>
                     </div>
                 </div>
 

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo } from 'react'
+import React, { useState } from 'react'
 import {
    Package,
    FileText,
@@ -10,17 +10,13 @@ import {
    PieChart as PieChartIcon,
    AlertCircle,
    Table as TableIcon,
-   Search,
    Download,
-   Filter,
-   ArrowRight,
    X,
    Calculator,
    BarChart3,
    Tag,
-   Briefcase,
    Scale,
-   ChevronRight
+   Briefcase
 } from 'lucide-react'
 import { useData } from '@/lib/context/DataContext'
 import { MetricCard } from '@/components/shared/MetricCard'
@@ -59,7 +55,11 @@ export default function ReportsPage() {
                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Operational Reporting & Decision Logic</p>
             </div>
             <div className="flex gap-2">
-               <Button variant="secondary" className="h-10 px-4 rounded-xl font-black text-[10px] tracking-widest uppercase italic bg-gray-50 border-gray-100 flex items-center gap-2">
+               <Button 
+                  variant="secondary" 
+                  onClick={() => toast.success('Generation of bulk data summary initiated...', { description: 'All intelligence modules are being exported.' })}
+                  className="h-10 px-4 rounded-xl font-black text-[10px] tracking-widest uppercase italic bg-gray-50 border-gray-100 flex items-center gap-2"
+               >
                   <Download className="w-4 h-4" /> Bulk Export
                </Button>
             </div>
@@ -73,7 +73,7 @@ export default function ReportsPage() {
                      title={tile.title}
                      value={tile.description}
                      icon={tile.icon}
-                     variant={tile.variant as any}
+                     variant={tile.variant as "primary" | "default" | "success" | "warning"}
                      isCritical={tile.critical}
                      onClick={() => setActiveModal(tile.id)}
                      className="hover:border-primary/40"
@@ -99,16 +99,26 @@ export default function ReportsPage() {
    MODAL COMPONENT: QUICK VIEW SYSTEM
    ========================================================================== */
 
-function ReportQuickViewModal({ type, onClose, inventory, transactions }: any) {
+interface ReportItem { id: string; name: string; category: string; total_qty: number; sku?: string; }
+interface ReportTransaction { id: string; item_id: string; type: string; quantity: number; date?: string; status?: string; engineer_id?: string; }
+
+interface ReportModalProps {
+   type: string;
+   onClose: () => void;
+   inventory: ReportItem[];
+   transactions: ReportTransaction[];
+}
+
+function ReportQuickViewModal({ type, onClose, inventory, transactions }: ReportModalProps) {
    const title = type.replace(/-/g, ' ').toUpperCase();
 
    const renderContent = () => {
       switch (type) {
-         case 'stock-summary': return <StockSummaryView inventory={inventory} transactions={transactions} />;
+         case 'stock-summary': return <StockSummaryView inventory={inventory} />;
          case 'stock-ledger': return <StockLedgerView inventory={inventory} transactions={transactions} />;
          case 'reorder-suggestion': return <ReorderIntelligenceView inventory={inventory} transactions={transactions} />;
-         case 'profit-report': return <ProfitMarginView inventory={inventory} transactions={transactions} />;
-         case 'dead-stock': return <DeadStockView inventory={inventory} transactions={transactions} />;
+         case 'profit-report': return <ProfitMarginView />;
+         case 'dead-stock': return <DeadStockView inventory={inventory} />;
          default: return (
            <div className="p-12 text-center opacity-40">
              <BarChart3 className="w-12 h-12 mx-auto mb-4" />
@@ -140,7 +150,7 @@ function ReportQuickViewModal({ type, onClose, inventory, transactions }: any) {
 
             {/* Modal Footer */}
             <div className="p-4 border-t border-gray-50 bg-gray-50/30 flex justify-between items-center">
-               <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Live Engine View &rarr; Aggregated Data</p>
+               <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Aggregated Data</p>
                <div className="flex gap-2">
                   <Button variant="secondary" className="h-9 px-4 rounded-lg bg-white border-gray-100 font-black text-[9px] uppercase tracking-widest italic">CSV Export</Button>
                   <Button className="h-9 px-4 rounded-lg bg-[#003366] text-white font-black text-[9px] uppercase tracking-widest italic">Print PDF</Button>
@@ -155,7 +165,7 @@ function ReportQuickViewModal({ type, onClose, inventory, transactions }: any) {
    SUB-VIEWS: REPORT TABLES
    ========================================================================== */
 
-function StockSummaryView({ inventory, transactions }: any) {
+function StockSummaryView({ inventory }: { inventory: ReportItem[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left">
@@ -169,7 +179,7 @@ function StockSummaryView({ inventory, transactions }: any) {
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
-          {inventory.map((item: any) => (
+          {inventory.map((item: { id: string, name: string, category: string, total_qty: number }) => (
             <tr key={item.id} className="hover:bg-gray-50/30">
               <td className="px-4 py-4">
                 <p className="text-xs font-black text-[#003366] uppercase leading-none">{item.name}</p>
@@ -187,11 +197,11 @@ function StockSummaryView({ inventory, transactions }: any) {
   )
 }
 
-function StockLedgerView({ transactions, inventory }: any) {
+function StockLedgerView({ transactions, inventory }: { transactions: { item_id: string, type: string, quantity: number, date?: string }[], inventory: { id: string, name: string }[] }) {
   return (
     <div className="space-y-4">
-      {transactions.map((t: any, i: number) => {
-        const item = inventory.find((inv: any) => inv.id == t.item_id);
+      {transactions.map((t: { item_id: string, type: string, quantity: number, date?: string }, i: number) => {
+        const item = inventory.find((inv: { id: string, name: string }) => inv.id == t.item_id);
         return (
           <div key={i} className="p-3 border border-gray-100 rounded-xl flex items-center justify-between hover:border-primary/20 transition-all">
             <div className="flex items-center gap-4">
@@ -216,12 +226,12 @@ function StockLedgerView({ transactions, inventory }: any) {
   )
 }
 
-function ReorderIntelligenceView({ inventory, transactions }: any) {
-  const calculations = inventory.map((item: any) => {
+function ReorderIntelligenceView({ inventory, transactions }: { inventory: ReportItem[], transactions: ReportTransaction[] }) {
+  const calculations = inventory.map((item: { id: string, name: string, total_qty?: number }) => {
     // Logic: Sales Velocity = total sold / 30
     const salesLast30 = transactions
-      .filter((t: any) => t.item_id == item.id && (t.type === 'SALE' || t.type === 'OUTWARD'))
-      .reduce((sum: number, t: any) => sum + t.quantity, 0);
+      .filter((t: { item_id: string, type: string, quantity: number }) => t.item_id == item.id && (t.type === 'SALE' || t.type === 'OUTWARD'))
+      .reduce((sum: number, t: { quantity: number }) => sum + t.quantity, 0);
     const velocity = parseFloat((salesLast30 / 30).toFixed(2));
     const leadTime = 7;
     const suggestedReorder = Math.ceil(velocity * leadTime);
@@ -235,7 +245,7 @@ function ReorderIntelligenceView({ inventory, transactions }: any) {
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
            <p className="text-[8px] font-black text-orange-400 uppercase tracking-widest">Urgent Alerts</p>
-           <h3 className="text-lg font-black text-orange-900 italic uppercase leading-none mt-2">{calculations.filter((c:any) => c.status === 'CRITICAL').length} Items</h3>
+           <h3 className="text-lg font-black text-orange-900 italic uppercase leading-none mt-2">{calculations.filter((c: { status: string }) => c.status === 'CRITICAL').length} Items</h3>
         </div>
       </div>
       <table className="w-full text-left">
@@ -248,7 +258,7 @@ function ReorderIntelligenceView({ inventory, transactions }: any) {
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
-          {calculations.map((c: any) => (
+          {calculations.map((c: { id: string, name: string, status: string, velocity: number, suggestedReorder: number }) => (
             <tr key={c.id} className={cn("hover:bg-gray-50/30", c.status === 'CRITICAL' && "bg-orange-50/10")}>
               <td className="px-4 py-4">
                 <p className="text-xs font-black text-[#003366] uppercase leading-none">{c.name}</p>
@@ -273,7 +283,7 @@ function ReorderIntelligenceView({ inventory, transactions }: any) {
   )
 }
 
-function ProfitMarginView({ inventory, transactions }: any) {
+function ProfitMarginView() {
   return (
     <div className="p-12 text-center opacity-40">
       <TrendingUp className="w-12 h-12 mx-auto mb-4" />
@@ -282,10 +292,10 @@ function ProfitMarginView({ inventory, transactions }: any) {
   )
 }
 
-function DeadStockView({ inventory, transactions }: any) {
+function DeadStockView({ inventory }: { inventory: ReportItem[] }) {
   return (
     <div className="space-y-4">
-      {inventory.filter((i:any) => true).slice(0, 5).map((item: any, i: number) => (
+      {inventory.filter(() => true).slice(0, 5).map((item: { id: string, name: string }, i: number) => (
         <div key={i} className="p-4 border border-red-50 rounded-2xl flex items-center justify-between bg-red-50/10">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center text-red-600">

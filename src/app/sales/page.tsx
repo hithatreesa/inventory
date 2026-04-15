@@ -4,18 +4,13 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import {
   Save,
   CheckCircle2,
-  UserPlus,
   Plus,
-  Info,
   FileUp,
   ExternalLink,
-  ChevronRight,
   Search,
   Trash2,
-  X,
   Minus,
   ShoppingCart,
-  Printer,
   Package
 } from 'lucide-react'
 import { useData } from '@/lib/context/DataContext'
@@ -23,7 +18,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { SectionHeader } from '@/components/shared/SectionHeader'
-import { SummaryPanel, SummaryActionCard, SummaryRow } from '@/components/shared/SummaryPanel'
+import { SummaryPanel, SummaryActionCard } from '@/components/shared/SummaryPanel'
 import POSMode from '@/components/POSMode'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -38,11 +33,15 @@ interface SalesItem {
   category: string
 }
 
-// Stable invoice number generated once per page load
-const INVOICE_ID = `INV-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 90000) + 10000)}`
 
 export default function SalesPage() {
   const { inventory, sellFromPOS } = useData()
+  const [invoiceId, setInvoiceId] = useState('')
+
+  useEffect(() => {
+    // Generate stable invoice number only on client to avoid hydration mismatch
+    setInvoiceId(`INV-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 90000) + 10000)}`)
+  }, [])
   const [mode, setMode] = useState<"ERP" | "POS">("ERP")
   const [items, setItems] = useState<SalesItem[]>([])
   const [customerName, setCustomerName] = useState('')
@@ -87,18 +86,6 @@ export default function SalesPage() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Barcode scan listener — adds scanned item to invoice
-  useEffect(() => {
-    const onScan = (e: CustomEvent) => {
-      const { item } = e.detail
-      if (!item) return
-      addProductToInvoice(item.id)
-      toast.success(`Scanned: ${item.name}`)
-    }
-    window.addEventListener('barcode-scanned', onScan as EventListener)
-    return () => window.removeEventListener('barcode-scanned', onScan as EventListener)
-  }, [inventory])
-
   // Add product to invoice line items
   const addProductToInvoice = useCallback((productId: string) => {
     const product = inventory.find(i => i.id === productId)
@@ -139,6 +126,18 @@ export default function SalesPage() {
     setSearchQuery('')
     setShowSearch(false)
   }, [inventory])
+
+  // Barcode scan listener — adds scanned item to invoice
+  useEffect(() => {
+    const onScan = (e: CustomEvent<{ item: { id: string, name: string } }>) => {
+      const { item } = e.detail
+      if (!item) return
+      addProductToInvoice(item.id)
+      toast.success(`Scanned: ${item.name}`)
+    }
+    window.addEventListener('barcode-scanned', onScan as EventListener)
+    return () => window.removeEventListener('barcode-scanned', onScan as EventListener)
+  }, [inventory, addProductToInvoice])
 
   // Update quantity for a line item
   const updateQty = useCallback((id: string, delta: number) => {
@@ -205,7 +204,7 @@ export default function SalesPage() {
         )
       }, {
         loading: 'Processing Sale...',
-        success: `Invoice ${INVOICE_ID} — Sale Complete!`,
+        success: `Invoice ${invoiceId} — Sale Complete!`,
         error: (err: Error) => err.message || 'Sale Failed'
       })
       setItems([])
@@ -214,7 +213,7 @@ export default function SalesPage() {
     } finally {
       setIsProcessing(false)
     }
-  }, [items, customerName, sellFromPOS])
+  }, [items, customerName, sellFromPOS, invoiceId])
 
   // Save draft (simple local state — just a toast for UX)
   const handleSaveDraft = useCallback(() => {
@@ -256,7 +255,7 @@ export default function SalesPage() {
       <SectionHeader
         title="Sales Invoice"
         prefix="SALES MANAGEMENT"
-        subtitle={`Document Identifier: #${INVOICE_ID}`}
+        subtitle={invoiceId ? `Document Identifier: #${invoiceId}` : "Initializing Document..."}
         actions={headerActions}
       />
 
@@ -365,20 +364,35 @@ export default function SalesPage() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && searchResults.length > 0) {
                       addProductToInvoice(searchResults[0].id)
-                    }
-                    if (e.key === 'Escape') {
                       setShowSearch(false)
                       setSearchQuery('')
                     }
                   }}
-                  className="h-14 rounded-2xl bg-white border-gray-100 shadow-sm text-base font-bold placeholder:italic transition-all focus:ring-4 focus:ring-primary/5 focus:border-primary"
+                  className="h-14 rounded-2xl bg-white border-gray-100 shadow-sm text-base font-bold placeholder:italic transition-all focus:ring-4 focus:ring-primary/5 focus:border-primary pr-36"
                 />
-                <div className="absolute right-5 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                  <span className="text-xs font-black text-gray-400 bg-gray-50 px-2.5 py-1 rounded-lg border border-gray-100 uppercase tracking-widest italic hidden sm:inline-block">
-                    Add Product
+                <button 
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (searchResults.length > 0) {
+                      addProductToInvoice(searchResults[0].id);
+                      setSearchQuery('');
+                    } else {
+                      toast.error('No product selected');
+                    }
+                  }}
+                  className={cn(
+                    "absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2 px-4 py-2 rounded-xl transition-all z-20 pointer-events-auto",
+                    searchResults.length > 0 
+                      ? "bg-primary text-white shadow-lg shadow-primary/20 hover:scale-105 active:scale-95" 
+                      : "bg-gray-100 text-gray-400 cursor-not-allowed opacity-50"
+                  )}
+                >
+                  <span className="text-[10px] font-black uppercase tracking-widest italic hidden sm:inline-block">
+                    Add Result
                   </span>
-                  <Plus className="w-4 h-4 text-primary" />
-                </div>
+                  <Plus className="w-4 h-4" />
+                </button>
               </div>
 
               {/* Search Dropdown */}

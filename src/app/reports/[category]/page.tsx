@@ -77,16 +77,15 @@ function DetailedReportContent() {
       toast.success(`Exporting ${reportInfo} as ${format.toUpperCase()}...`)
    }
 
-   // Mock Table Data based on Type
    const tableData = useMemo(() => {
       const base = [1, 2, 3, 4, 5, 6, 7, 8]
       return base.map(i => ({
          id: `REF-${2000 + i}`,
          date: `2024-03-${10 + i}`,
          entity: category === 'purchase' ? 'Industrial Logic Ltd' : 'Apex Systems Inc',
-         amount: (Math.random() * 5000 + 100).toFixed(2),
+         amount: ((i * 153.45 + 102.50) % 5000).toFixed(2),
          status: type === 'low-stock' ? 'Critical' : i % 3 === 0 ? 'Verified' : 'Pending',
-         units: Math.floor(Math.random() * 50) + 1
+         units: (i * 7 + 12) % 60
       }))
    }, [category, type])
 
@@ -237,7 +236,6 @@ export default function DetailedReportPage() {
       <Suspense fallback={
          <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
             <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-            <p className="text-[10px] font-black text-primary uppercase tracking-[0.3em] animate-pulse">Initializing Analytics Scaffold...</p>
          </div>
       }>
          <DetailedReportContent />

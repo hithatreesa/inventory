@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import {
    Package,
    ArrowUpRight,
@@ -34,12 +35,16 @@ import { QuickEntryModal } from '@/components/modals/QuickEntryModal'
 import { useDashboardData } from '@/utils/useDashboardData'
 
 export default function DashboardPage() {
+   const router = useRouter()
    const { inventory, transactions, engineers } = useData()
    const [isQuickEntryOpen, setIsQuickEntryOpen] = useState(false)
    const [activeMetric, setActiveMetric] = useState<string | null>(null)
    
-   // Fix purity: Initialize once, don't use useMemo for impure functions
-   const [dashboardInitTime] = useState(() => Date.now())
+    // Fix purity & hydration: Initialize as 0 and set on client mount
+    const [dashboardInitTime, setDashboardInitTime] = useState(0)
+    useEffect(() => {
+       setDashboardInitTime(Date.now())
+    }, [])
 
    // Construction of safeData payload formatted for user-provided DashboardDataLayer
    const data = useMemo(() => {
@@ -362,7 +367,18 @@ export default function DashboardPage() {
                                  <span className="text-[8px] font-black text-orange-400 uppercase tracking-widest">Velocity: {item.velocity}/day</span>
                               </div>
                            </div>
-                           <button className="h-7 px-3 bg-white text-[#003366] rounded-lg text-[8px] font-black uppercase tracking-widest italic flex items-center gap-1.5 hover:bg-blue-100 transition-colors">
+                           <button 
+                              onClick={() => {
+                                 const itemInInv = inventory.find(inv => inv.name === item.name);
+                                 const reorderData = {
+                                    id: itemInInv?.id,
+                                    name: item.name,
+                                    qty: Math.ceil(item.velocity * 7) // Suggesting 7 days worth of stock
+                                 };
+                                 router.push(`/purchase/new?reorder=${encodeURIComponent(JSON.stringify(reorderData))}`);
+                              }}
+                              className="h-7 px-3 bg-white text-[#003366] rounded-lg text-[8px] font-black uppercase tracking-widest italic flex items-center gap-1.5 hover:bg-blue-100 transition-colors"
+                           >
                               <Plus className="w-2.5 h-2.5" /> Order
                            </button>
                         </div>

@@ -12,9 +12,9 @@ import {
   Minus,
   User,
   Zap,
-  ShoppingCart,
-  X
+  ShoppingCart
 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { useData } from '@/lib/context/DataContext'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -32,10 +32,11 @@ interface BillItem {
 }
 
 export default function POSPage() {
+  const router = useRouter()
   const { inventory, sellFromPOS } = useData()
   const [billItems, setBillItems] = useState<BillItem[]>([])
   const [query, setQuery] = useState('')
-  const [customer, setCustomer] = useState('Walk-in Customer')
+  const [customer] = useState('Walk-in Customer')
   const [priceLevel, setPriceLevel] = useState<'Retail' | 'Wholesale' | 'Dealer'>('Retail')
   const [discount, setDiscount] = useState(0)
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'UPI' | 'Card'>('Cash')
@@ -136,8 +137,9 @@ export default function POSPage() {
 
   // Keyboard Shortcuts & Barcode Listener
   useEffect(() => {
-    const onScan = (e: any) => {
-      const { item } = e.detail;
+    const onScan = (e: Event) => {
+      const customEvent = e as CustomEvent<{ item: { id: string } }>;
+      const { item } = customEvent.detail;
       if (item) addItem(item.id);
     };
     window.addEventListener('barcode-scanned', onScan);
@@ -287,7 +289,12 @@ export default function POSPage() {
         <div className="bg-white rounded-3xl p-6 border border-border-main shadow-sm flex flex-col gap-4">
           <div className="flex justify-between items-center px-1">
             <h4 className="text-sm font-black text-gray-400 uppercase tracking-[0.2em] italic">Customer Assignment</h4>
-            <button className="text-sm font-black text-primary uppercase hover:underline">New Account</button>
+            <button 
+              onClick={() => router.push('/engineers/add')}
+              className="text-sm font-black text-primary uppercase hover:underline"
+            >
+              New Account
+            </button>
           </div>
           <div className="flex items-center gap-4 bg-gray-50/50 p-4 rounded-2xl border border-gray-100 group cursor-pointer hover:bg-primary/5 transition-all">
             <div className="w-12 h-12 bg-white rounded-xl border border-gray-100 flex items-center justify-center text-primary shadow-sm group-hover:scale-105 transition-transform shrink-0">
@@ -303,7 +310,7 @@ export default function POSPage() {
             {['Retail', 'Wholesale', 'Dealer'].map((level) => (
               <button
                 key={level}
-                onClick={() => setPriceLevel(level as any)}
+                onClick={() => setPriceLevel(level as 'Retail' | 'Wholesale' | 'Dealer')}
                 className={cn(
                   "py-2.5 rounded-xl text-sm font-black uppercase tracking-widest transition-all italic border",
                   priceLevel === level
@@ -370,7 +377,7 @@ export default function POSPage() {
             ].map((m) => (
               <button
                 key={m.id}
-                onClick={() => setPaymentMode(m.id as any)}
+                onClick={() => setPaymentMode(m.id as 'Cash' | 'UPI' | 'Card')}
                 className={cn(
                   "flex-1 flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all",
                   paymentMode === m.id

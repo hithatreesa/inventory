@@ -197,23 +197,37 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [engineers, setEngineers] = useState<Engineer[]>(MOCK_ENGINEERS)
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [logs, setLogs] = useState<Log[]>([])
-  const [catalog, setCatalog] = useState<InventoryItem[]>(MOCK_CATALOG)
+  const [catalog, setCatalog] = useState<InventoryItem[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('inventory_catalog');
+      return saved ? JSON.parse(saved) : MOCK_CATALOG;
+    }
+    return MOCK_CATALOG;
+  })
+
+  // Persistence Effect
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('inventory_catalog', JSON.stringify(catalog));
+    }
+  }, [catalog]);
 
   const addLog = useCallback((msg: string) => {
     setLogs(prev => [
-      { id: Date.now().toString(), title: msg, desc: `Action`, type: 'System', time: 'Just now', message: msg },
+      { id: Date.now().toString(), title: msg, desc: `Action`, type: 'System', time: 'Just now', message: msg, created_at: Date.now() },
       ...prev
     ])
   }, [])
 
   // Derived state from strict serial engine
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (currentCatalog?: InventoryItem[]) => {
     try {
+      const activeCatalog = currentCatalog || catalog;
       const groupedItems = engine.getAllItemsGrouped();
       const engineTxns = engine.getTransactions();
 
       // 1. Group engine items by catalog product to build `InventoryItem[]`
-      const parsedInventory: InventoryItem[] = catalog.map(cat => {
+      const parsedInventory: InventoryItem[] = activeCatalog.map(cat => {
         const group = groupedItems.find(g => g.item_id === cat.id);
 
         return {
@@ -248,9 +262,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       });
 
     } catch (err) {
-      console.error('Data deriving error:', err)
+      console.error("fetchData failed:", err);
     }
-  }, [catalog])
+  }, [catalog, engineers, addLog])
 
   useEffect(() => {
     fetchData()
@@ -620,16 +634,26 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       is_serialized: !!item.is_serialized
     };
 
-    setCatalog(prev => [...prev, newItem]);
-    
-    // fetchData is called but since engine transactions haven't changed, 
-    // it will just map the new catalog item with 0 qty from the engine.
-    await fetchData();
+    setCatalog(prev => {
+      const next = [...prev, newItem];
+      // Passing next catalog directly to fetchData to avoid stale closure/async state race
+      fetchData(next);
+      return next;
+    });
   }
-  const editItem = async () => {} 
+  const editItem = async (id: string, updates: Partial<InventoryItem>) => {
+    setCatalog(prev => {
+      const next = prev.map(item => item.id === id ? { ...item, ...updates } : item);
+      fetchData(next);
+      return next;
+    });
+  }
   const deleteItems = async (ids: string[]) => {
-    setCatalog(prev => prev.filter(item => !ids.includes(item.id)));
-    await fetchData();
+    setCatalog(prev => {
+      const next = prev.filter(item => !ids.includes(item.id));
+      fetchData(next);
+      return next;
+    });
   }
 
   const processPO = async (header: any, lines: any[]) => {

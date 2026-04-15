@@ -66,7 +66,7 @@ function SidePanel({
 }
 
 export default function InventoryPage() {
-   const { inventory, transactions, engineers, issueAsset, returnAsset, deleteItems, adjustItem } = useData()
+   const { inventory, transactions, engineers, returnAsset, deleteItems, adjustItem } = useData()
    const [selectedIds, setSelectedIds] = useState<string[]>([])
    const [filters, setFilters] = useState({
       search: '',
@@ -77,12 +77,13 @@ export default function InventoryPage() {
    })
    const [activePanel, setActivePanel] = useState<{ type: 'detail' | 'serials', id: string } | null>(null)
    const [isItemModalOpen, setIsItemModalOpen] = useState(false)
-   const [editingItem, setEditingItem] = useState<any>(null)
+   const [editingItem, setEditingItem] = useState<unknown>(null)
    const [exportMenuOpen, setExportMenuOpen] = useState<'top' | 'mobile' | 'bulk' | null>(null)
 
    useEffect(() => {
-      const onScan = (e: any) => {
-          const { item } = e.detail;
+      const onScan = (e: Event) => {
+          const customEvent = e as CustomEvent<{ item: { id: string, name: string, barcode: string } }>;
+          const { item } = customEvent.detail;
           if (item) {
               // If scanned, we open a quick adjustment prompt or modal
               const qty = prompt(`Adjust stock for ${item.name} (barcode: ${item.barcode}). Enter adjustment quantity (+/-):`, "0");
@@ -117,10 +118,10 @@ export default function InventoryPage() {
                doc.save(`Company_Inventory_${dateStr}.pdf`);
             } else if (type === 'engineer') {
                doc.text(`Engineer Asset Assignment Report - ${dateStr}`, 14, 15);
-               const inUseTxns = transactions.filter((t: any) => t.status === 'In Use');
-               const tableData = inUseTxns.map((t: any) => {
+               const inUseTxns = transactions.filter((t: { status: string }) => t.status === 'In Use');
+               const tableData = inUseTxns.map((t: { item_id: string, engineer_id: string, quantity: number }) => {
                   const item = inventory.find(i => i.id == t.item_id);
-                  const eng = (engineers || []).find((e: any) => e.id == t.engineer_id);
+                  const eng = (engineers || []).find((e: { id: string }) => e.id == t.engineer_id);
                   return [
                      eng ? eng.name : t.engineer_id,
                      item ? item.name : 'Unknown Item',
@@ -136,7 +137,7 @@ export default function InventoryPage() {
                doc.save(`Engineer_Assets_${dateStr}.pdf`);
             } else if (type === 'inhand') {
                doc.text(`In-Hand Stock Report - ${dateStr}`, 14, 15);
-               const inhandItems = inventory.filter(i => (i.total_qty - i.assigned_qty) > 0);
+               const inhandItems = inventory.filter((i: { total_qty: number, assigned_qty: number }) => (i.total_qty - i.assigned_qty) > 0);
                const tableData = inhandItems.map(item => [
                   item.name, item.sku || 'N/A', item.category, item.location || 'N/A', (item.total_qty - item.assigned_qty).toString()
                ]);
@@ -191,8 +192,9 @@ export default function InventoryPage() {
          await deleteItems(ids)
          toast.success('Items deleted successfully')
          setSelectedIds([])
-      } catch (err: any) {
-         toast.error(err.message || 'Failed to delete items')
+      } catch (err: unknown) {
+         const error = err as Error;
+         toast.error(error.message || 'Failed to delete items')
       }
    }
 
@@ -201,7 +203,7 @@ export default function InventoryPage() {
       setIsItemModalOpen(true)
    }
 
-   const openEditModal = (item: any) => {
+   const openEditModal = (item: { id: string, name: string }) => {
       setEditingItem(item)
       setIsItemModalOpen(true)
    }
@@ -525,7 +527,7 @@ export default function InventoryPage() {
                         className="h-12 px-6 rounded-2xl bg-white/5 text-white font-black text-sm tracking-widest uppercase italic flex items-center gap-2 hover:bg-white/10 hover:translate-y-[-2px] transition-all" 
                         onClick={() => setExportMenuOpen(exportMenuOpen === 'bulk' ? null : 'bulk')}
                      >
-                        <Download className="w-4 h-4 text-primary" /> Export
+                        <Download className="w-4 h-4 text-primary" /> BULK EXPORT
                      </button>
                      {exportMenuOpen === 'bulk' && (
                         <div className="absolute bottom-full mb-2 right-0 w-36 bg-white border border-gray-100 rounded-xl shadow-xl z-50 flex flex-col py-1 overflow-hidden" onMouseLeave={() => setExportMenuOpen(null)}>
@@ -643,7 +645,7 @@ export default function InventoryPage() {
                 <div className="space-y-4">
                   <h4 className="text-sm font-black text-gray-400 uppercase tracking-widest italic border-b border-gray-50 pb-4">Activity Log</h4>
                   <div className="grid grid-cols-1 gap-3">
-                     {transactions.filter((t: any) => t.item_id === activeItem?.id).map((txn: any) => (
+                     {transactions.filter((t: { item_id: string }) => t.item_id === activeItem?.id).map((txn: { id: string, status: string, quantity: number, type: string, engineer_id?: string, date?: string }) => (
                         <div 
                            key={txn.id} 
                            onClick={() => txn.status === 'Returned' ? null : returnAsset(txn.id)}

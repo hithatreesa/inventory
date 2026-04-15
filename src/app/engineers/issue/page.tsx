@@ -10,7 +10,7 @@ import {
     Barcode,
     User,
     Package,
-    Navigation
+
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useData, InventoryItem } from '@/lib/context/DataContext'
@@ -235,9 +235,6 @@ function EngineerIssueContent() {
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 px-2 sm:px-0">
                     <div className="w-full lg:w-auto">
                         <h1 className="text-3xl sm:text-5xl font-black text-[#1A1C21] tracking-tight italic leading-tight">Issue Inventory</h1>
-                        <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.3em] mt-2 flex items-center gap-2">
-                            <Navigation className="w-3 h-3 text-primary animate-pulse" /> Outward Possession Tracker
-                        </p>
                     </div>
                     
                     {/* Header Action Row */}
@@ -465,7 +462,7 @@ function EngineerIssueContent() {
                                 </div>
                             </div>
 
-                            {/* Live Manifest */}
+
                             <div className="w-full lg:w-[450px] border-t lg:border-t-0 lg:border-l border-gray-100 bg-white flex flex-col shrink-0 min-h-[300px]">
                                 <div className="p-8 border-b border-gray-100"><h3 className="text-xs font-black text-gray-300 uppercase tracking-widest">Captured Serials</h3></div>
                                 <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">

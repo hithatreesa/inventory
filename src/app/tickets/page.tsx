@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState } from 'react'
-import { Plus, ArrowRight, UserPlus, Clock, CheckCircle2, AlertCircle, Play, CheckCircle } from 'lucide-react'
+import { Plus, UserPlus, Clock, CheckCircle2, AlertCircle, Play, CheckCircle } from 'lucide-react'
 import { useData } from '@/lib/context/DataContext'
 
 export default function TicketsPage() {

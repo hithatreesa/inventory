@@ -2,15 +2,11 @@
 
 import React, { useState } from 'react'
 import {
-  ChevronRight,
   Package,
   IndianRupee,
-  Lock,
   MapPin,
-  History,
   Info,
   Barcode,
-  ArrowRight,
   ShieldCheck,
   Plus,
   Trash2,

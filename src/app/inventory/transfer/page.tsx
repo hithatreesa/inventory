@@ -10,10 +10,8 @@ import {
   Minus, 
   Calendar, 
   Zap,
-  MoreVertical,
   Bell,
-  HelpCircle,
-  ChevronRight
+  HelpCircle
 } from 'lucide-react'
 import { stockTransferData } from '@/lib/mock-data/inventory'
 
@@ -173,7 +171,7 @@ export default function StockTransferPage() {
                          </button>
                       </div>
                     </td>
-                    <td className="px-8 py-6 text-right text-sm font-extrabold text-text-main">₹{item.unitValue.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                    <td className="px-8 py-6 text-right text-sm font-extrabold text-text-main">₹{item.unitValue.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
                   </tr>
                 ))}
               </tbody>
@@ -226,7 +224,7 @@ export default function StockTransferPage() {
             </div>
             <div className="pt-8 flex flex-col items-end">
                <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-60 mb-2">Gross Value</span>
-               <h2 className="text-4xl font-black tracking-tighter italic">₹{grossValue.toLocaleString(undefined, {minimumFractionDigits: 2})}</h2>
+               <h2 className="text-4xl font-black tracking-tighter italic">₹{grossValue.toLocaleString('en-IN', {minimumFractionDigits: 2})}</h2>
             </div>
           </div>
 

@@ -22,7 +22,7 @@ export function SummaryRow({ label, value, isWarning, className }: SummaryRowPro
         "text-base font-black italic tracking-tighter",
         isWarning ? 'text-warning' : 'text-text-main'
       )}>
-        {typeof value === 'number' ? `₹${value.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : value}
+        {typeof value === 'number' ? `₹${value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : value}
       </span>
     </div>
   )
@@ -85,7 +85,7 @@ export function SummaryPanel({
           </span>
         </div>
         <h2 className="text-5xl font-black text-text-main tracking-tighter text-right italic">
-          ₹{grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          ₹{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
         </h2>
       </div>
       

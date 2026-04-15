@@ -2,15 +2,20 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useData } from '@/lib/context/DataContext';
+import { toast } from 'sonner';
 
 interface POSModeProps {
   onExit: () => void;
 }
 
 export default function POSMode({ onExit }: POSModeProps) {
-  const { inventory, createTransaction } = useData();
+  const { inventory, outwardItem, engineers } = useData();
   const [cart, setCart] = useState<any[]>([]);
   const [barcodeInput, setBarcodeInput] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Point 20: Use a dedicated Terminal ID for POS sales
+  const POS_ENG_ID = "eng_pos_terminal";
 
   // STEP 7: ADD ITEM BY BARCODE
   const addItemByBarcode = (code: string) => {
@@ -36,23 +41,26 @@ export default function POSMode({ onExit }: POSModeProps) {
     });
   };
 
-  // STEP 11: COMPLETE SALE
-  const completeSale = () => {
-    if (cart.length === 0) return;
+  // STEP 11: COMPLETE SALE (Harden Point 20)
+  const completeSale = async () => {
+    if (cart.length === 0 || isProcessing) return;
 
-    cart.forEach(item => {
-      createTransaction({
-        type: "SALE",
-        item_id: item.id,
-        quantity: item.qty,
-        price: item.selling_price,
-        date: new Date().toISOString().split("T")[0],
-        created_at: new Date()
-      });
-    });
-
-    printBill();
-    setCart([]);
+    setIsProcessing(true);
+    try {
+        // We iterate through cart and deduct stock via the context's hardened outward flow
+        for (const item of cart) {
+            await outwardItem(item.id, POS_ENG_ID, item.qty, `POS_SALE_${new Date().getTime()}`);
+        }
+        
+        toast.success("Sale Completed Successfully");
+        printBill();
+        setCart([]);
+    } catch (err: any) {
+        console.error("POS_HARD_FAIL", err);
+        toast.error(err.message || "Sale failed: Stock inconsistency detected");
+    } finally {
+        setIsProcessing(false);
+    }
   };
 
   // STEP 12: INSTANT PRINT
@@ -85,7 +93,7 @@ export default function POSMode({ onExit }: POSModeProps) {
       <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-6 shadow-sm">
         <div>
           <h1 className="text-xl font-black italic uppercase text-[#003366] tracking-tight">Express POS Module</h1>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{new Date().toLocaleDateString()}</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{new Date().toLocaleDateString('en-IN')}</p>
         </div>
         <button 
           onClick={onExit} 
@@ -145,8 +153,8 @@ export default function POSMode({ onExit }: POSModeProps) {
                              <button onClick={() => setCart(cart.map(i => i.id === item.id ? {...i, qty: i.qty + 1} : i))} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center font-bold text-gray-500 hover:bg-gray-200 active:scale-95 transition-transform">+</button>
                            </div>
                          </td>
-                         <td className="py-4 font-black text-sm text-gray-400 text-right tabular-nums hidden sm:table-cell">₹{(item.selling_price || 0).toLocaleString()}</td>
-                         <td className="py-4 font-black text-lg text-primary text-right tabular-nums italic">₹{(item.qty * (item.selling_price || 0)).toLocaleString()}</td>
+                         <td className="py-4 font-black text-sm text-gray-400 text-right tabular-nums hidden sm:table-cell">₹{(item.selling_price || 0).toLocaleString('en-IN')}</td>
+                         <td className="py-4 font-black text-lg text-primary text-right tabular-nums italic">₹{(item.qty * (item.selling_price || 0)).toLocaleString('en-IN')}</td>
                          <td className="py-4 text-right">
                            <button onClick={() => setCart(cart.filter(i => i.id !== item.id))} className="text-[10px] font-black text-red-400 tracking-widest italic uppercase hover:text-red-600 px-2">X</button>
                          </td>
@@ -172,7 +180,7 @@ export default function POSMode({ onExit }: POSModeProps) {
              <div className="space-y-3">
                <div className="flex justify-between items-center bg-white p-4 rounded-[20px] border border-gray-100">
                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Units ({cart.reduce((a,b)=>a+b.qty,0)})</span>
-                 <span className="font-black text-sm tabular-nums text-text-secondary">₹{total.toLocaleString()}</span>
+                 <span className="font-black text-sm tabular-nums text-text-secondary">₹{total.toLocaleString('en-IN')}</span>
                </div>
                <div className="flex justify-between items-center bg-white p-4 rounded-[20px] border border-gray-100">
                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tax (VAT%)</span>
@@ -185,7 +193,7 @@ export default function POSMode({ onExit }: POSModeProps) {
              <div className="bg-[#003366] text-white p-6 rounded-[28px] shadow-xl shadow-primary/20 flex flex-col sm:flex-row justify-between items-end sm:items-center relative overflow-hidden">
                <div className="absolute right-0 top-0 w-32 h-32 bg-white/5 rounded-full blur-2xl -mr-10 -mt-10"></div>
                <span className="text-[10px] font-black uppercase tracking-[0.2em] italic text-blue-200">Total Payable</span>
-               <span className="text-5xl font-black italic tracking-tighter tabular-nums drop-shadow-md">₹{total.toLocaleString()}</span>
+               <span className="text-5xl font-black italic tracking-tighter tabular-nums drop-shadow-md">₹{total.toLocaleString('en-IN')}</span>
              </div>
 
              {/* STEP 13: MOBILE + TOUCH OPTIMIZATION (large buttons h-14/16 grid) */}

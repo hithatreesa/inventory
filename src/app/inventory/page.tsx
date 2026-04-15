@@ -1,19 +1,17 @@
 "use client"
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
    Search,
    Download,
    Plus,
    Filter,
-   MoreVertical,
    Eye,
    Edit2,
    Package,
    Boxes,
    AlertCircle,
    X,
-   FileText,
    Share2,
    Trash2,
    ArrowRightLeft,
@@ -68,7 +66,7 @@ function SidePanel({
 }
 
 export default function InventoryPage() {
-   const { inventory, transactions, engineers, issueAsset, returnAsset, deleteItems } = useData()
+   const { inventory, transactions, engineers, issueAsset, returnAsset, deleteItems, adjustItem } = useData()
    const [selectedIds, setSelectedIds] = useState<string[]>([])
    const [filters, setFilters] = useState({
       search: '',
@@ -81,6 +79,21 @@ export default function InventoryPage() {
    const [isItemModalOpen, setIsItemModalOpen] = useState(false)
    const [editingItem, setEditingItem] = useState<any>(null)
    const [exportMenuOpen, setExportMenuOpen] = useState<'top' | 'mobile' | 'bulk' | null>(null)
+
+   useEffect(() => {
+      const onScan = (e: any) => {
+          const { item } = e.detail;
+          if (item) {
+              // If scanned, we open a quick adjustment prompt or modal
+              const qty = prompt(`Adjust stock for ${item.name} (barcode: ${item.barcode}). Enter adjustment quantity (+/-):`, "0");
+              if (qty !== null && qty !== "0") {
+                  adjustItem(item.id, Number(qty), 'SCAN_ADJUST');
+              }
+          }
+      };
+      window.addEventListener('barcode-scanned', onScan);
+      return () => window.removeEventListener('barcode-scanned', onScan);
+   }, [adjustItem]);
 
    const handleExport = (type: 'company' | 'engineer' | 'inhand') => {
       import('jspdf').then(jsPDFModule => {
@@ -202,45 +215,49 @@ export default function InventoryPage() {
 
    return (
       <div className="space-y-6 pb-24 animate-in fade-in duration-500 text-text-main">
-         {/* TOP HEADER BAR */}
-         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-8 rounded-3xl border border-border-main shadow-sm gap-6">
-            <div className="w-full sm:w-auto">
-               <div className="flex items-center gap-3">
-                  <h1 className="text-3xl font-black text-[#003366] tracking-tighter italic uppercase underline decoration-primary/20 decoration-4">Inventory Management</h1>
-               </div>
-            </div>
-            <div className="flex items-center gap-2">
-               <Button 
-                variant="secondary" 
-                className="hidden sm:flex h-9 px-3 rounded-xl font-black text-sm tracking-widest uppercase italic bg-white border-gray-100 hover:bg-gray-50 items-center justify-center gap-2"
-                onClick={() => toast.info('Import functionality coming soon')}
-               >
-                  <Plus className="w-4 h-4 text-primary" /> Import
-               </Button>
-               <div className="relative">
-                  <Button 
-                   variant="secondary" 
-                   className="hidden sm:flex h-9 px-3 rounded-xl font-black text-sm tracking-widest uppercase italic bg-white border-gray-100 hover:bg-gray-50 items-center justify-center gap-2"
-                   onClick={() => setExportMenuOpen(exportMenuOpen === 'top' ? null : 'top')}
-                  >
-                     <Download className="w-4 h-4 text-primary" /> Export
-                  </Button>
-                  {exportMenuOpen === 'top' && (
-                     <div className="absolute top-full mt-2 right-0 w-36 bg-white border border-gray-100 rounded-xl shadow-lg z-50 flex flex-col py-1 overflow-hidden" onMouseLeave={() => setExportMenuOpen(null)}>
-                        <button className="px-4 py-2.5 hover:bg-gray-50 text-left font-black text-xs text-[#003366] uppercase tracking-widest italic" onClick={() => handleExport('company')}>Company</button>
-                        <button className="px-4 py-2.5 hover:bg-gray-50 text-left font-black text-xs text-[#003366] uppercase tracking-widest italic" onClick={() => handleExport('engineer')}>Engineer</button>
-                        <button className="px-4 py-2.5 hover:bg-gray-50 text-left font-black text-xs text-[#003366] uppercase tracking-widest italic" onClick={() => handleExport('inhand')}>Inhand</button>
-                     </div>
-                  )}
-               </div>
-               <Button 
-                className="h-9 px-5 rounded-xl font-black text-sm tracking-widest uppercase italic shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
-                onClick={openAddModal}
-               >
-                  <Plus className="w-4 h-4" /> Add Item
-               </Button>
-            </div>
-         </div>
+          {/* TOP HEADER BAR */}
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-white p-6 sm:p-10 rounded-[32px] sm:rounded-[48px] border border-border-main shadow-sm gap-6 sm:gap-8 transition-all duration-300">
+             <div className="w-full lg:w-auto">
+                <div className="flex items-center gap-3">
+                   <h1 className="text-2xl sm:text-4xl font-black text-[#003366] tracking-tighter italic uppercase underline decoration-primary/20 decoration-4 leading-tight">Inventory Management</h1>
+                </div>
+             </div>
+             
+             {/* Action Row - Fixed for zero-clipping scroll */}
+             <div className="w-full lg:w-auto flex items-center gap-3 overflow-x-auto pb-2 lg:pb-0 custom-scrollbar-hide snap-x -mr-6 sm:mr-0 px-2 sm:px-0">
+                <Button 
+                 variant="secondary" 
+                 className="flex-shrink-0 h-10 lg:h-12 px-3 sm:px-5 rounded-xl sm:rounded-2xl font-black text-[8px] sm:text-[10px] tracking-widest uppercase italic bg-white border-2 border-gray-100 hover:bg-gray-50 flex items-center justify-center gap-2 sm:gap-3 snap-start"
+                 onClick={() => toast.info('Import functionality coming soon')}
+                >
+                   <Plus className="w-3 h-3 sm:w-4 sm:h-4 text-primary" /> Import
+                </Button>
+                
+                <div className="relative flex-shrink-0 snap-start">
+                   <Button 
+                    variant="secondary" 
+                    className="h-10 lg:h-12 px-3 sm:px-5 rounded-xl sm:rounded-2xl font-black text-[8px] sm:text-[10px] tracking-widest uppercase italic bg-white border-2 border-gray-100 hover:bg-gray-50 flex items-center justify-center gap-2 sm:gap-3"
+                    onClick={() => setExportMenuOpen(exportMenuOpen === 'top' ? null : 'top')}
+                   >
+                      <Download className="w-3 h-3 sm:w-4 sm:h-4 text-primary" /> Export
+                   </Button>
+                   {exportMenuOpen === 'top' && (
+                      <div className="absolute top-full mt-3 right-0 w-44 bg-white border border-gray-100 rounded-2xl shadow-xl z-[100] flex flex-col py-2 overflow-hidden animate-in fade-in zoom-in-95 duration-200" onMouseLeave={() => setExportMenuOpen(null)}>
+                         <button className="px-5 py-3 hover:bg-gray-50 text-left font-black text-[10px] text-[#003366] uppercase tracking-widest italic flex items-center gap-3" onClick={() => handleExport('company')}>Company</button>
+                         <button className="px-5 py-3 hover:bg-gray-50 text-left font-black text-[10px] text-[#003366] uppercase tracking-widest italic flex items-center gap-3" onClick={() => handleExport('engineer')}>Engineer</button>
+                         <button className="px-5 py-3 hover:bg-gray-50 text-left font-black text-[10px] text-[#003366] uppercase tracking-widest italic flex items-center gap-3" onClick={() => handleExport('inhand')}>Inhand</button>
+                      </div>
+                   )}
+                </div>
+                
+                <Button 
+                 className="flex-shrink-0 h-10 lg:h-12 px-5 sm:px-8 rounded-xl sm:rounded-2xl font-black text-[9px] sm:text-[11px] tracking-widest uppercase italic shadow-lg sm:shadow-xl shadow-primary/20 flex items-center justify-center gap-2 sm:gap-3 bg-primary text-white snap-end"
+                 onClick={openAddModal}
+                >
+                   <Plus className="w-3 h-3 sm:w-4 sm:h-4" /> Add Item
+                </Button>
+             </div>
+          </div>
 
          <ItemModal 
             isOpen={isItemModalOpen} 
@@ -248,38 +265,9 @@ export default function InventoryPage() {
             item={editingItem} 
          />
 
-         {/* ACTION ROW - ONLY MOBILE */}
-         <div className="flex sm:hidden flex-row gap-2 px-4">
-            <Button
-               variant="secondary"
-               onClick={() => document.getElementById('filter-section')?.scrollIntoView({ behavior: 'smooth' })}
-               className="flex-1 h-9 px-2 rounded-xl font-black text-sm tracking-widest uppercase italic bg-white border border-gray-100 hover:bg-gray-50 flex items-center justify-center gap-2"
-            >
-               <Filter className="w-3 h-3 text-primary" /> Filters
-            </Button>
-            <Button variant="secondary" className="flex-1 h-9 px-2 rounded-xl font-black text-sm tracking-widest uppercase italic bg-white border border-gray-100 hover:bg-gray-50 flex items-center justify-center gap-2">
-               <Plus className="w-3 h-3 text-primary" /> Import
-            </Button>
-            <div className="flex-1 relative flex">
-               <Button 
-                  variant="secondary" 
-                  onClick={() => setExportMenuOpen(exportMenuOpen === 'mobile' ? null : 'mobile')}
-                  className="flex-1 h-9 px-2 rounded-xl font-black text-sm tracking-widest uppercase italic bg-white border border-gray-100 hover:bg-gray-50 flex items-center justify-center gap-2"
-               >
-                  <Download className="w-3 h-3 text-primary" /> Export
-               </Button>
-               {exportMenuOpen === 'mobile' && (
-                  <div className="absolute top-full mt-2 right-0 w-36 bg-white border border-gray-100 rounded-xl shadow-lg z-50 flex flex-col py-1 overflow-hidden" onMouseLeave={() => setExportMenuOpen(null)}>
-                     <button className="px-4 py-2.5 hover:bg-gray-50 text-left font-black text-xs text-[#003366] uppercase tracking-widest italic" onClick={() => handleExport('company')}>Company</button>
-                     <button className="px-4 py-2.5 hover:bg-gray-50 text-left font-black text-xs text-[#003366] uppercase tracking-widest italic" onClick={() => handleExport('engineer')}>Engineer</button>
-                     <button className="px-4 py-2.5 hover:bg-gray-50 text-left font-black text-xs text-[#003366] uppercase tracking-widest italic" onClick={() => handleExport('inhand')}>Inhand</button>
-                  </div>
-               )}
-            </div>
-         </div>
 
          {/* Section 2: KPI Grid */}
-         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
             <MetricCard
                title="Total Inventory Types"
                value={stats.totalItems}
@@ -451,7 +439,7 @@ export default function InventoryPage() {
                                  <p className="text-sm font-black text-gray-300 tabular-nums italic">{item.assigned_qty}</p>
                               </td>
                               <td className="px-6 py-6 text-right font-black italic text-sm text-[#003366] tabular-nums tracking-tighter">
-                                 ₹{(item.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                 ₹{(item.price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                               </td>
                               <td className="px-6 py-6 text-center">
                                  <span className={cn(
@@ -613,7 +601,7 @@ export default function InventoryPage() {
                         {[
                            { label: 'Warehouse', value: activeItem.location || 'Main Distribution' },
                            { label: 'Brand', value: activeItem.brand || 'N/A' },
-                           { label: 'Price (Default)', value: `₹${(activeItem.price || 0).toLocaleString()}` },
+                           { label: 'Price (Default)', value: `₹${(activeItem.price || 0).toLocaleString('en-IN')}` },
                            { label: 'GST Configuration', value: activeItem.category === 'Hardware' ? '18%' : '12%' },
                         ].map((row, i) => (
                            <div key={i} className="flex justify-between items-center py-2 px-4 rounded-xl hover:bg-gray-50 transition-colors group">

@@ -4,7 +4,6 @@ import React, { useMemo, useState } from 'react'
 import {
    Package,
    ArrowUpRight,
-   ArrowDownRight,
    AlertCircle,
    Plus,
    FileText,
@@ -12,15 +11,12 @@ import {
    Zap,
    TrendingDown,
    BarChart3,
-   ChevronRight,
    ClipboardCheck,
    Package2,
    Boxes,
-   PieChart,
    TrendingUp,
    ShoppingCart,
-   X,
-   ArrowRight
+   X
 } from 'lucide-react'
 import {
    BarChart,
@@ -32,50 +28,52 @@ import {
    ResponsiveContainer,
    Cell
 } from 'recharts'
-import { useData } from '@/lib/context/DataContext'
+import { useData, InventoryItem, Transaction, Engineer } from '@/lib/context/DataContext'
 import { MetricCard } from '@/components/shared/MetricCard'
-import { ActivityStream } from '@/components/shared/ActivityStream'
 import { QuickEntryModal } from '@/components/modals/QuickEntryModal'
-import { toast } from 'sonner'
 import { useDashboardData } from '@/utils/useDashboardData'
 
 export default function DashboardPage() {
-   const { inventory, logs, transactions, engineers } = useData()
+   const { inventory, transactions, engineers } = useData()
    const [isQuickEntryOpen, setIsQuickEntryOpen] = useState(false)
    const [activeMetric, setActiveMetric] = useState<string | null>(null)
+   
+   // Fix purity: Initialize once, don't use useMemo for impure functions
+   const [dashboardInitTime] = useState(() => Date.now())
 
    // Construction of safeData payload formatted for user-provided DashboardDataLayer
    const data = useMemo(() => {
       return {
-         sales: transactions.filter((t: any) => t.type === 'SALE' || t.type === 'OUTWARD').map((t: any) => {
-            const match = inventory.find((i: any) => i.id == t.item_id);
+         sales: transactions.filter((t: Transaction) => t.type === 'SALE' || t.type === 'OUTWARD').map((t: Transaction) => {
+            const match = inventory.find((i: InventoryItem) => i.id == t.item_id);
+            const matchPrice = match?.price || 0;
             return {
                date: t.date || new Date().toISOString().split("T")[0],
-               total: t.quantity * (t.price || match?.price || 0),
-               items: [{ qty: t.quantity, costPrice: match?.price || 0, price: t.price || match?.price || 0, category: match?.category, name: match?.name }]
+               total: t.quantity * (t.price || matchPrice),
+               items: [{ qty: t.quantity, costPrice: matchPrice, price: t.price || matchPrice, category: match?.category, name: match?.name }]
             }
          }),
-         purchases: transactions.filter((t: any) => t.type === 'PURCHASE' || t.type === 'INWARD').map((t: any) => {
+         purchases: transactions.filter((t: Transaction) => t.type === 'PURCHASE' || t.type === 'INWARD').map((t: Transaction) => {
             return {
                date: t.date || new Date().toISOString().split("T")[0],
                total: t.quantity * (t.price || 0)
             }
          }),
-         items: inventory.map((i: any) => ({
-            ...i, qty: i.total_qty || 0, costPrice: i.price || 0, reorderLevel: i.threshold || 5, lastMovement: Date.now()
+         items: inventory.map((i: InventoryItem) => ({
+            ...i, qty: i.total_qty || 0, costPrice: i.price || 0, reorderLevel: i.threshold || 5, lastMovement: dashboardInitTime
          })),
-         approvals: transactions.filter((t: any) => t.status === 'PENDING')
+         approvals: transactions.filter((t: Transaction) => t.status === 'PENDING')
       }
-   }, [transactions, inventory]);
+   }, [transactions, inventory, dashboardInitTime]);
 
    const stats = useDashboardData({ data });
 
    // Aggregate Engineer Stats for the new Status Section
    const engineerStats = useMemo(() => {
-      return (engineers || []).map(eng => {
+      return (engineers || []).map((eng: Engineer) => {
          let taken = 0;
          let returned = 0;
-         transactions.filter(t => t.engineer_id === eng.id).forEach(t => {
+         transactions.filter((t: Transaction) => t.engineer_id === eng.id).forEach((t: Transaction) => {
             if (t.type === 'OUTWARD' || t.type === 'ISSUE') taken += Number(t.quantity);
             if (t.type === 'RETURN') returned += Number(t.quantity);
          });
@@ -87,13 +85,13 @@ export default function DashboardPage() {
       }).filter(eng => eng.taken > 0);
    }, [engineers, transactions]);
 
-   const totalCatSales = useMemo(() => stats.categorySales.reduce((sum: number, c: any) => sum + c.value, 0), [stats.categorySales]);
-   
+   const totalCatSales = useMemo(() => (stats.categorySales).reduce((sum: number, c: { value: number }) => sum + c.value, 0), [stats.categorySales]);
+
    const categorySalesWithPercent = useMemo(() => {
-      return stats.categorySales.map((c: any) => ({
+      return (stats.categorySales).map((c: { name: string; value: number }) => ({
          ...c,
          nameWithPercent: `${c.name} (${totalCatSales ? ((c.value / totalCatSales) * 100).toFixed(0) : 0}%)`
-      })).sort((a: any, b: any) => b.value - a.value);
+      })).sort((a: { value: number }, b: { value: number }) => b.value - a.value);
    }, [stats.categorySales, totalCatSales]);
 
    return (
@@ -118,10 +116,10 @@ export default function DashboardPage() {
          <QuickEntryModal isOpen={isQuickEntryOpen} onClose={() => setIsQuickEntryOpen(false)} />
 
          {/* KPI GRID */}
-         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
+         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3">
             <MetricCard
                title="Today Sales"
-               value={`₹${stats.todaySales.toLocaleString()}`}
+               value={`₹${stats.todaySales.toLocaleString('en-IN')}`}
                trend={`${stats.profitMargin}% margin`}
                icon={<ArrowUpRight className="w-5 h-5" />}
                variant="success"
@@ -129,7 +127,7 @@ export default function DashboardPage() {
             />
             <MetricCard
                title="Today Purchases"
-               value={`₹${stats.todayPurchase.toLocaleString()}`}
+               value={`₹${stats.todayPurchase.toLocaleString('en-IN')}`}
                trend="↓ -2.1%"
                period="Inbound Value"
                icon={<Boxes className="w-5 h-5" />}
@@ -156,7 +154,7 @@ export default function DashboardPage() {
             />
             <MetricCard
                title="Profit"
-               value={`₹${stats.profitToday.toLocaleString()}`}
+               value={`₹${stats.profitToday.toLocaleString('en-IN')}`}
                period="Net Today"
                icon={<Zap className="w-5 h-5" />}
                variant="success"
@@ -171,6 +169,7 @@ export default function DashboardPage() {
                onClick={() => setActiveMetric("stock-value")}
             />
          </div>
+
 
 
          {/* NEW: PERSONNEL DEPLOYMENT SECTION (AS REQUESTED) */}
@@ -198,15 +197,15 @@ export default function DashboardPage() {
                               <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" /> Standby & Active
                            </p>
                         </div>
-                        <div className="mt-8 pt-4 border-t border-white/10 flex items-center gap-10">
+                        <div className="mt-8 pt-4 border-t border-white/10 flex items-center justify-between">
 
-                           <div className="text-[9px] font-black text-blue-300 uppercase tracking-widest italic">
-                              <span className="opacity-50">TAKEN&nbsp;&nbsp;:&nbsp;</span>
+                           <div className="flex items-baseline gap-1.5">
+                              <span className="text-[9px] font-black text-blue-300/50 uppercase tracking-widest italic">TAKEN :</span>
                               <span className="text-white text-base font-black tabular-nums">{eng.taken}</span>
                            </div>
 
-                           <div className="text-[9px] font-black text-blue-300 uppercase tracking-widest italic">
-                              <span className="opacity-50">PENDING&nbsp;&nbsp;:&nbsp;</span>
+                           <div className="flex items-baseline gap-1.5">
+                              <span className="text-[9px] font-black text-blue-300/50 uppercase tracking-widest italic">PENDING :</span>
                               <span className="text-yellow-400 text-base font-black tabular-nums">{eng.pending}</span>
                            </div>
 
@@ -327,7 +326,7 @@ export default function DashboardPage() {
                   <TrendingUp className="w-4 h-4 text-gray-400" /> Top Selling
                </h4>
                <div className="space-y-1">
-                  {stats.topSelling.length > 0 ? stats.topSelling.map((item: any, idx: number) => (
+                  {stats.topSelling.length > 0 ? stats.topSelling.map((item: { name: string; qty: number }, idx: number) => (
                      <div key={idx} className="flex justify-between items-center p-2.5 bg-gray-50/50 rounded-xl hover:bg-gray-100 transition-colors">
                         <div className="flex items-center gap-3">
                            <div className="w-6 h-6 rounded-full bg-[#003366] text-white flex items-center justify-center font-black text-[9px] italic">#{idx + 1}</div>
@@ -353,7 +352,7 @@ export default function DashboardPage() {
                      <Zap className="w-4 h-4" /> Reorder Intelligence
                   </h4>
                   <div className="space-y-2">
-                     {stats.reorderItems.slice(0, 4).length > 0 ? stats.reorderItems.slice(0, 4).map((item: any, i: number) => (
+                     {stats.reorderItems.slice(0, 4).length > 0 ? stats.reorderItems.slice(0, 4).map((item: { name: string; qty: number; velocity: number }, i: number) => (
                         <div key={i} className="bg-white/5 border border-white/10 p-2.5 rounded-xl hover:bg-white/10 transition-all flex items-center justify-between group/line">
                            <div className="flex-1">
                               <p className="text-[10px] font-black uppercase italic tracking-tight text-white mb-1 leading-none">{item.name}</p>
@@ -381,7 +380,7 @@ export default function DashboardPage() {
                      <TrendingDown className="w-4 h-4 text-gray-400" /> Dead Stock
                   </h4>
                   <div className="space-y-1">
-                     {stats.deadStock.slice(0, 4).length > 0 ? stats.deadStock.slice(0, 4).map((item: any, i: number) => (
+                     {stats.deadStock.slice(0, 4).length > 0 ? stats.deadStock.slice(0, 4).map((item: { name: string; id?: string }, i: number) => (
                         <div key={item.id || i} className="flex justify-between items-center p-2.5 rounded-xl hover:bg-gray-50/50 transition-all group/item border border-transparent hover:border-gray-100">
                            <div>
                               <p className="text-[10px] font-black text-[#003366] italic uppercase tracking-tight leading-none">{item.name}</p>
@@ -415,7 +414,19 @@ export default function DashboardPage() {
    DRILL-DOWN MODAL COMPONENT
    ========================================================================== */
 
-function DashboardMetricModal({ type, onClose, data, stats }: any) {
+interface DashboardMetricModalProps {
+   type: string | null;
+   onClose: () => void;
+   data: {
+      sales: any[];
+      purchases: any[];
+      items: any[];
+      approvals: any[];
+   };
+   stats: any;
+}
+
+function DashboardMetricModal({ type, onClose, data, stats }: DashboardMetricModalProps) {
    if (!type) return null;
 
    const title = type.replace(/-/g, ' ').toUpperCase();
@@ -433,8 +444,8 @@ function DashboardMetricModal({ type, onClose, data, stats }: any) {
    }
 
    return (
-      <div className="fixed inset-0 bg-[#003366]/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-         <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[80vh] animate-in zoom-in-95 duration-200">
+      <div className="fixed inset-0 bg-[#003366]/40 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+         <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200">
             {/* Header */}
             <div className="p-6 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
                <div>
@@ -456,7 +467,7 @@ function DashboardMetricModal({ type, onClose, data, stats }: any) {
    );
 }
 
-function SalesDetailView({ data }: any) {
+function SalesDetailView({ data }: { data: { sales: any[] } }) {
    return (
       <div className="space-y-4">
          <table className="w-full text-left">
@@ -478,7 +489,7 @@ function SalesDetailView({ data }: any) {
                         <span className="text-xs font-black tabular-nums">{sale.items[0]?.qty}</span>
                      </td>
                      <td className="py-4 text-right">
-                        <span className="text-xs font-black text-green-600 tabular-nums">₹{sale.total.toLocaleString()}</span>
+                        <span className="text-xs font-black text-green-600 tabular-nums">₹{sale.total.toLocaleString('en-IN')}</span>
                      </td>
                   </tr>
                )) : (
@@ -492,7 +503,7 @@ function SalesDetailView({ data }: any) {
    );
 }
 
-function PurchasesDetailView({ data }: any) {
+function PurchasesDetailView({ data }: { data: { purchases: any[] } }) {
    return (
       <div className="space-y-4">
          <table className="w-full text-left">
@@ -510,7 +521,7 @@ function PurchasesDetailView({ data }: any) {
                         <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-1">Date: {p.date}</p>
                      </td>
                      <td className="py-4 text-right">
-                        <span className="text-xs font-black text-[#003366] tabular-nums">₹{p.total.toLocaleString()}</span>
+                        <span className="text-xs font-black text-[#003366] tabular-nums">₹{p.total.toLocaleString('en-IN')}</span>
                      </td>
                   </tr>
                )) : (
@@ -524,7 +535,7 @@ function PurchasesDetailView({ data }: any) {
    );
 }
 
-function ApprovalsDetailView({ data }: any) {
+function ApprovalsDetailView({ data }: { data: { approvals: any[] } }) {
    return (
       <div className="space-y-4">
          {data.approvals.length > 0 ? data.approvals.map((app: any, idx: number) => (
@@ -570,42 +581,82 @@ function LowStockDetailView({ stats }: any) {
 }
 
 function ProfitDetailView({ stats, data }: any) {
+   const costOfGoods = stats.todaySales - stats.profitToday;
    return (
       <div className="space-y-6">
-         <div className="grid grid-cols-2 gap-4">
+         {/* Hero Summary Row */}
+         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="p-6 bg-green-50 rounded-3xl border border-green-100">
                <p className="text-[10px] font-black text-green-600 uppercase tracking-widest italic mb-2">Total Revenue</p>
-               <p className="text-3xl font-black text-[#003366] italic tracking-tighter tabular-nums">₹{stats.todaySales.toLocaleString()}</p>
+               <p className="text-3xl font-black text-[#003366] italic tracking-tighter tabular-nums">₹{stats.todaySales.toLocaleString('en-IN')}</p>
             </div>
             <div className="p-6 bg-blue-50 rounded-3xl border border-blue-100">
                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest italic mb-2">Net Profit Today</p>
-               <p className="text-3xl font-black text-[#003366] italic tracking-tighter tabular-nums">₹{stats.profitToday.toLocaleString()}</p>
+               <p className="text-3xl font-black text-[#003366] italic tracking-tighter tabular-nums">₹{stats.profitToday.toLocaleString('en-IN')}</p>
+            </div>
+            <div className="p-6 bg-orange-50 rounded-3xl border border-orange-100">
+               <p className="text-[10px] font-black text-orange-600 uppercase tracking-widest italic mb-2">Cost of Goods</p>
+               <p className="text-3xl font-black text-[#003366] italic tracking-tighter tabular-nums">₹{costOfGoods.toLocaleString('en-IN')}</p>
             </div>
          </div>
-         <div className="p-4 bg-gray-50/50 rounded-2xl border border-gray-100">
+
+         {/* Margin Analysis */}
+         <div className="p-5 bg-gray-50/50 rounded-2xl border border-gray-100">
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic mb-4">Daily Margin Analysis</p>
-            <div className="h-4 bg-white rounded-full overflow-hidden border border-gray-100">
+            <div className="h-5 bg-white rounded-full overflow-hidden border border-gray-100">
                <div
-                  className="h-full bg-green-500 rounded-full"
-                  style={{ width: `${stats.profitMargin}%` }}
+                  className="h-full bg-gradient-to-r from-green-400 to-green-600 rounded-full transition-all duration-700"
+                  style={{ width: `${Math.min(stats.profitMargin, 100)}%` }}
                />
             </div>
-            <div className="flex justify-between mt-2">
-               <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Efficiency: {stats.profitMargin}%</span>
-               <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Target: 30%</span>
+            <div className="flex justify-between mt-3">
+               <span className="text-[10px] font-black text-green-600 uppercase tracking-widest">Efficiency: {stats.profitMargin}%</span>
+               <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Target: 30%</span>
             </div>
+         </div>
+
+         {/* Sales Breakdown Table */}
+         <div className="border border-gray-100 rounded-2xl overflow-hidden">
+            <div className="bg-gray-50/50 px-6 py-4 border-b border-gray-100">
+               <p className="text-[10px] font-black text-[#003366] uppercase tracking-widest italic">Revenue Breakdown by Transaction</p>
+            </div>
+            <table className="w-full text-left">
+               <thead>
+                  <tr className="border-b border-gray-50">
+                     <th className="px-6 py-3 text-[9px] font-black text-gray-400 uppercase tracking-widest italic">Item</th>
+                     <th className="px-6 py-3 text-[9px] font-black text-gray-400 uppercase tracking-widest italic text-center">Qty</th>
+                     <th className="px-6 py-3 text-[9px] font-black text-gray-400 uppercase tracking-widest italic text-right">Revenue</th>
+                  </tr>
+               </thead>
+               <tbody className="divide-y divide-gray-50">
+                  {data.sales.length > 0 ? data.sales.map((sale: any, idx: number) => (
+                     <tr key={idx} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="px-6 py-4">
+                           <p className="text-xs font-black text-[#003366] italic uppercase">{sale.items[0]?.name || 'Unknown'}</p>
+                           <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mt-1">{sale.items[0]?.category || 'General'}</p>
+                        </td>
+                        <td className="px-6 py-4 text-center text-xs font-black tabular-nums">{sale.items[0]?.qty}</td>
+                        <td className="px-6 py-4 text-right text-xs font-black text-green-600 tabular-nums">₹{sale.total.toLocaleString('en-IN')}</td>
+                     </tr>
+                  )) : (
+                     <tr>
+                        <td colSpan={3} className="py-12 text-center opacity-30 text-[10px] font-black uppercase tracking-[0.2em] italic">No sales recorded today</td>
+                     </tr>
+                  )}
+               </tbody>
+            </table>
          </div>
       </div>
    );
 }
 
-function ValuationDetailView({ stats }: any) {
+function ValuationDetailView({ stats }: { stats: { stockValuation: number; categorySales: any[] } }) {
    return (
       <div className="space-y-4">
          <div className="p-8 bg-primary text-white rounded-[32px] overflow-hidden relative mb-4">
             <div className="absolute right-0 top-0 w-32 h-32 bg-white/5 rounded-full blur-2xl -mr-10 -mt-10" />
             <p className="text-[10px] font-black uppercase tracking-widest italic opacity-60">Total Inventory Worth</p>
-            <h3 className="text-5xl font-black italic tracking-tighter mt-2 tabular-nums">₹{stats.stockValuation.toLocaleString()}</h3>
+            <h3 className="text-5xl font-black italic tracking-tighter mt-2 tabular-nums">₹{stats.stockValuation.toLocaleString('en-IN')}</h3>
          </div>
 
          <div className="grid grid-cols-1 gap-2">

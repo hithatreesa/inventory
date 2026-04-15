@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 import { useData } from '@/lib/context/DataContext'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 
 export function ItemModal({ 
   isOpen, 
@@ -25,11 +26,15 @@ export function ItemModal({
     name: '',
     category: 'Hardware',
     sku: '',
-    unit: 'pcs',
+    unit: 'nos',
     price: '',
     brand: '',
     location: 'Main Store',
-    threshold: '5'
+    threshold: '5',
+    gst_rate: '18',
+    model: '',
+    is_serialized: 'NO',
+    barcode: ''
   })
 
   useEffect(() => {
@@ -38,22 +43,30 @@ export function ItemModal({
         name: item.name || '',
         category: item.category || 'Hardware',
         sku: item.sku || '',
-        unit: item.unit || 'pcs',
+        unit: item.unit || 'nos',
         price: item.price?.toString() || '',
         brand: item.brand || '',
         location: item.location || 'Main Store',
-        threshold: item.threshold?.toString() || '5'
+        threshold: item.threshold?.toString() || '5',
+        gst_rate: item.gst_rate?.toString() || '0',
+        model: item.model || '',
+        is_serialized: item.is_serialized ? 'YES' : 'NO',
+        barcode: item.barcode || ''
       })
     } else {
       setForm({
         name: '',
         category: 'Hardware',
         sku: '',
-        unit: 'pcs',
+        unit: 'nos',
         price: '',
         brand: '',
         location: 'Main Store',
-        threshold: '5'
+        threshold: '5',
+        gst_rate: '18',
+        model: '',
+        is_serialized: 'NO',
+        barcode: ''
       })
     }
   }, [item, isOpen])
@@ -65,7 +78,9 @@ export function ItemModal({
       const payload = {
         ...form,
         price: Number(form.price),
-        threshold: Number(form.threshold)
+        threshold: Number(form.threshold),
+        gst_rate: Number(form.gst_rate),
+        is_serialized: form.is_serialized === 'YES'
       }
 
       if (item) {
@@ -82,6 +97,25 @@ export function ItemModal({
       setIsSubmitting(false)
     }
   }
+
+  // Scanning mode for the individual field
+  const [isScanning, setIsScanning] = useState(false);
+
+  useEffect(() => {
+    if (!isScanning) return;
+    
+    const onScan = (e: any) => {
+        const { barcode } = e.detail;
+        if (barcode) {
+            setForm(f => ({ ...f, barcode }));
+            setIsScanning(false);
+            toast.success("Barcode captured");
+        }
+    };
+    
+    window.addEventListener('barcode-scanned', onScan);
+    return () => window.removeEventListener('barcode-scanned', onScan);
+  }, [isScanning]);
 
   return (
     <Modal 
@@ -112,7 +146,6 @@ export function ItemModal({
               disabled={isSubmitting}
             />
           </div>
-
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Category</label>
             <select 
@@ -126,7 +159,51 @@ export function ItemModal({
               <option>Networking</option>
               <option>Storage</option>
               <option>Laptops</option>
+              <option>Electronics</option>
+              <option>Industrial</option>
+              <option>Raw Materials</option>
             </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Unit (SI)</label>
+            <Select 
+              options={['nos', 'm', 'kg', 'pcs', 'box']}
+              value={form.unit}
+              onChange={e => setForm({...form, unit: e.target.value})}
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">GST (%)</label>
+            <Input 
+              type="number"
+              placeholder="18" 
+              value={form.gst_rate}
+              onChange={e => setForm({...form, gst_rate: e.target.value})}
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Model</label>
+            <Input 
+              placeholder="e.g. Nexus 9000" 
+              value={form.model}
+              onChange={e => setForm({...form, model: e.target.value})}
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Serial Tracking</label>
+            <Select 
+              options={['YES', 'NO']}
+              value={form.is_serialized}
+              onChange={e => setForm({...form, is_serialized: e.target.value})}
+              disabled={isSubmitting}
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -169,6 +246,28 @@ export function ItemModal({
               onChange={e => setForm({...form, threshold: e.target.value})}
               disabled={isSubmitting}
             />
+          </div>
+          <div className="space-y-1.5 col-span-2">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Barcode Identification</label>
+            <div className="flex gap-2">
+                <Input 
+                    placeholder="Scan or type barcode..." 
+                    value={form.barcode}
+                    onChange={e => setForm({...form, barcode: e.target.value})}
+                    disabled={isSubmitting}
+                    className="flex-1 font-mono tracking-widest"
+                />
+                <Button 
+                    type="button" 
+                    onClick={() => setIsScanning(!isScanning)}
+                    className={cn(
+                        "px-6 h-10 rounded-xl transition-all",
+                        isScanning ? "bg-primary text-white animate-pulse" : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                    )}
+                >
+                    {isScanning ? "SCANNING..." : "SCAN"}
+                </Button>
+            </div>
           </div>
         </div>
 

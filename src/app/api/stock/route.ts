@@ -16,7 +16,9 @@ export async function GET() {
     })
 
     return NextResponse.json({ inventory })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message, stack: err.stack }, { status: 500 })
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err)
+    const errorStack = err instanceof Error ? err.stack : undefined
+    return NextResponse.json({ error: errorMessage, stack: errorStack }, { status: 500 })
   }
 }

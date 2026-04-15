@@ -8,8 +8,6 @@ import {
    MoreVertical,
    Activity,
    Filter,
-   MapPin,
-   Clock,
    ShieldCheck,
    AlertTriangle,
    FileText,

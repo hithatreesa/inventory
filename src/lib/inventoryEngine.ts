@@ -1,120 +1,150 @@
-export type TransactionType = "INWARD" | "ASSIGN" | "RETURN" | "CONSUMED";
+// =============================================================================
+// INVENTORY ENGINE — STRICT EVENT-DRIVEN STATE MACHINE
+// All inventory state is DERIVED from transactions. No direct mutations.
+// =============================================================================
+
+export type TransactionType =
+  | "INWARD"
+  | "OUTWARD"
+  | "ASSIGN"
+  | "RETURN"
+  | "CONSUMED"
+  | "ADJUSTMENT";
 
 export interface Transaction {
   id: string
   type: TransactionType
-  serial: string
+
   item_id: string
+  serial: string
+  qty?: number       // alias used by some callers
+  quantity: number
+
   engineer_id?: string
+  customer_id?: string
+
+  // GST fields (stored in transaction, not inventory)
+  gst_rate?: number
+  cgst?: number
+  sgst?: number
+  igst?: number
+
+  // Pricing
+  purchase_price?: number
+  sale_price?: number
+  price?: number   // legacy compat
+
+  // Reference
+  reference_type?: "PO" | "SALE" | "TICKET" | "ADJUSTMENT"
+  reference_id?: string
+  reference?: string  // legacy compat
+
+  // Legacy metadata
+  gst?: number
+  warehouse_id?: string
+  supplier?: string
+  invoice?: string
+  from_location?: "STORE" | "ENGINEER"
+  to_location?: "STORE" | "ENGINEER"
+
   timestamp: number
+  created_at?: number
 }
 
-// In-Memory Ticking Engine bounds
+// Internal Tracking State
+export interface SerialState {
+  status: "IN_STOCK" | "ASSIGNED" | "SOLD" | "CONSUMED"
+  item_id: string
+  currentHolder?: string   // engineer_id when ASSIGNED
+  customer_id?: string     // customer_id when SOLD
+  quantity: number
+  lastUpdated: number
+}
+
+export interface SummaryCounts {
+  IN_STOCK: number
+  ASSIGNED: number
+  SOLD: number
+  CONSUMED: number
+}
+
+// --------------------------------------------------
+// IN-MEMORY LEDGER
+// --------------------------------------------------
 let transactions: Transaction[] = [];
 let serialCounters: Record<string, number> = {};
 
-export interface SerialState {
-  status: "IN_STOCK" | "ASSIGNED" | "CONSUMED"
-  item_id: string
-  engineer_id?: string
-}
-
-// Cache for derivation
+// Derivation cache
 let _cachedTxnsLength = -1;
-let _cachedState: { serialMap: Record<string, SerialState> } | null = null;
+let _cachedState: { serialMap: Record<string, SerialState>; summaryCounts: SummaryCounts } | null = null;
 
-// Seed Data
+// --------------------------------------------------
+// SEED DATA
+// --------------------------------------------------
 serialCounters["ITM001"] = 2;
 serialCounters["ITM002"] = 1;
 transactions.push(
-  { id: "MOCK-1", type: "INWARD", serial: "ITM001-1", item_id: "ITM001", timestamp: 1000 },
-  { id: "MOCK-2", type: "INWARD", serial: "ITM001-2", item_id: "ITM001", timestamp: 1001 },
-  { id: "MOCK-3", type: "INWARD", serial: "ITM002-1", item_id: "ITM002", timestamp: 1002 },
-  { id: "MOCK-4", type: "ASSIGN", serial: "ITM001-1", item_id: "ITM001", engineer_id: "ENG001", timestamp: 1003 }
+  { id: "MOCK-1", type: "INWARD", serial: "ITM001-1", item_id: "ITM001", timestamp: 1000, quantity: 1, to_location: "STORE" },
+  { id: "MOCK-2", type: "INWARD", serial: "ITM001-2", item_id: "ITM001", timestamp: 1001, quantity: 1, to_location: "STORE" },
+  { id: "MOCK-3", type: "INWARD", serial: "ITM002-1", item_id: "ITM002", timestamp: 1002, quantity: 1, to_location: "STORE" },
+  { id: "MOCK-4", type: "ASSIGN", serial: "ITM001-1", item_id: "ITM001", engineer_id: "ENG001", timestamp: 1003, quantity: 1, from_location: "STORE", to_location: "ENGINEER" }
 );
 
 // --------------------------------------------------
-// CORE ENGINE FUNCTIONS
+// HELPERS
 // --------------------------------------------------
 
-export function inwardItem(item_id: string): string {
-  if (typeof serialCounters[item_id] === "undefined") {
-    serialCounters[item_id] = 0;
+function validateStateTransition(current: SerialState["status"] | undefined, action: TransactionType) {
+  if (current === "CONSUMED") throw new Error("HARD_FAIL: INVALID_ACTION_ON_TERMINAL_STATE");
+
+  switch (action) {
+    case "INWARD":
+    case "ADJUSTMENT":
+      if (current) throw new Error("HARD_FAIL: SERIAL_ALREADY_EXISTS");
+      break;
+    case "ASSIGN":
+      if (current !== "IN_STOCK")
+        throw new Error(`HARD_FAIL: CANNOT_ASSIGN_FROM_${current || "NON_EXISTENT"}`);
+      break;
+    case "OUTWARD":
+      if (current !== "IN_STOCK")
+        throw new Error(`HARD_FAIL: CANNOT_SELL_FROM_${current || "NON_EXISTENT"}`);
+      break;
+    case "RETURN":
+      // Valid from ASSIGNED (engineer return) or SOLD (customer return)
+      if (current !== "ASSIGNED" && current !== "SOLD")
+        throw new Error(`HARD_FAIL: CANNOT_RETURN_FROM_${current || "NON_EXISTENT"}`);
+      break;
+    case "CONSUMED":
+      if (current !== "ASSIGNED")
+        throw new Error(`HARD_FAIL: CANNOT_CONSUMED_FROM_${current || "NON_EXISTENT"}`);
+      break;
   }
-  serialCounters[item_id]++;
-  const serial = `${item_id}-${serialCounters[item_id]}`;
-  
-  const state = buildState(transactions);
-  if (state.serialMap[serial]) {
-    throw new Error(`HARD_FAIL: Duplicate serial ${serial} detected.`);
-  }
-
-  transactions.push({
-    id: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-    type: "INWARD",
-    serial,
-    item_id,
-    timestamp: Date.now()
-  });
-
-  return serial;
 }
 
-export function assignItem(serial: string, engineer_id: string) {
-  const state = buildState(transactions);
-  const item = state.serialMap[serial];
-
-  if (!item) throw new Error(`HARD_FAIL: Serial ${serial} does not exist in ledger.`);
-  if (item.status !== "IN_STOCK") throw new Error(`HARD_FAIL: Expected IN_STOCK for ${serial}, but found ${item.status}.`);
-
-  transactions.push({
-    id: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-    type: "ASSIGN",
-    serial,
-    item_id: item.item_id,
-    engineer_id,
-    timestamp: Date.now()
-  });
-}
-
-export function returnItem(serial: string) {
-  const state = buildState(transactions);
-  const item = state.serialMap[serial];
-
-  if (!item) throw new Error(`HARD_FAIL: Serial ${serial} does not exist in ledger.`);
-  if (item.status !== "ASSIGNED") throw new Error(`HARD_FAIL: Expected ASSIGNED for ${serial}, but found ${item.status}.`);
-
-  transactions.push({
-    id: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-    type: "RETURN",
-    serial,
-    item_id: item.item_id,
-    timestamp: Date.now()
-  });
-}
-
-export function consumeItem(serial: string) {
-  const state = buildState(transactions);
-  const item = state.serialMap[serial];
-
-  if (!item) throw new Error(`HARD_FAIL: Serial ${serial} does not exist in ledger.`);
-  if (item.status !== "ASSIGNED") throw new Error(`HARD_FAIL: Expected ASSIGNED for ${serial}, but found ${item.status}. Cannot consume unassigned items.`);
-
-  transactions.push({
-    id: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-    type: "CONSUMED",
-    serial,
-    item_id: item.item_id,
-    timestamp: Date.now()
-  });
+function debugLog(msg: string, data?: any) {
+  console.log(`[ENGINE] ${new Date().toISOString()} | ${msg}`, data || "");
 }
 
 // --------------------------------------------------
-// DERIVATION ENGINE
+// SYSTEM CONTROL
 // --------------------------------------------------
 
-export function buildState(txns: Transaction[]): { serialMap: Record<string, SerialState> } {
-  // Simple module-level cache to prevent multiple O(N) scans per render
+export function resetSystem() {
+  debugLog("RESETTING SYSTEM LEDGER");
+  transactions = [];
+  serialCounters = {};
+  _cachedTxnsLength = -1;
+  _cachedState = null;
+}
+
+// --------------------------------------------------
+// DERIVATION ENGINE — buildState
+// --------------------------------------------------
+
+export function buildState(
+  txns: Transaction[] = transactions
+): { serialMap: Record<string, SerialState>; summaryCounts: SummaryCounts } {
   if (txns === transactions && txns.length === _cachedTxnsLength && _cachedState) {
     return _cachedState;
   }
@@ -122,32 +152,345 @@ export function buildState(txns: Transaction[]): { serialMap: Record<string, Ser
   const serialMap: Record<string, SerialState> = {};
 
   for (const t of txns) {
-    if (t.type === "INWARD") {
-      serialMap[t.serial] = { status: "IN_STOCK", item_id: t.item_id };
+    const current = serialMap[t.serial];
+
+    if (t.type === "INWARD" || t.type === "ADJUSTMENT") {
+      serialMap[t.serial] = {
+        status: "IN_STOCK",
+        item_id: t.item_id,
+        quantity: t.quantity || 1,
+        lastUpdated: t.timestamp,
+      };
+    } else if (t.type === "OUTWARD") {
+      if (current) {
+        if (t.engineer_id) {
+          // Transfer to engineer (Possession)
+          current.status = "ASSIGNED";
+          current.currentHolder = t.engineer_id;
+        } else {
+          // Final sale (No possession tracking needed)
+          current.status = "SOLD";
+          current.customer_id = t.customer_id;
+          current.currentHolder = undefined;
+        }
+        current.lastUpdated = t.timestamp;
+      }
     } else if (t.type === "ASSIGN") {
-      const item = serialMap[t.serial];
-      if (item) {
-        item.status = "ASSIGNED";
-        item.engineer_id = t.engineer_id;
+      if (current) {
+        current.status = "ASSIGNED";
+        current.currentHolder = t.engineer_id;
+        current.lastUpdated = t.timestamp;
       }
     } else if (t.type === "RETURN") {
-      const item = serialMap[t.serial];
-      if (item) {
-        item.status = "IN_STOCK";
-        item.engineer_id = undefined;
+      if (current) {
+        current.status = "IN_STOCK";
+        current.currentHolder = undefined;
+        current.customer_id = undefined;
+        current.lastUpdated = t.timestamp;
       }
     } else if (t.type === "CONSUMED") {
-      const item = serialMap[t.serial];
-      if (item) {
-        item.status = "CONSUMED";
-        item.engineer_id = undefined;
+      if (current) {
+        current.status = "CONSUMED";
+        current.currentHolder = undefined;
+        current.lastUpdated = t.timestamp;
       }
     }
   }
 
+  // Build summaryCounts
+  const summaryCounts: SummaryCounts = { IN_STOCK: 0, ASSIGNED: 0, SOLD: 0, CONSUMED: 0 };
+  for (const s of Object.values(serialMap)) {
+    summaryCounts[s.status] += s.quantity;
+  }
+
+  debugLog(
+    `STATE REBUILT. Serials: ${Object.keys(serialMap).length} | ${JSON.stringify(summaryCounts)}`
+  );
+
   _cachedTxnsLength = txns.length;
-  _cachedState = { serialMap };
+  _cachedState = { serialMap, summaryCounts };
   return _cachedState;
+}
+
+// --------------------------------------------------
+// CORE ENGINE FUNCTIONS
+// --------------------------------------------------
+
+export function executeInward(params: { 
+  productId: string, 
+  serial: string, 
+  qty: number, 
+  gst: number, 
+  price: number, 
+  source: string,
+  metadata?: Partial<Transaction> 
+}) {
+  const { productId, serial, qty, gst, price, source, metadata } = params;
+
+  if (typeof serialCounters[productId] === "undefined") {
+    serialCounters[productId] = 0;
+  }
+
+  const state = buildState(transactions);
+  validateStateTransition(state.serialMap[serial]?.status, "INWARD");
+
+  const txn: Transaction = {
+    id: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    type: "INWARD",
+    serial,
+    item_id: productId,
+    timestamp: Date.now(),
+    quantity: qty || 1,
+    gst_rate: gst,
+    purchase_price: price,
+    reference_type: source as any,
+    created_at: Date.now(),
+    ...metadata,
+  };
+
+  debugLog("LEDGER_INWARD:", txn);
+  transactions.push(txn);
+  return serial;
+}
+
+export function executeInwardBulk(params: {
+  productId: string,
+  qty: number,
+  gst: number,
+  price: number,
+  source: string,
+  metadata?: Partial<Transaction>
+}) {
+  const { productId, qty, gst, price, source, metadata } = params;
+  if (qty <= 0) throw new Error("HARD_FAIL: INVALID_QUANTITY");
+  const serial = `BULK-${productId}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+
+  const txn: Transaction = {
+    id: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    type: "INWARD",
+    serial,
+    item_id: productId,
+    timestamp: Date.now(),
+    quantity: qty,
+    gst_rate: gst,
+    purchase_price: price,
+    reference_type: source as any,
+    created_at: Date.now(),
+    ...metadata,
+  };
+
+  debugLog("LEDGER_INWARD_BULK:", txn);
+  transactions.push(txn);
+  return serial;
+}
+
+export function executeInwardBatch(batch: Transaction[]) {
+  const currentState = buildState(transactions);
+  const batchSerials = new Set();
+
+  for (const t of batch) {
+    if (t.serial) {
+      if (batchSerials.has(t.serial)) throw new Error(`HARD_FAIL: DUPLICATE_IN_BATCH ${t.serial}`);
+      validateStateTransition(currentState.serialMap[t.serial]?.status, "INWARD");
+      batchSerials.add(t.serial);
+    }
+  }
+
+  debugLog(`COMMITTING BATCH: ${batch.length} items`);
+  transactions.push(...batch);
+}
+
+export function executeOutward(params: {
+  productId: string,
+  serial: string,
+  qty: number,
+  destination: string,
+  source: string,
+  metadata?: Partial<Transaction>
+}) {
+  const { productId, serial, qty, destination, source, metadata } = params;
+  const state = buildState(transactions);
+  const item = state.serialMap[serial];
+
+  if (!item) throw new Error(`HARD_FAIL: SERIAL_NOT_FOUND ${serial}`);
+  validateStateTransition(item.status, "OUTWARD");
+
+  const txn: Transaction = {
+    id: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    type: "OUTWARD",
+    serial,
+    item_id: productId,
+    engineer_id: destination,
+    timestamp: Date.now(),
+    quantity: 1,
+    reference_type: source as any,
+    created_at: Date.now(),
+    ...metadata,
+  };
+
+  debugLog("LEDGER_OUTWARD:", txn);
+  transactions.push(txn);
+  return serial;
+}
+
+export function executeOutwardBulk(params: {
+  productId: string,
+  qty: number,
+  destination: string,
+  source: string,
+  metadata?: Partial<Transaction>
+}) {
+  const { productId, qty, destination, source, metadata } = params;
+  if (qty <= 0) throw new Error("HARD_FAIL: INVALID_QUANTITY");
+  const serial = `BULK-OUT-${productId}-${Date.now()}`;
+
+  const txn: Transaction = {
+    id: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    type: "OUTWARD",
+    serial,
+    item_id: productId,
+    engineer_id: destination,
+    timestamp: Date.now(),
+    quantity: qty,
+    reference_type: source as any,
+    created_at: Date.now(),
+    ...metadata,
+  };
+
+  debugLog("LEDGER_OUTWARD_BULK:", txn);
+  transactions.push(txn);
+  return serial;
+}
+
+export function sellItem(serial: string, customer_id: string, metadata?: Partial<Transaction>) {
+  const state = buildState(transactions);
+  const item = state.serialMap[serial];
+
+  if (!item) throw new Error(`HARD_FAIL: SERIAL_NOT_FOUND ${serial}`);
+  validateStateTransition(item.status, "OUTWARD");
+
+  const txn: Transaction = {
+    id: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    type: "OUTWARD",
+    serial,
+    item_id: item.item_id,
+    customer_id,
+    timestamp: Date.now(),
+    quantity: item.quantity,
+    reference_type: "SALE",
+    reference_id: `SALE-${Date.now()}`,
+    created_at: Date.now(),
+    ...metadata,
+  };
+
+  debugLog("SELL:", txn);
+  transactions.push(txn);
+}
+
+export function assignItem(serial: string, engineer_id: string, metadata?: Partial<Transaction>) {
+  const state = buildState(transactions);
+  const item = state.serialMap[serial];
+
+  validateStateTransition(item?.status, "ASSIGN");
+
+  const txn: Transaction = {
+    id: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    type: "ASSIGN",
+    serial,
+    item_id: item.item_id,
+    engineer_id,
+    timestamp: Date.now(),
+    quantity: item.quantity,
+    created_at: Date.now(),
+    ...metadata,
+  };
+
+  debugLog("ASSIGN:", txn);
+  transactions.push(txn);
+}
+
+export function returnItem(serial: string, engineer_id: string, metadata?: Partial<Transaction>) {
+  const state = buildState(transactions);
+  const item = state.serialMap[serial];
+
+  validateStateTransition(item?.status, "RETURN");
+
+  // Ownership lock: only the assigned holder can return (skip for SOLD returns)
+  if (item.status === "ASSIGNED" && item.currentHolder !== engineer_id) {
+    throw new Error(
+      `HARD_FAIL: INVALID_OWNER ${serial}. Expected ${item.currentHolder}, provided ${engineer_id}`
+    );
+  }
+
+  const txn: Transaction = {
+    id: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    type: "RETURN",
+    serial,
+    item_id: item.item_id,
+    engineer_id,
+    timestamp: Date.now(),
+    quantity: item.quantity,
+    created_at: Date.now(),
+    ...metadata,
+  };
+
+  debugLog("RETURN:", txn);
+  transactions.push(txn);
+}
+
+export function consumeItem(serial: string, engineer_id: string, metadata?: Partial<Transaction>) {
+  const state = buildState(transactions);
+  const item = state.serialMap[serial];
+
+  validateStateTransition(item?.status, "CONSUMED");
+
+  if (item.currentHolder !== engineer_id) {
+    throw new Error(
+      `HARD_FAIL: INVALID_OWNER ${serial}. Expected ${item.currentHolder}, provided ${engineer_id}`
+    );
+  }
+
+  const txn: Transaction = {
+    id: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    type: "CONSUMED",
+    serial,
+    item_id: item.item_id,
+    engineer_id,
+    timestamp: Date.now(),
+    quantity: item.quantity,
+    created_at: Date.now(),
+    ...metadata,
+  };
+
+  debugLog("CONSUMED:", txn);
+  transactions.push(txn);
+}
+
+export function adjustStock(item_id: string, qty: number, metadata?: Partial<Transaction>): string[] {
+  if (qty <= 0) throw new Error("HARD_FAIL: INVALID_ADJUSTMENT_QTY");
+  const serials: string[] = [];
+  const adjRef = `ADJ-${Date.now()}`;
+
+  for (let i = 0; i < qty; i++) {
+    const serial = `ADJ-${item_id}-${Date.now()}-${i}`;
+    const txn: Transaction = {
+      id: `TXN-ADJ-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      type: "ADJUSTMENT",
+      serial,
+      item_id,
+      timestamp: Date.now(),
+      quantity: 1,
+      reference_type: "ADJUSTMENT",
+      reference_id: adjRef,
+      created_at: Date.now(),
+      ...metadata,
+    };
+    transactions.push(txn);
+    serials.push(serial);
+  }
+
+  debugLog(`ADJUSTMENT: ${qty} units for ${item_id}`);
+  return serials;
 }
 
 // --------------------------------------------------
@@ -168,40 +511,109 @@ export function getAssignedStock(item_id: string) {
     .map(([serial, data]) => ({ serial, ...data }));
 }
 
+export function getSoldStock(item_id: string) {
+  const map = buildState(transactions).serialMap;
+  return Object.entries(map)
+    .filter(([_, data]) => data.item_id === item_id && data.status === "SOLD")
+    .map(([serial, data]) => ({ serial, ...data }));
+}
+
 export function getEngineerItems(engineer_id: string) {
   const map = buildState(transactions).serialMap;
   return Object.entries(map)
-    .filter(([_, data]) => data.engineer_id === engineer_id && data.status === "ASSIGNED")
+    .filter(([_, data]) => data.currentHolder === engineer_id && data.status === "ASSIGNED")
     .map(([serial, data]) => ({ serial, ...data }));
 }
 
 export function getSerialHistory(serial: string) {
-  return transactions.filter(t => t.serial === serial).sort((a, b) => a.timestamp - b.timestamp);
+  return transactions.filter((t) => t.serial === serial).sort((a, b) => a.timestamp - b.timestamp);
 }
 
 export function getAllItemsGrouped() {
   const map = buildState(transactions).serialMap;
-  const groups: Record<string, { item_id: string, total_qty: number, assigned_qty: number, available_qty: number }> = {};
+  const groups: Record<
+    string,
+    {
+      item_id: string;
+      total_qty: number;
+      assigned_qty: number;
+      available_qty: number;
+      sold_qty: number;
+    }
+  > = {};
 
   for (const [_, data] of Object.entries(map)) {
-      if (!groups[data.item_id]) {
-          groups[data.item_id] = { item_id: data.item_id, total_qty: 0, assigned_qty: 0, available_qty: 0 };
-      }
-      
-      // CONSUMED is permanently removed and does not contribute to qty counts.
-      if (data.status === "IN_STOCK") {
-          groups[data.item_id].total_qty++;
-          groups[data.item_id].available_qty++;
-      } else if (data.status === "ASSIGNED") {
-          groups[data.item_id].total_qty++;
-          groups[data.item_id].assigned_qty++;
-      }
+    if (!groups[data.item_id]) {
+      groups[data.item_id] = {
+        item_id: data.item_id,
+        total_qty: 0,
+        assigned_qty: 0,
+        available_qty: 0,
+        sold_qty: 0,
+      };
+    }
+
+    if (data.status === "IN_STOCK") {
+      groups[data.item_id].total_qty += data.quantity;
+      groups[data.item_id].available_qty += data.quantity;
+    } else if (data.status === "ASSIGNED") {
+      groups[data.item_id].total_qty += data.quantity;
+      groups[data.item_id].assigned_qty += data.quantity;
+    } else if (data.status === "SOLD") {
+      // SOLD items are removed from available/total — only tracked in sold_qty
+      groups[data.item_id].sold_qty += data.quantity;
+    }
+    // CONSUMED: permanently removed from all counts
   }
+
   return Object.values(groups);
 }
 
 export function getTransactions() {
   return transactions;
+}
+
+export function buildAuditReport(scannedSerials: string[]) {
+  const state = buildState(transactions);
+  const systemSerials = Object.entries(state.serialMap)
+    .filter(([_, data]) => data.status === "IN_STOCK")
+    .map(([serial]) => serial);
+
+  const missing = systemSerials.filter((s) => !scannedSerials.includes(s));
+  const extra = scannedSerials.filter((s) => !systemSerials.includes(s));
+  const matched = scannedSerials.filter((s) => systemSerials.includes(s)).length;
+
+  return {
+    totalSystem: systemSerials.length,
+    totalScanned: scannedSerials.length,
+    missingSerials: missing,
+    extraSerials: extra,
+    matched,
+  };
+}
+
+export function getAgingReport() {
+  const state = buildState(transactions);
+  const agingReport: any[] = [];
+
+  for (const [serial, data] of Object.entries(state.serialMap)) {
+    if (data.status === "ASSIGNED") {
+      const ageDays = Math.floor((Date.now() - data.lastUpdated) / (1000 * 60 * 60 * 24));
+      let status: "OK" | "WARNING" | "CRITICAL" = "OK";
+      if (ageDays >= 15) status = "CRITICAL";
+      else if (ageDays >= 7) status = "WARNING";
+
+      agingReport.push({
+        serial,
+        productId: data.item_id,
+        engineerId: data.currentHolder,
+        ageDays,
+        status,
+      });
+    }
+  }
+
+  return agingReport;
 }
 
 // --------------------------------------------------
@@ -213,6 +625,8 @@ if (typeof window !== "undefined") {
     buildState,
     getSerialHistory,
     getAvailableStock,
-    serialCounters
+    getSoldStock,
+    adjustStock,
+    serialCounters,
   };
 }

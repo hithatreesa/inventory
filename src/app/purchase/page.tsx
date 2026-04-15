@@ -8,8 +8,6 @@ import {
   Search,
   ShoppingCart,
   Clock,
-  CheckCircle2,
-  AlertCircle,
   AlertTriangle
 } from 'lucide-react'
 import { useData } from '@/lib/context/DataContext'
@@ -20,8 +18,10 @@ import { MetricCard } from '@/components/shared/MetricCard'
 import { ItemModal } from '@/components/modals/ItemModal'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { useRouter } from 'next/navigation'
 
 export default function PurchaseDashboard() {
+  const router = useRouter()
   const { transactions, inventory, inwardItem } = useData()
   const [isItemModalOpen, setIsItemModalOpen] = useState(false)
 
@@ -88,7 +88,7 @@ export default function PurchaseDashboard() {
       header: 'EST. VALUE',
       align: 'right',
       className: 'font-black text-text-main italic',
-      cell: (order) => `₹${order.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+      cell: (order) => `₹${order.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
     },
     {
       header: 'STATUS',
@@ -107,25 +107,31 @@ export default function PurchaseDashboard() {
   return (
     <div className="space-y-8 pb-12">
       {/* Header */}
-      <div className="flex justify-between items-end">
-        <div>
-          <h1 className="text-4xl font-black text-text-main tracking-tight italic">Purchases</h1>
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 px-2 sm:px-0">
+        <div className="w-full lg:w-auto">
+          <h1 className="text-3xl sm:text-4xl font-black text-text-main tracking-tight italic uppercase underline decoration-primary/20 decoration-4 leading-tight">Purchases</h1>
         </div>
-        <div className="flex items-center gap-4">
-          <Button variant="secondary" className="rounded-2xl border-gray-100 font-black text-sm tracking-widest h-12 px-6" onClick={() => toast.info('Export started')}>
-            <Download className="w-4 h-4 mr-2" /> EXPORT PDF
+
+        {/* Header Action Row */}
+        <div className="w-full lg:w-auto flex items-center gap-3 overflow-x-auto pb-4 lg:pb-0 custom-scrollbar-hide snap-x">
+          <Button
+            variant="secondary"
+            className="flex-shrink-0 rounded-xl sm:rounded-2xl border-2 border-gray-100 font-black text-[8px] sm:text-[10px] tracking-widest h-10 sm:h-12 px-3 sm:px-6 italic snap-start"
+            onClick={() => toast.info('Export started')}
+          >
+            <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-2" /> EXPORT
           </Button>
           <Button
             onClick={() => setIsItemModalOpen(true)}
-            className="rounded-2xl shadow-xl shadow-primary/20 font-black text-sm tracking-widest h-12 px-8 italic"
+            className="flex-shrink-0 rounded-xl sm:rounded-2xl shadow-xl shadow-primary/20 font-black text-[8px] sm:text-[10px] tracking-widest h-10 sm:h-12 px-6 sm:px-8 italic border border-primary/10 snap-center"
           >
-            <Plus className="w-5 h-5 mr-1" /> ADD ITEM
+            <Plus className="w-4 h-4 sm:w-5 sm:h-5 mr-1 text-primary" /> ADD ITEM
           </Button>
           <Button
-            onClick={() => toast.info('Please use Quick Entry to record a new purchase')}
-            className="rounded-2xl shadow-xl shadow-primary/20 font-black text-sm tracking-widest h-12 px-8 italic bg-[#003366] text-white"
+            onClick={() => router.push('/purchase/new')}
+            className="flex-shrink-0 rounded-xl sm:rounded-2xl shadow-[0_10px_30px_rgba(0,51,102,0.3)] font-black text-[8px] sm:text-[10px] tracking-widest h-10 sm:h-12 px-6 sm:px-8 italic bg-[#003366] text-white snap-end"
           >
-            <Plus className="w-5 h-5 mr-1" /> CREATE NEW PO
+            <Plus className="w-4 h-4 sm:w-5 sm:h-5 mr-1" /> NEW PO
           </Button>
         </div>
       </div>

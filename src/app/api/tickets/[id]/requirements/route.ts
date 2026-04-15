@@ -6,8 +6,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const { id } = await params
     const requirements = getTicketRequirements(id)
     return NextResponse.json({ requirements })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }
 
@@ -28,7 +29,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     })
 
     return NextResponse.json({ requirement }, { status: 201 })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

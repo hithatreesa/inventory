@@ -5,8 +5,9 @@ export async function GET() {
   try {
     const tickets = getTickets()
     return NextResponse.json({ tickets })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }
 
@@ -27,7 +28,8 @@ export async function POST(req: Request) {
     })
 
     return NextResponse.json({ ticket }, { status: 201 })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

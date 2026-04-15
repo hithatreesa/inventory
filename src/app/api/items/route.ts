@@ -6,8 +6,9 @@ export async function POST(req: Request) {
     const body = await req.json()
     const item = addItem(body)
     return NextResponse.json({ success: true, item })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 })
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: errorMessage }, { status: 400 })
   }
 }
 
@@ -19,8 +20,9 @@ export async function PATCH(req: Request) {
     
     const item = updateItem(id, updates)
     return NextResponse.json({ success: true, item })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 })
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: errorMessage }, { status: 400 })
   }
 }
 
@@ -33,7 +35,8 @@ export async function DELETE(req: Request) {
     
     deleteItems(ids)
     return NextResponse.json({ success: true })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 400 })
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: errorMessage }, { status: 400 })
   }
 }

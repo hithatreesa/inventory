@@ -9,7 +9,8 @@ export function SidebarDependentLayout({ children }: { children: React.ReactNode
 
   return (
     <main className={cn(
-      "flex-1 overflow-y-auto overflow-x-hidden pt-20 transition-all duration-300 ease-in-out scroll-smooth",
+      "flex-1 overflow-y-auto overflow-x-hidden pt-20 scroll-smooth",
+      "transition-[padding] duration-300 ease-in-out",
       isCollapsed ? "lg:pl-20" : "lg:pl-72",
       "pl-0" // default for mobile
     )}>

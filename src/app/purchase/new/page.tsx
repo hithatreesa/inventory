@@ -1,428 +1,1033 @@
 "use client"
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react'
-import { 
-  Plus, 
-  Trash2, 
-  CheckCircle2, 
-  Save, 
-  X,
-  Search,
-  AlertCircle,
-  Hash
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import {
+    Plus,
+    Trash2,
+    CheckCircle2,
+    X,
+    Search,
+    Scan,
+    QrCode,
+    RefreshCw,
+    AlertCircle,
+    Landmark,
+    Truck,
+    FileText,
+    Barcode,
+    ShoppingCart
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
-import { useData } from '@/lib/context/DataContext'
+import { useData, InventoryItem, PurchaseLine, ScanEntry } from '@/lib/context/DataContext'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { useRouter } from 'next/navigation'
 
-interface PurchaseLine {
-  id: string
-  productId: string
-  name: string
-  sku: string
-  qty: number
-  pPrice: number
-  sPrice: number
-  gst: number
-  total: number
-  isSerialized: boolean
-  serials: string[]
+// Point 13: UI Enhancement Sounds (Synthesized via Web Audio)
+const playBeep = (freq = 880, duration = 0.1) => {
+    if (typeof window === 'undefined') return;
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + duration);
 }
+
+const playError = () => playBeep(220, 0.4);
+const playSuccess = () => playBeep(880, 0.1);
+
+
+
 
 export default function PurchaseEntryPage() {
-  const { inventory } = useData()
-  const [header, setHeader] = useState({
-    supplier: '',
-    date: new Date().toISOString().split('T')[0],
-    invoiceNumber: '',
-    warehouse: 'Main Warehouse',
-    paymentType: 'Cash',
-    notes: ''
-  })
+    const { inventory, processPO } = useData()
+    const router = useRouter()
 
-  const [lines, setLines] = useState<PurchaseLine[]>([])
-  const [discount, setDiscount] = useState(0)
-  const [activeSerialLine, setActiveSerialLine] = useState<string | null>(null)
-  const [tempSerials, setTempSerials] = useState<string[]>([])
-
-  // Derived Totals
-  const { subtotal, totalGst, grandTotal } = useMemo(() => {
-    let sub = 0
-    let gstSum = 0
-    lines.forEach(line => {
-      const lineSub = line.qty * line.pPrice
-      const lineGst = lineSub * (line.gst / 100)
-      sub += lineSub
-      gstSum += lineGst
+    // Header State
+    const [header, setHeader] = useState({
+        supplier: 'Aether Logistics',
+        date: new Date().toISOString().split('T')[0],
+        invoiceNumber: 'PO-2026-0412',
+        warehouse: 'Central Hub',
+        notes: ''
     })
-    return { 
-      subtotal: sub, 
-      totalGst: gstSum, 
-      grandTotal: sub + gstSum - discount 
+
+    // Invoice Lines
+    const [lines, setLines] = useState<PurchaseLine[]>([])
+
+    // Pending Entry Flow
+    const [pendingRow, setPendingRow] = useState<{
+        item: InventoryItem | null,
+        name: string,
+        price: number,
+        qty: number,
+        isSerialized: boolean,
+        model: string,
+        brand: string
+    } | null>(null)
+
+    // Scan Session HUD
+    const [scanSession, setScanSession] = useState<{
+        lineId: string,
+        item: PurchaseLine,
+        requiredQty: number,
+        scanned: ScanEntry[]
+    } | null>(null)
+
+    const [manualSerial, setManualSerial] = useState('')
+    const [modalTab, setModalTab] = useState<'scanner' | 'activity'>('scanner')
+    const [duplicateError, setDuplicateError] = useState<string | null>(null)
+
+    const removeLastSerial = useCallback(() => {
+        if (!scanSession || scanSession.scanned.length === 0) return;
+        setScanSession(prev => prev ? {
+            ...prev,
+            scanned: prev.scanned.slice(0, -1)
+        } : null);
+        playBeep(440, 0.05);
+    }, [scanSession]);
+
+    const finalizePurchase = useCallback(async () => {
+        if (scanSession) {
+            playError();
+            toast.error("HARD_FAIL: ACTIVE_SCAN_SESSION_EXISTS");
+            return;
+        }
+
+        // Final Parity Check
+        for (const line of lines) {
+            if (line.isSerialized && line.serials.length !== line.qty) {
+                playError();
+                toast.error(`HARD_FAIL: SERIAL_MISMATCH for ${line.name}. Scanned: ${line.serials.length}/${line.qty}`);
+                return;
+            }
+            if (line.qty <= 0) {
+                playError();
+                toast.error(`HARD_FAIL: INVALID_QTY for ${line.name}`);
+                return;
+            }
+        }
+
+        if (!header.supplier) {
+            playError();
+            toast.error("HARD_FAIL: MISSING_SUPPLIER");
+            return;
+        }
+
+        if (!header.warehouse) {
+            playError();
+            toast.error("HARD_FAIL: MISSING_WAREHOUSE");
+            return;
+        }
+
+        try {
+            await toast.promise(processPO({ 
+                vendor: header.supplier, 
+                date: header.date, 
+                reference: header.invoiceNumber 
+            }, lines), {
+                loading: 'Committing Procurement Ledger...',
+                success: 'Purchase Successful | Stock Updated',
+                error: (err: Error) => err.message || 'Procurement Failed'
+            })
+            router.push('/purchase');
+        } catch (err: any) {
+            console.error(err);
+        }
+    }, [scanSession, lines, header, processPO, router]);
+
+    const { subtotal, totalGst, grandTotal } = useMemo(() => {
+        let sub = 0
+        let gstSum = 0
+
+        lines.forEach(line => {
+            const lineSub = line.qty * line.price
+            const lineGst = lineSub * (line.gstRate / 100)
+
+            sub += lineSub
+            gstSum += lineGst
+        })
+
+        return {
+            subtotal: sub,
+            totalGst: gstSum,
+            grandTotal: sub + gstSum
+        }
+    }, [lines])
+
+    const removeLine = useCallback((id: string) => {
+        if (scanSession?.lineId === id) {
+            toast.error("Cannot delete line with an active scan session");
+            return;
+        }
+        setLines(prev => prev.filter(l => l.id !== id))
+    }, [scanSession]);
+
+    // Point 14: Scanner Focus Guard (Ensures hardware scanner always has a target)
+    useEffect(() => {
+        if (scanSession) {
+            const timer = setTimeout(() => {
+                document.getElementById('scanner-capture-input')?.focus();
+            }, 100);
+
+            const handleGlobalClick = (e: MouseEvent) => {
+                const target = e.target as HTMLElement;
+                // DO NOT steal focus if user is trying to type in the manual input or clicking buttons
+                if (
+                    target.tagName === 'INPUT' ||
+                    target.tagName === 'TEXTAREA' ||
+                    target.closest('button') ||
+                    target.closest('.manual-input-zone')
+                ) {
+                    return;
+                }
+                document.getElementById('scanner-capture-input')?.focus();
+            };
+
+            window.addEventListener('mousedown', handleGlobalClick);
+            return () => {
+                clearTimeout(timer);
+                window.removeEventListener('mousedown', handleGlobalClick);
+            };
+        }
+    }, [scanSession])
+
+    // Point 8: Keyboard-First Global Controls
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if (scanSession) {
+                if (e.key === 'Escape') {
+                    setScanSession(null);
+                    toast.warning("Scanner Paused.");
+                }
+                if (e.key === 'Delete') {
+                    removeLastSerial();
+                }
+                if (e.ctrlKey && e.key === 'Enter') {
+                    // Point: Force Commit shortcut inside scanner
+                    e.preventDefault();
+                    if (scanSession.scanned.length === scanSession.requiredQty) {
+                        setLines(prev => prev.map(l => l.id === scanSession.lineId ? { ...l, serials: scanSession.scanned, isLocked: true } : l));
+                        toast.success(`VERIFIED: Batch Committed.`);
+                        setScanSession(null);
+                        setModalTab('scanner');
+                    } else {
+                        toast.error("HARD_FAIL: INCOMPLETE_BATCH");
+                        playError();
+                    }
+                }
+            } else {
+                if (e.ctrlKey && e.key === 'Enter') {
+                    e.preventDefault();
+                    finalizePurchase();
+                }
+
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    const inputs = Array.from(document.querySelectorAll('.qty-input')) as HTMLInputElement[];
+                    const activeIndex = inputs.indexOf(document.activeElement as HTMLInputElement);
+                    if (activeIndex !== -1) {
+                        e.preventDefault();
+                        const nextIndex = e.key === 'ArrowDown' ? activeIndex + 1 : activeIndex - 1;
+                        if (nextIndex >= 0 && nextIndex < inputs.length) {
+                            inputs[nextIndex].focus();
+                            inputs[nextIndex].select();
+                        }
+                    }
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [scanSession, lines, header, removeLastSerial, finalizePurchase]) // Re-bind on state change to ensure finalizePurchase has latest context
+
+    // --- Actions ---
+
+    const startAdding = () => {
+        setPendingRow({ item: null, name: '', price: 0, qty: 1, isSerialized: false, model: 'N/A', brand: 'N/A' })
     }
-  }, [lines])
 
-  const addLine = (productId?: string) => {
-    const item = inventory.find(i => i.id === productId)
-    const newLine: PurchaseLine = {
-      id: Math.random().toString(36).substr(2, 9),
-      productId: item?.id?.toString() || '',
-      name: item?.name || '',
-      sku: item?.sku || '',
-      qty: 1,
-      pPrice: item?.price || 0,
-      sPrice: (item?.price || 0) * 1.2, // Default 20% margin
-      gst: item?.category === 'Hardware' ? 18 : 12, // Auto GST logic based on category
-      total: 0,
-      isSerialized: item?.category === 'Hardware', // Mock: Hardware is serialized
-      serials: []
-    }
-    // Calculate total
-    newLine.total = newLine.qty * newLine.pPrice * (1 + newLine.gst / 100)
-    setLines([...lines, newLine])
-  }
+    const commitLine = (autoScan = false) => {
+        if (!pendingRow || !pendingRow.name || pendingRow.qty <= 0) {
+            playError();
+            toast.error("HARD_FAIL: INVALID_ENTRY_DATA");
+            return;
+        }
 
-  const updateLine = (id: string, updates: Partial<PurchaseLine>) => {
-    setLines(prev => prev.map(l => {
-      if (l.id === id) {
-        const updatedLine = { ...l, ...updates }
-        updatedLine.total = updatedLine.qty * updatedLine.pPrice * (1 + updatedLine.gst / 100)
-        return updatedLine
-      }
-      return l
-    }))
-  }
+        const item = pendingRow.item
 
-  const removeLine = (id: string) => {
-    setLines(lines.filter(l => l.id !== id))
-  }
+        // Point 5: GST Master Derivation & Hard Fail
+        if (item && (typeof item.gst_rate === 'undefined' || item.gst_rate === null)) {
+            playError();
+            toast.error("HARD_FAIL: GST_NOT_DEFINED_IN_ITEM_MASTER");
+            throw new Error(`GST_NOT_DEFINED_FOR_PRODUCT: ${item.name}`);
+        }
 
-  const openSerialModal = (line: PurchaseLine) => {
-    setActiveSerialLine(line.id)
-    setTempSerials(line.serials.length ? line.serials : Array(line.qty).fill(''))
-  }
+        const newLine: PurchaseLine = {
+            id: `po_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            productId: item?.id || 'MANUAL_ENTRY',
+            name: pendingRow.name,
+            brand: item?.brand || pendingRow.brand || 'N/A',
+            model: item?.model || pendingRow.model || 'N/A',
+            qty: pendingRow.qty,
+            price: pendingRow.price,
+            gstRate: item?.gst_rate ?? 18, 
+            isSerialized: pendingRow.isSerialized,
+            serials: [],
+            isLocked: false
+        }
 
-  const handleSaveSerials = () => {
-    if (tempSerials.some(s => !s.trim())) {
-      toast.error('All serial numbers are required')
-      return
-    }
-    if (new Set(tempSerials).size !== tempSerials.length) {
-      toast.error('Duplicate serial numbers detected')
-      return
-    }
-    updateLine(activeSerialLine!, { serials: tempSerials })
-    setActiveSerialLine(null)
-    toast.success('Serial numbers assigned')
-  }
+        const updatedLines = [...lines, newLine];
+        setLines(updatedLines);
+        setPendingRow(null);
 
-  const handleSubmit = (status: 'Draft' | 'Approved') => {
-    if (!header.supplier || !header.invoiceNumber) {
-      toast.error('Supplier and Invoice Number are mandatory')
-      return
-    }
-    if (lines.length === 0) {
-      toast.error('Add at least one item to proceed')
-      return
-    }
-    
-    // Check serials
-    const missingSerials = lines.find(l => l.isSerialized && l.serials.length !== l.qty)
-    if (missingSerials && status === 'Approved') {
-      toast.error(`Missing serial numbers for ${missingSerials.name}`)
-      return
+        toast.success(`LINE_ADDED: ${newLine.name}`);
+
+        if (autoScan && newLine.isSerialized) {
+            // Delay slightly to ensure state is committed or use direct target
+            setTimeout(() => triggerScan(newLine.id, updatedLines), 10);
+        }
     }
 
-    toast.promise(new Promise(resolve => setTimeout(resolve, 1500)), {
-      loading: 'Recording purchase entry...',
-      success: `Purchase ${status === 'Approved' ? 'submitted' : 'saved as draft'} successfully`,
-      error: 'Failed to record purchase'
-    })
-  }
+    const triggerScan = (lineId: string, customLines?: PurchaseLine[]) => {
+        const source = customLines || lines;
+        const target = source.find(l => l.id === lineId);
+        if (!target || !target.isSerialized) return;
 
-  return (
-    <div className="space-y-6 pb-20 animate-in fade-in duration-500">
-      {/* Header Info */}
-      <div className="bg-white rounded-3xl border border-border-main p-8 shadow-sm">
-        <div className="flex justify-between items-center mb-8 border-b border-gray-50 pb-6">
-           <div>
-              <h1 className="text-3xl font-black text-[#003366] tracking-tighter italic uppercase">Purchase Entry</h1>
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Inbound Stock Registration Engine</p>
-           </div>
-           <span className="h-10 px-6 rounded-2xl flex items-center justify-center border border-primary/20 bg-primary/5 text-primary font-black italic text-[11px]">PO-PR-240812</span>
-        </div>
+        setLines(prev => prev.map(l => l.id === target.id ? { ...l, isLocked: true } : l));
+        setScanSession({
+            lineId: target.id,
+            item: target,
+            requiredQty: target.qty,
+            scanned: []
+        });
+        toast.info(`HARD_LOCK: Capturing ${target.qty} serials for ${target.name}`);
+    }
 
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-8">
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Supplier</label>
-            <select 
-              value={header.supplier}
-              onChange={(e) => setHeader({...header, supplier: e.target.value})}
-              className="w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-4 text-sm font-bold focus:ring-4 focus:ring-primary/5 focus:border-primary transition-all appearance-none"
-            >
-              <option value="">Select Supplier...</option>
-              <option value="Aether Logistics">Aether Logistics International</option>
-              <option value="Cyberdyne Systems">Cyberdyne Systems</option>
-              <option value="Weyland Corp">Weyland Corp</option>
-            </select>
-          </div>
+    const rescanLine = (lineId: string) => {
+        const line = lines.find(l => l.id === lineId);
+        if (!line) return;
 
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Purchase Date</label>
-            <Input type="date" value={header.date} onChange={(e) => setHeader({...header, date: e.target.value})} className="h-12 text-sm" />
-          </div>
+        setLines(prev => prev.map(l => l.id === lineId ? { ...l, serials: [], isLocked: true } : l));
+        setScanSession({
+            lineId: line.id,
+            item: line,
+            requiredQty: line.qty,
+            scanned: []
+        });
+        playBeep(440, 0.1);
+        toast.info(`RESCAN: Previous data cleared. Repositary open.`);
+    }
 
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Invoice Number</label>
-            <Input 
-              placeholder="e.g. INV-9921" 
-              value={header.invoiceNumber} 
-              onChange={(e) => setHeader({...header, invoiceNumber: e.target.value})}
-              className="h-12 text-sm font-black tracking-tight"
-            />
-          </div>
+    const handleSessionScan = (barcode: string) => {
+        if (!scanSession || !barcode) return;
 
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Warehouse</label>
-            <select 
-              value={header.warehouse}
-              onChange={(e) => setHeader({...header, warehouse: e.target.value})}
-              className="w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-4 text-sm font-bold focus:ring-4 focus:ring-primary/5 appearance-none"
-            >
-              <option>Main Warehouse</option>
-              <option>Express Hub A</option>
-              <option>Global Distribution</option>
-            </select>
-          </div>
+        // 1. Check duplicate in current session
+        const isDuplicateSession = scanSession.scanned.some(s => s.serial === barcode);
+        if (isDuplicateSession) {
+            playError();
+            setDuplicateError(`DUPLICATE_IN_SESSION: ${barcode}`);
+            return;
+        }
 
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Payment Type</label>
-            <select 
-              value={header.paymentType}
-              onChange={(e) => setHeader({...header, paymentType: e.target.value})}
-              className="w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-4 text-sm font-bold appearance-none"
-            >
-              <option>Cash</option>
-              <option>Credit (Net-30)</option>
-              <option>Bank Transfer</option>
-            </select>
-          </div>
+        // 2. Check duplicate in entire PO
+        const isDuplicateGlobal = lines.some(l => l.serials.some(s => (typeof s === 'string' ? s : s.serial) === barcode));
+        if (isDuplicateGlobal) {
+            playError();
+            setDuplicateError(`HARD_FAIL: GLOBAL_DUPLICATE_REJECTED: ${barcode}`);
+            return;
+        }
 
-          <div className="md:col-span-2 lg:col-span-3 space-y-1.5">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Notes</label>
-            <Input 
-              placeholder="Additional procurement metadata..." 
-              value={header.notes}
-              onChange={(e) => setHeader({...header, notes: e.target.value})}
-              className="h-12 text-sm" 
-            />
-          </div>
-        </div>
-      </div>
+        // 3. Check duplicate in inventory
+        const isDuplicateInventory = inventory.some(item => item.barcode === barcode || item.sku === barcode);
+        if (isDuplicateInventory) {
+            playError();
+            setDuplicateError(`HARD_FAIL: SERIAL_ALREADY_EXISTS: ${barcode}`);
+            return;
+        }
 
-      <div className="flex flex-col lg:flex-row gap-8">
-        {/* ITEM ENTRY TABLE */}
-        <div className="flex-1 bg-white rounded-3xl border border-border-main flex flex-col overflow-hidden shadow-sm">
-          <div className="overflow-x-auto min-h-[400px]">
-             <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-gray-50/50 border-b border-gray-100">
-                    <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Item Identification</th>
-                    <th className="px-4 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-center">Qty</th>
-                    <th className="px-4 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-right">Purchase Price</th>
-                    <th className="px-4 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-right">Selling Price</th>
-                    <th className="px-4 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-center">GST %</th>
-                    <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-right">Line Total</th>
-                    <th className="w-16"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {lines.map((line) => (
-                    <tr key={line.id} className="group hover:bg-gray-50/30 transition-colors">
-                      <td className="px-8 py-5">
-                          <select 
-                            value={line.productId}
-                            onChange={(e) => {
-                              const item = inventory.find(i => i.id === e.target.value)
-                              updateLine(line.id, { 
-                                productId: item?.id?.toString(), 
-                                name: item?.name, 
-                                sku: item?.sku,
-                                pPrice: item?.price || 0,
-                                sPrice: (item?.price || 0) * 1.2,
-                                gst: item?.category === 'Hardware' ? 18 : 12,
-                                isSerialized: item?.category === 'Hardware'
-                              })
-                            }}
-                            className="bg-transparent font-black italic text-sm text-[#003366] focus:outline-none w-full appearance-none"
-                          >
-                            <option value="">Select Item...</option>
-                            {inventory.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
-                          </select>
-                          <p className="text-[10px] text-gray-400 font-mono mt-1 font-bold">{line.sku || 'SKU_UNKNOWN'}</p>
-                          {line.isSerialized && (
-                            <button 
-                              onClick={() => openSerialModal(line)}
-                              className={cn(
-                                "mt-2 flex items-center gap-1.5 px-3 py-1 rounded-full text-[9px] font-black uppercase transition-all border",
-                                line.serials.length === line.qty 
-                                  ? "bg-green-50 text-green-600 border-green-100" 
-                                  : "bg-primary/5 text-primary border-primary/20 animate-pulse"
-                              )}
-                            >
-                              <Hash className="w-3 h-3" />
-                              {line.serials.length === line.qty ? 'Serials Assigned' : 'Add Serials Required'}
-                            </button>
-                          )}
-                      </td>
-                      <td className="px-4 py-5 text-center">
-                        <input 
-                          type="number" 
-                          value={line.qty} 
-                          onChange={(e) => updateLine(line.id, { qty: parseInt(e.target.value) || 0 })}
-                          className="w-16 bg-gray-50/50 rounded-lg border border-gray-100 px-2 py-1.5 text-center text-sm font-black focus:outline-none focus:ring-2 focus:ring-primary/10"
-                        />
-                      </td>
-                      <td className="px-4 py-5 text-right font-black italic text-sm">
-                        <input 
-                          type="number" 
-                          value={line.pPrice} 
-                          onChange={(e) => updateLine(line.id, { pPrice: parseFloat(e.target.value) || 0 })}
-                          className="w-24 bg-transparent text-right focus:outline-none"
-                        />
-                      </td>
-                      <td className="px-4 py-5 text-right font-black italic text-sm text-primary">
-                        <input 
-                          type="number" 
-                          value={line.sPrice} 
-                          onChange={(e) => updateLine(line.id, { sPrice: parseFloat(e.target.value) || 0 })}
-                          className="w-24 bg-transparent text-right focus:outline-none"
-                        />
-                      </td>
-                      <td className="px-4 py-5 text-center font-black text-gray-400 text-xs">
-                        {line.gst}%
-                      </td>
-                      <td className="px-10 py-6 text-right font-black italic text-sm text-[#003366] tabular-nums tracking-tighter">
-                        ₹{line.total.toLocaleString(undefined, {minimumFractionDigits: 2})}
-                      </td>
-                      <td className="px-6 py-5 text-right">
-                        <button onClick={() => removeLine(line.id)} className="text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  <tr className="bg-gray-50/20">
-                     <td colSpan={7} className="p-4">
-                        <Button 
-                          variant="secondary" 
-                          onClick={() => addLine()}
-                          className="w-full h-12 border-dashed border-2 border-gray-200 bg-transparent text-[10px] font-black tracking-widest uppercase italic group hover:border-primary hover:text-primary transition-all"
+        // 4. Check overscan
+        if (scanSession.scanned.length >= scanSession.requiredQty) {
+            playError();
+            toast.error("HARD_FAIL: OVER_SCAN");
+            return;
+        }
+
+        const newEntry: ScanEntry = {
+            serial: barcode,
+            timestamp: Date.now(),
+            metadata: { 
+                serialNo: scanSession.scanned.length + 1,
+                model: scanSession.item.model || "N/A"
+            }
+        };
+
+        const updatedScanned = [...scanSession.scanned, newEntry];
+        playSuccess();
+
+        if (updatedScanned.length === scanSession.requiredQty) {
+            // Point 7: Line Update After Scan (Distill to full record for ledger)
+            setLines(prev => prev.map(l => l.id === scanSession.lineId ? {
+                ...l,
+                serials: updatedScanned,
+                isLocked: true
+            } : l));
+
+            toast.success(`VERIFIED: Registry Complete.`);
+            setScanSession(null);
+        } else {
+            setScanSession(prev => prev ? { ...prev, scanned: updatedScanned } : null);
+        }
+    }
+
+
+
+    return (
+        <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#F8F9FC] p-8">
+            {/* Navigation & Header Actions */}
+            <div className="max-w-[1600px] mx-auto space-y-10">
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 px-2 sm:px-0">
+                    <div className="w-full lg:w-auto">
+                        <h1 className="text-3xl sm:text-5xl font-black text-[#1A1C21] tracking-tight italic leading-tight">New Purchase Order</h1>
+                    </div>
+
+                    {/* Header Action Row */}
+                    <div className="w-full lg:w-auto flex items-center gap-3 overflow-x-auto pb-4 lg:pb-0 custom-scrollbar-hide snap-x -mr-6 sm:mr-0 px-2 sm:px-0">
+                        <Button
+                            variant="secondary"
+                            className="flex-shrink-0 bg-white border-2 border-gray-100 text-gray-400 font-black uppercase text-[8px] sm:text-[10px] tracking-widest px-4 sm:px-8 h-10 sm:h-14 rounded-xl sm:rounded-2xl hover:bg-gray-50 transition-all italic snap-start"
+                            onClick={() => toast.info('Draft functionality coming soon')}
                         >
-                          <Plus className="w-4 h-4 mr-2 group-hover:rotate-90 transition-transform" /> Add Purchase Line
+                            Draft Save
                         </Button>
-                     </td>
-                  </tr>
-                </tbody>
-             </table>
-          </div>
-        </div>
-
-        {/* SUMMARY PANEL */}
-        <div className="w-full lg:w-96 space-y-6">
-           <div className="bg-[#003366] rounded-3xl p-8 text-white shadow-xl shadow-primary/20 space-y-6 flex flex-col relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16" />
-              <div className="space-y-4 relative z-10">
-                 <div className="flex justify-between items-center opacity-60 text-[10px] font-black uppercase tracking-[0.2em] italic">
-                    <span>Valuation Subtotal</span>
-                    <span>₹{subtotal.toLocaleString()}</span>
-                 </div>
-                 <div className="flex justify-between items-center opacity-60 text-[10px] font-black uppercase tracking-[0.2em] italic">
-                    <span>Aggregated GST</span>
-                    <span>₹{totalGst.toLocaleString()}</span>
-                 </div>
-                 <div className="flex justify-between items-center bg-white/5 p-4 rounded-xl border border-white/5 mt-2">
-                    <span className="text-[10px] font-black uppercase tracking-widest italic opacity-80">Discount Amt</span>
-                    <input 
-                      type="number" 
-                      value={discount} 
-                      onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
-                      className="bg-transparent text-right font-black w-24 focus:outline-none placeholder:text-white/20 italic" 
-                      placeholder="0.00"
-                    />
-                 </div>
-              </div>
-              <div className="pt-6 border-t border-white/10 relative z-10">
-                 <p className="text-[10px] font-black text-blue-200 uppercase tracking-[0.2em] italic mb-2 opacity-60">Settlement Total</p>
-                 <p className="text-5xl font-black italic tracking-tighter leading-none select-none">
-                    <span className="text-xl mr-1 opacity-20">₹</span>
-                    {grandTotal.toLocaleString()}
-                 </p>
-              </div>
-           </div>
-
-           <div className="bg-white rounded-3xl p-8 border border-border-main shadow-sm flex flex-col gap-4">
-              <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic border-b border-gray-50 pb-4 mb-2">Workflow Execution</h4>
-              <Button size="xl" onClick={() => handleSubmit('Approved')} className="h-20 rounded-2xl italic font-black text-xs tracking-widest group shadow-2xl shadow-primary/10">
-                <CheckCircle2 className="w-5 h-5 mr-3 group-hover:scale-110 transition-transform" /> SUBMIT PURCHASE
-              </Button>
-              <Button variant="secondary" onClick={() => handleSubmit('Draft')} className="h-16 rounded-2xl border-gray-100 bg-white font-black text-[10px] tracking-widest uppercase italic group hover:shadow-xl transition-all">
-                <Save className="w-5 h-5 mr-3 text-primary opacity-40 group-hover:opacity-100 transition-opacity" /> Save Draft-A
-              </Button>
-              <Button variant="secondary" className="h-16 rounded-2xl border-gray-100 bg-white font-black text-[10px] tracking-widest uppercase italic text-red-500 hover:bg-red-50">
-                 Discard Entry
-              </Button>
-           </div>
-        </div>
-      </div>
-
-      {/* SERIAL MODAL (INLINE STYLE) */}
-      {activeSerialLine && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-6 animate-in fade-in transition-all">
-          <div className="bg-white rounded-[40px] border border-border-main p-10 w-full max-w-xl shadow-2xl space-y-8 animate-in zoom-in duration-300">
-             <div className="flex justify-between items-center border-b border-gray-50 pb-6">
-                <div className="flex items-center gap-4">
-                   <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary shadow-sm"><Hash className="w-6 h-6" /></div>
-                   <div>
-                      <h3 className="text-xl font-black text-[#003366] italic tracking-tight uppercase">Serial Registration</h3>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Required: {tempSerials.length} Identity Strings</p>
-                   </div>
+                        <Button
+                            onClick={finalizePurchase}
+                            disabled={lines.length === 0 || !!scanSession}
+                            className={cn(
+                                "flex-shrink-0 bg-[#0066FF] text-white font-black uppercase text-[8px] sm:text-[10px] tracking-widest sm:tracking-[0.2em] px-6 sm:px-10 h-10 sm:h-14 rounded-xl sm:rounded-2xl shadow-[0_10px_30px_rgba(0,102,255,0.3)] hover:scale-105 transition-all flex items-center gap-2 sm:gap-3 italic snap-end",
+                                (lines.length === 0 || !!scanSession) && "opacity-50 grayscale cursor-not-allowed"
+                            )}
+                        >
+                            <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 fill-white/20" />
+                            Finalize Order
+                        </Button>
+                    </div>
                 </div>
-                <button onClick={() => setActiveSerialLine(null)} className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center hover:bg-red-50 hover:text-red-50 transition-all"><X className="w-5 h-5 text-gray-400 hover:text-red-500" /></button>
-             </div>
 
-             <div className="space-y-6 max-h-[400px] overflow-y-auto pr-4 custom-scrollbar">
-                {tempSerials.map((s, idx) => (
-                  <div key={idx} className="space-y-1.5">
-                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1 italic">Unit #{idx + 1} Serial String</label>
-                     <Input 
-                        placeholder="ENTER_SN_OR_SCAN..." 
-                        value={s}
-                        onChange={(e) => {
-                          const newer = [...tempSerials]
-                          newer[idx] = e.target.value.toUpperCase()
-                          setTempSerials(newer)
-                        }}
-                        className="h-12 font-mono font-bold tracking-widest text-sm focus:ring-primary/10"
-                     />
-                  </div>
-                ))}
-             </div>
+                {/* Operational Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {[
+                        { label: "Supplier", value: header.supplier, icon: Landmark, key: 'supplier', color: 'bg-blue-50 text-blue-600' },
+                        { label: "Invoice Number", value: header.invoiceNumber, icon: FileText, key: 'invoiceNumber', color: 'bg-indigo-50 text-indigo-600' },
+                        { label: "Warehouse", value: header.warehouse, icon: Truck, key: 'warehouse', color: 'bg-slate-50 text-slate-600' },
+                    ].map((c) => (
+                        <div key={c.key} className="bg-white p-6 sm:p-8 rounded-[32px] shadow-[0_4px_20px_rgba(0,0,0,0.02)] border border-gray-100/50 flex items-center gap-6 group hover:shadow-xl transition-all duration-500">
+                            <div className={cn("w-12 h-12 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 duration-500", c.color)}>
+                                <c.icon className="w-8 h-8" />
+                            </div>
+                            <div className="flex-1 space-y-1">
+                                <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest italic">{c.label}</label>
+                                <input
+                                    value={c.value}
+                                    onChange={(e) => setHeader({ ...header, [c.key]: e.target.value })}
+                                    className="w-full bg-transparent text-xl font-black text-[#1A1C21] outline-none placeholder:text-gray-100"
+                                    placeholder={`Enter ${c.label}...`}
+                                />
+                            </div>
+                        </div>
+                    ))}
+                </div>
 
-             <div className="flex gap-4 pt-4">
-                <Button size="xl" onClick={handleSaveSerials} className="flex-1 rounded-2xl font-black text-xs italic tracking-widest">
-                   VALIDATE & ATTACH
-                </Button>
-                <Button variant="secondary" size="xl" onClick={() => setActiveSerialLine(null)} className="rounded-2xl px-10 font-black text-[10px] tracking-widest uppercase italic">
-                   CANCEL
-                </Button>
-             </div>
-          </div>
+                {/* Line Items Section */}
+                <div className="bg-white rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.02)] border border-gray-100/50">
+                    <div className="px-10 py-8 border-b border-gray-50 flex justify-between items-center bg-[#F8F9FC]/50">
+                        <h2 className="text-sm font-black text-[#1A1C21] uppercase tracking-[0.2em] italic">Line Items</h2>
+                        <button
+                            onClick={startAdding}
+                            disabled={!!pendingRow || !!scanSession}
+                            className="flex items-center gap-2 text-[10px] font-black text-primary uppercase tracking-widest hover:opacity-70 transition-all disabled:opacity-20 italic"
+                        >
+                            <Plus className="w-4 h-4 bg-primary text-white rounded-full p-0.5" />
+                            Add Item
+                        </button>
+                    </div>
+
+                    <div className="divide-y divide-gray-50">
+                        {/* Table Header Labels */}
+                        <div className="hidden lg:grid grid-cols-12 px-10 py-6 bg-gray-50/30">
+                            <div className="col-span-5 text-[9px] font-black text-gray-300 uppercase tracking-widest italic">Item Name</div>
+                            <div className="col-span-2 text-[9px] font-black text-gray-300 uppercase tracking-widest italic text-center">Quantity</div>
+                            <div className="col-span-3 text-[9px] font-black text-gray-300 uppercase tracking-widest italic">Status</div>
+                            <div className="col-span-2 text-[9px] font-black text-gray-300 uppercase tracking-widest italic text-right">Actions</div>
+                        </div>
+
+                        {lines.map((l) => (
+                            <div key={l.id} className="group relative">
+                                {/* Desktop View: Row-based */}
+                                <div className="hidden lg:grid grid-cols-12 px-10 py-8 items-center hover:bg-gray-50/50 transition-all border-b border-gray-50">
+                                    <div className="col-span-5 flex flex-col justify-center">
+                                        <div className="space-y-1">
+                                            <p className="text-lg font-black text-[#1A1C21] italic truncate">{l.name}</p>
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{l.brand} | {l.model}</p>
+                                        </div>
+                                        {l.serials.length > 0 && (
+                                            <div className="mt-4 grid grid-cols-2 gap-2">
+                                                {l.serials.map((s, idx) => (
+                                                    <div key={idx} className="flex items-center gap-2 bg-gray-50/50 px-3 py-1.5 rounded-lg border border-gray-100">
+                                                        <Barcode className="w-3 h-3 text-gray-300 flex-shrink-0" />
+                                                        <span className="text-[10px] font-black text-gray-500 tracking-wider truncate">
+                                                            {s.serial}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="col-span-2 text-center">
+                                        {(l.isSerialized && l.isLocked) ? (
+                                            <p className="text-xl font-black text-gray-400 italic">{l.qty}</p>
+                                        ) : (
+                                            <input
+                                                type="number"
+                                                value={l.qty}
+                                                onChange={(e) => setLines(prev => prev.map(item => item.id === l.id ? { ...item, qty: parseInt(e.target.value) || 0 } : item))}
+                                                className="qty-input w-full bg-transparent text-center text-xl font-black text-[#1A1C21] outline-none italic"
+                                            />
+                                        )}
+                                    </div>
+                                    <div className="col-span-3 lg:pr-10">
+                                        <div className="flex items-center gap-3">
+                                            {l.isSerialized && l.serials.length === l.qty ? (
+                                                <span className="text-[#0066FF] text-[10px] font-black uppercase tracking-widest italic">Verified</span>
+                                            ) : l.isSerialized && l.serials.length > 0 ? (
+                                                <span className="text-amber-500 text-[10px] font-black uppercase tracking-widest italic">Syncing</span>
+                                            ) : l.isSerialized ? (
+                                                <span className="text-red-500 text-[10px] font-black uppercase tracking-widest italic">Error</span>
+                                            ) : (
+                                                <span className="text-gray-300 text-[10px] font-black uppercase tracking-widest italic">Verified</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="col-span-2 flex justify-end gap-3">
+                                        {l.isSerialized && l.serials.length < l.qty && (
+                                            <button onClick={() => rescanLine(l.id)} className="p-3 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-500 hover:text-white transition-all">
+                                                <Scan className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                        <button onClick={() => removeLine(l.id)} className="p-3 bg-red-50 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all">
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Mobile View: Premium Stacked Card */}
+                                <div className="lg:hidden p-6 space-y-6 border-b border-gray-50 bg-white active:bg-gray-50 transition-colors">
+                                    <div className="flex justify-between items-start gap-4">
+                                        <div className="space-y-1">
+                                            <h3 className="text-xl font-black text-[#1A1C21] italic leading-tight">{l.name}</h3>
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{l.brand} | {l.model}</p>
+                                        </div>
+                                        <button onClick={() => removeLine(l.id)} className="p-3 text-red-300 hover:text-red-500 transition-colors">
+                                            <Trash2 className="w-5 h-5" />
+                                        </button>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100 flex flex-col items-center justify-center">
+                                            <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">Quantity</span>
+                                            {(l.isSerialized && l.isLocked) ? (
+                                                <span className="text-2xl font-black text-gray-400 italic tabular-nums">{l.qty}</span>
+                                            ) : (
+                                                <input
+                                                    type="number"
+                                                    value={l.qty}
+                                                    onChange={(e) => setLines(prev => prev.map(item => item.id === l.id ? { ...item, qty: parseInt(e.target.value) || 0 } : item))}
+                                                    className="w-full bg-transparent text-center text-2xl font-black text-[#1A1C21] outline-none italic tabular-nums"
+                                                />
+                                            )}
+                                        </div>
+                                        <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100 flex flex-col items-center justify-center">
+                                            <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">Status</span>
+                                            {l.isSerialized && l.serials.length === l.qty ? (
+                                                <CheckCircle2 className="w-6 h-6 text-[#0066FF]" />
+                                            ) : l.isSerialized && l.serials.length > 0 ? (
+                                                <RefreshCw className="w-6 h-6 text-amber-500 animate-spin-slow" />
+                                            ) : l.isSerialized ? (
+                                                <AlertCircle className="w-6 h-6 text-red-500" />
+                                            ) : (
+                                                <CheckCircle2 className="w-6 h-6 text-gray-200" />
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {l.isSerialized && l.serials.length < l.qty && (
+                                        <Button
+                                            onClick={() => rescanLine(l.id)}
+                                            className="w-full h-14 bg-amber-500 text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-lg shadow-amber-500/20 flex items-center justify-center gap-3 italic"
+                                        >
+                                            <Scan className="w-5 h-5" />
+                                            Launch Batch Scanner
+                                        </Button>
+                                    )}
+
+                                    {l.isSerialized && l.serials.length > 0 && (
+                                        <div className="space-y-3">
+                                            <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest italic">Registry Captures ({l.serials.length})</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {l.serials.slice(0, 3).map((s, idx) => (
+                                                    <div key={idx} className="bg-blue-50/50 px-3 py-1.5 rounded-lg border border-blue-100 text-[10px] font-black text-[#0066FF] tracking-wider italic">
+                                                        {s.serial}
+                                                    </div>
+                                                ))}
+                                                {l.serials.length > 3 && (
+                                                    <div className="px-3 py-1.5 rounded-lg border border-dashed border-gray-200 text-[10px] font-black text-gray-300 italic">
+                                                        +{l.serials.length - 3} more
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+
+                        {pendingRow && (
+                            <div className="p-4 sm:p-6 bg-primary/[0.02] border-t-2 border-primary/20 animate-in slide-in-from-bottom-4 duration-300">
+                                <div className="grid grid-cols-2 lg:grid-cols-12 gap-3 sm:gap-4 items-end">
+                                    <div className="col-span-2 lg:col-span-5 space-y-2">
+                                        <label className="text-[9px] font-black text-primary uppercase tracking-widest italic">Item Selection</label>
+                                        <input
+                                            value={pendingRow.name}
+                                            onChange={(e) => setPendingRow({ ...pendingRow, name: e.target.value })}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') commitLine(true); }}
+                                            placeholder="Enter item name..."
+                                            className="w-full h-12 bg-white border-2 border-primary/20 rounded-xl px-4 text-base font-black italic outline-none focus:border-primary transition-all shadow-sm"
+                                        />
+                                    </div>
+
+                                    <div className="col-span-1 lg:col-span-2 space-y-2">
+                                        <label className="text-[9px] font-black text-primary uppercase tracking-widest italic text-center block">Serial Track</label>
+                                        <button
+                                            onClick={() => setPendingRow({ ...pendingRow, isSerialized: !pendingRow.isSerialized })}
+                                            className={cn(
+                                                "w-full h-12 rounded-xl flex flex-col items-center justify-center transition-all border-2",
+                                                pendingRow.isSerialized ? "bg-primary text-white border-primary shadow-lg shadow-primary/20" : "bg-white text-gray-300 border-gray-100"
+                                            )}
+                                        >
+                                            <span className="text-[9px] font-black uppercase tracking-widest leading-none">{pendingRow.isSerialized ? 'SERIAL' : 'BATCH'}</span>
+                                            <span className="text-[7px] font-bold opacity-50 uppercase leading-none">TRACKING</span>
+                                        </button>
+                                    </div>
+
+                                    <div className="col-span-1 lg:col-span-1 space-y-2">
+                                        <label className="text-[9px] font-black text-primary uppercase tracking-widest italic text-center block">Qty</label>
+                                        <input
+                                            type="number"
+                                            value={pendingRow.qty || ''}
+                                            onChange={(e) => setPendingRow({ ...pendingRow, qty: parseInt(e.target.value) || 0 })}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') commitLine(true); }}
+                                            className="qty-input w-full h-12 bg-white border-2 border-primary/20 rounded-xl text-center font-black text-xl outline-none focus:border-primary shadow-sm"
+                                        />
+                                    </div>
+
+                                    <div className="col-span-1 lg:col-span-2 space-y-2">
+                                        <label className="text-[9px] font-black text-primary uppercase tracking-widest italic block text-right">Price</label>
+                                        <input
+                                            type="number"
+                                            value={pendingRow.price || ''}
+                                            onChange={(e) => setPendingRow({ ...pendingRow, price: parseFloat(e.target.value) || 0 })}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') commitLine(true); }}
+                                            className="w-full h-12 bg-white border-2 border-primary/20 rounded-xl text-right px-4 font-black text-lg outline-none focus:border-primary shadow-sm"
+                                        />
+                                    </div>
+
+                                    <div className="col-span-1 lg:col-span-2 flex gap-2 h-12">
+                                        <button onClick={() => setPendingRow(null)} className="flex-1 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-all flex items-center justify-center">
+                                            <X className="w-5 h-5" />
+                                        </button>
+                                        <button onClick={() => commitLine(true)} className="flex-1 bg-primary text-white rounded-xl shadow-lg shadow-primary/20 hover:scale-105 transition-all flex items-center justify-center">
+                                            <CheckCircle2 className="w-5 h-5" />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {lines.length === 0 && !pendingRow && (
+                            <div className="py-32 text-center text-gray-200 font-black uppercase text-[10px] tracking-[0.5em] italic">
+                                <div className="flex flex-col items-center gap-6">
+                                    <ShoppingCart className="w-16 h-16 opacity-10" />
+                                    <span>Registry empty. Click &apos;+ Add Item&apos; to start.</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Footer Section Fix */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 pt-10 pb-20">
+                    <div className="col-span-1 lg:col-span-12 xl:col-span-7 bg-[#EDF2F7]/50 rounded-[32px] p-6 sm:p-10 space-y-6">
+                        <h3 className="text-xs font-black text-[#1A1C21] uppercase tracking-[0.2em] italic">Internal Notes</h3>
+                        <textarea
+                            placeholder="Type instructions for the receiving team..."
+                            className="w-full h-40 bg-transparent border-2 border-dashed border-gray-200/50 rounded-2xl p-6 text-sm font-bold italic outline-none focus:border-primary/30 transition-all resize-none"
+                            value={header.notes}
+                            onChange={(e) => setHeader({ ...header, notes: e.target.value })}
+                        />
+                    </div>
+
+                    <div className="col-span-1 lg:col-span-12 xl:col-span-5 flex flex-col justify-end space-y-8">
+                        <div className="space-y-4">
+                            {[
+                                { label: "Order Total (Est.)", value: `₹${subtotal.toLocaleString('en-IN')}`, highlight: true },
+                                { label: "Carrier", value: "Standard Freight", highlight: false },
+                                { label: "Exp. Arrival", value: "April 14, 2026", highlight: false },
+                            ].map((row, i) => (
+                                <div key={i} className="flex justify-between items-baseline border-b border-gray-100 pb-4 last:border-none gap-2 flex-wrap">
+                                    <span className="text-[11px] font-black text-gray-300 uppercase tracking-widest italic">{row.label}</span>
+                                    <span className={cn(
+                                        "font-black italic text-right tabular-nums break-words",
+                                        row.highlight ? "text-3xl sm:text-5xl text-[#1A1C21]" : "text-sm text-gray-500"
+                                    )}>{row.value}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* HIGH-PRECISION SCANNER MODAL */}
+            {scanSession && (
+                <div className="fixed inset-0 z-[500] flex items-center justify-center bg-slate-900/60 backdrop-blur-3xl animate-in fade-in duration-500 p-2 sm:p-10">
+                    <div className="w-full max-w-7xl h-full sm:h-[90vh] bg-white rounded-[32px] sm:rounded-[48px] shadow-[0_40px_100px_rgba(0,0,0,0.4)] border border-white/20 overflow-hidden flex flex-col animate-in zoom-in-95 duration-500 relative">
+
+                        {/* Modal Header */}
+                        <div className="px-6 sm:px-12 py-6 sm:py-8 border-b border-gray-100 flex flex-col justify-between bg-white gap-6">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+                                <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+                                    <span className="bg-[#0066FF]/10 text-[#0066FF] px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-[0.2em] italic">Live Mode</span>
+                                    <span className="text-gray-300 font-bold text-xs">Batch #8821-X</span>
+                                    <h1 className="text-2xl sm:text-4xl font-black text-[#1A1C21] italic tracking-tight">Batch Scanner</h1>
+                                </div>
+                                <div className="flex gap-4">
+                                    <Button
+                                        variant="secondary"
+                                        onClick={() => {
+                                            setScanSession(null);
+                                            toast.warning("Session Paused. Data retained.");
+                                            playBeep(440, 0.1);
+                                        }}
+                                        className="bg-gray-50 text-gray-400 font-black uppercase text-[10px] tracking-widest px-4 sm:px-8 h-12 rounded-xl italic"
+                                    >
+                                        Pause
+                                    </Button>
+                                    <Button
+                                        onClick={() => {
+                                            if (scanSession.scanned.length === scanSession.requiredQty) {
+                                                setLines(prev => prev.map(l => l.id === scanSession.lineId ? {
+                                                    ...l,
+                                                    serials: scanSession.scanned,
+                                                    isLocked: true
+                                                } : l));
+                                                toast.success(`VERIFIED: Registry Complete.`);
+                                                setScanSession(null);
+                                                setModalTab('scanner');
+                                            } else {
+                                                toast.error("HARD_FAIL: INCOMPLETE_BATCH");
+                                                playError();
+                                            }
+                                        }}
+                                        disabled={scanSession.scanned.length !== scanSession.requiredQty}
+                                        className={cn(
+                                            "bg-[#0066FF] text-white font-black uppercase text-[10px] tracking-widest px-4 sm:px-8 h-12 rounded-xl shadow-lg shadow-[#0066FF]/20 italic",
+                                            scanSession.scanned.length !== scanSession.requiredQty && "opacity-50 grayscale cursor-not-allowed"
+                                        )}
+                                    >
+                                        Commit
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {/* Mobile Tab Switcher */}
+                            <div className="flex lg:hidden bg-gray-50 p-1 rounded-2xl border border-gray-100">
+                                <button
+                                    onClick={() => setModalTab('scanner')}
+                                    className={cn(
+                                        "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                                        modalTab === 'scanner' ? "bg-white text-primary shadow-sm border border-gray-100" : "text-gray-400"
+                                    )}
+                                >
+                                    Scanner {modalTab === 'scanner' && "✓"}
+                                </button>
+                                <button
+                                    onClick={() => setModalTab('activity')}
+                                    className={cn(
+                                        "flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                                        modalTab === 'activity' ? "bg-white text-primary shadow-sm border border-gray-100" : "text-gray-400"
+                                    )}
+                                >
+                                    Activity {modalTab === 'activity' && "•"}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Modal Content */}
+                        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
+                            {/* Main Scanning View (Left) */}
+                            <div className={cn(
+                                "flex-1 p-6 sm:p-12 space-y-10 overflow-y-auto custom-scrollbar bg-[#F8F9FC]/30 min-h-0",
+                                modalTab !== 'scanner' && "hidden lg:block"
+                            )}>
+                                {/* Simulated Camera View */}
+                                <div className="relative group rounded-[40px] overflow-hidden shadow-2xl bg-black border-[12px] border-white ring-1 ring-gray-100">
+                                    <div className="aspect-video w-full bg-slate-900 flex items-center justify-center relative">
+                                        {/* Viewfinder Deco */}
+                                        <div className="absolute top-10 left-10 w-16 h-16 border-t-4 border-l-4 border-white/40 rounded-tl-3xl" />
+                                        <div className="absolute top-10 right-10 w-16 h-16 border-t-4 border-r-4 border-white/40 rounded-tr-3xl" />
+                                        <div className="absolute bottom-10 left-10 w-16 h-16 border-b-4 border-l-4 border-white/40 rounded-bl-3xl" />
+                                        <div className="absolute bottom-10 right-10 w-16 h-16 border-b-4 border-r-4 border-white/40 rounded-br-3xl" />
+
+                                        {/* Camera Placeholder Logic */}
+                                        <div className="text-center space-y-6 z-20">
+                                            <div className="w-24 h-24 bg-primary/20 rounded-full flex items-center justify-center mx-auto border border-primary/30 animate-pulse">
+                                                <Scan className="w-10 h-10 text-primary" />
+                                            </div>
+                                            <p className="text-white/20 font-black uppercase tracking-[0.5em] text-[10px] italic">Hardware Camera Interface : {scanSession.item.name}</p>
+                                        </div>
+
+                                        {/* Animated Laser Line */}
+                                        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
+                                            <div className="w-3/4 h-[2px] bg-red-500 shadow-[0_0_20px_rgba(239,68,68,1)] animate-scan-line" />
+                                        </div>
+
+                                        {/* Camera Metadata Overlays */}
+                                        <div className="absolute top-8 left-8 bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/20 flex items-center gap-3">
+                                            <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                                            <span className="text-[9px] font-black text-white uppercase tracking-widest">Cam 01: Active</span>
+                                        </div>
+                                        <div className="absolute top-8 right-8 bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/20 flex items-center gap-3">
+                                            <span className="text-[9px] font-black text-white uppercase tracking-widest">{scanSession.scanned.length} / {scanSession.requiredQty}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Invisible Input for Scanner Logic */}
+                                    <input
+                                        id="scanner-capture-input"
+                                        autoFocus
+                                        className="absolute inset-0 opacity-0 cursor-default"
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                const val = (e.target as HTMLInputElement).value.trim();
+                                                if (val) {
+                                                    handleSessionScan(val);
+                                                    (e.target as HTMLInputElement).value = '';
+                                                }
+                                            }
+                                            if (e.key === 'Escape') setScanSession(null);
+                                            if (e.key === 'Delete') removeLastSerial();
+                                        }}
+                                    />
+                                </div>
+
+                                {/* Manual Entry Fallback */}
+                                <div className="bg-white p-6 sm:p-10 rounded-[32px] sm:rounded-[40px] shadow-sm border border-gray-100 space-y-6">
+                                    <div className="flex justify-between items-center">
+                                        <div className="space-y-1">
+                                            <h3 className="text-lg sm:text-xl font-black text-[#1A1C21] italic">Manual Override</h3>
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Use if barcode is unreadable</p>
+                                        </div>
+                                        <QrCode className="w-5 h-5 text-gray-200" />
+                                    </div>
+                                    <div className="flex flex-col sm:flex-row gap-4 manual-input-zone">
+                                        <div className="flex-1 relative">
+                                            <input
+                                                type="text"
+                                                id="manual-serial-input"
+                                                placeholder="serial number"
+                                                className="w-full h-16 bg-gray-50/50 border-2 border-gray-100 rounded-2xl px-6 pr-32 font-black italic text-lg outline-none focus:border-primary transition-all"
+                                                value={manualSerial}
+                                                onChange={(e) => setManualSerial(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        const val = manualSerial.trim();
+                                                        if (val) {
+                                                            handleSessionScan(val);
+                                                            setManualSerial('');
+                                                            // Snap focus back to hidden input after manual log
+                                                            setTimeout(() => document.getElementById('scanner-capture-input')?.focus(), 10);
+                                                        }
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+                                        <Button
+                                            onClick={() => {
+                                                const val = manualSerial.trim();
+                                                if (val) {
+                                                    handleSessionScan(val);
+                                                    setManualSerial('');
+                                                    setTimeout(() => document.getElementById('scanner-capture-input')?.focus(), 10);
+                                                }
+                                            }}
+                                            className="h-16 px-10 bg-white border-2 border-gray-100 text-[#1A1C21] font-black uppercase text-[10px] tracking-widest rounded-2xl hover:bg-gray-50 transition-all shadow-sm italic"
+                                        >
+                                            Log Serial
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                {/* Progress Section */}
+                                <div className="space-y-8 bg-white p-6 sm:p-10 rounded-[32px] sm:rounded-[40px] shadow-sm border border-gray-100">
+                                    <div className="flex justify-between items-end">
+                                        <div className="space-y-1">
+                                            <h3 className="text-lg sm:text-xl font-black text-[#1A1C21] italic">Batch Status</h3>
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Active session analysis</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="text-primary font-black italic text-2xl sm:text-4xl">{scanSession.scanned.length}</span>
+                                            <span className="text-gray-300 font-black italic text-base sm:text-lg ml-2">/ {scanSession.requiredQty}</span>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-10 pt-4">
+                                        {[
+                                            { label: "Items Scanned", val: scanSession.scanned.length },
+                                            { label: "Success Rate", val: "99.2%" },
+                                            { label: "Time Elapsed", val: "12:44" },
+                                        ].map((stat, i) => (
+                                            <div key={i} className="border-l border-gray-100 pl-8 space-y-2">
+                                                <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest">{stat.label}</p>
+                                                <p className="text-4xl font-black text-[#1A1C21] italic tracking-tighter">{stat.val}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Sidebar Details & Activity (Right) */}
+                            <div className={cn(
+                                "w-full lg:w-[450px] border-t lg:border-t-0 lg:border-l border-gray-100 flex flex-col bg-white shrink-0 overflow-hidden",
+                                modalTab !== 'activity' && "hidden lg:flex"
+                            )}>
+                                {/* Batch Details Section */}
+                                <div className="p-6 sm:p-10 border-b border-gray-100 space-y-6">
+                                    <div className="flex justify-between items-center">
+                                        <h3 className="text-sm font-black text-[#1A1C21] uppercase tracking-[0.2em] italic">Active Batch Details</h3>
+                                    </div>
+                                    <div className="space-y-4">
+                                        {[
+                                            { label: "Destination", value: header.warehouse },
+                                            { label: "Priority Level", value: "High Priority", badge: true },
+                                            { label: "Operator ID", value: "#EXP-4491" },
+                                            { label: "Current Value", value: `₹${(scanSession.scanned.length * scanSession.item.price).toLocaleString('en-IN')}`, highlight: true },
+                                        ].map((detail, i) => (
+                                            <div key={i} className="flex justify-between items-center">
+                                                <span className="text-[11px] font-black text-gray-400 italic">{detail.label}</span>
+                                                {detail.badge ? (
+                                                    <span className="bg-orange-50 text-orange-600 px-4 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest italic">{detail.value}</span>
+                                                ) : (
+                                                    <span className={cn("text-sm font-black italic", detail.highlight ? "text-[#0066FF]" : "text-[#1A1C21]")}>{detail.value}</span>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <Button className="w-full h-14 bg-blue-50 text-[#0066FF] border border-blue-100 rounded-xl font-black uppercase tracking-widest text-[10px] italic hover:bg-blue-100 transition-all flex items-center justify-center gap-3">
+                                        Export Manifest (CSV)
+                                    </Button>
+                                </div>
+
+                                {/* Activity Log / Live Stream */}
+                                <div className="flex-1 flex flex-col overflow-hidden min-h-[300px]">
+                                    <div className="px-6 sm:px-10 py-6 sm:py-8 border-b border-gray-100 bg-gray-50/30">
+                                        <h3 className="text-xs font-black text-gray-400 font-black uppercase tracking-[0.2em] italic">Live Scan Table</h3>
+                                    </div>
+                                    <div className="flex-1 overflow-auto custom-scrollbar bg-white">
+                                        <div className="min-w-[500px] lg:min-w-0">
+                                            <table className="w-full text-left">
+                                                <thead className="sticky top-0 bg-gray-50 z-10">
+                                                    <tr className="border-b border-gray-100">
+                                                        <th className="px-4 sm:px-6 py-4 text-[9px] font-black text-gray-400 uppercase tracking-widest italic">Item Name</th>
+                                                        <th className="px-4 sm:px-6 py-4 text-[9px] font-black text-gray-400 uppercase tracking-widest italic text-center">Serial No</th>
+                                                        <th className="px-4 sm:px-6 py-4 text-[9px] font-black text-gray-400 uppercase tracking-widest italic">Barcode</th>
+                                                        <th className="px-4 sm:px-6 py-4 text-[9px] font-black text-gray-400 uppercase tracking-widest italic">Model</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-50">
+                                                    {scanSession.scanned.length === 0 ? (
+                                                        <tr>
+                                                            <td colSpan={4} className="py-20 text-center">
+                                                                <div className="flex flex-col items-center justify-center text-gray-200 gap-4 opacity-50 italic">
+                                                                    <QrCode className="w-12 h-12" />
+                                                                    <p className="text-[10px] font-black uppercase tracking-widest">Waiting for first capture...</p>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ) : (
+                                                        [...scanSession.scanned].reverse().map((entry, idx) => (
+                                                            <tr key={idx} className="hover:bg-gray-50/50 transition-all animate-in slide-in-from-right-4 duration-300">
+                                                                <td className="px-4 sm:px-6 py-4 text-[10px] font-black text-gray-800 italic uppercase">{scanSession.item.name}</td>
+                                                                <td className="px-4 sm:px-6 py-4 text-[10px] font-black text-gray-400 italic text-center">#{entry.metadata?.serialNo ?? '-'}</td>
+                                                                <td className="px-4 sm:px-6 py-4 text-[11px] font-black text-[#0066FF] tracking-widest">{entry.serial}</td>
+                                                                <td className="px-4 sm:px-6 py-4 text-[10px] font-bold text-gray-500 uppercase">{entry.metadata?.model ?? 'N/A'}</td>
+                                                            </tr>
+                                                        ))
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    <div className="p-8 border-t border-gray-100 text-center bg-gray-50/50">
+                                        <div className="flex justify-between items-center px-4">
+                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest italic">
+                                                Status: <span className={scanSession.scanned.length === scanSession.requiredQty ? "text-[#0066FF]" : "text-amber-500"}>
+                                                    {scanSession.scanned.length === scanSession.requiredQty ? "VERIFIED" : "IN_PROGRESS"}
+                                                </span>
+                                            </p>
+                                            <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest">
+                                                PROGRESS: {((scanSession.scanned.length / scanSession.requiredQty) * 100).toFixed(0)}%
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* DUPLICATE ERROR OVERLAY */}
+            {duplicateError && (
+                <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-[#1A1C21]/60 backdrop-blur-3xl animate-in fade-in duration-300 p-4">
+                    <div className="w-full max-w-[600px] bg-white rounded-[32px] sm:rounded-[40px] shadow-[0_50px_100px_rgba(0,0,0,0.5)] border-4 border-red-500/20 overflow-hidden flex flex-col items-center p-8 sm:p-12 space-y-6 sm:space-y-8 animate-in zoom-in-95 duration-300">
+                        <div className="w-20 h-20 sm:w-24 sm:h-24 bg-red-50 rounded-full flex items-center justify-center border-4 border-red-100 animate-bounce">
+                            <X className="w-10 h-10 sm:w-12 sm:h-12 text-red-500" />
+                        </div>
+                        <div className="text-center space-y-4">
+                            <h2 className="text-2xl sm:text-3xl font-black text-[#1A1C21] italic uppercase tracking-tight">Duplicate Item Detected</h2>
+                            <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.2em] italic">Barcode: {duplicateError.split(': ')[1]}</p>
+                            <p className="text-red-500 font-black uppercase text-xs tracking-widest bg-red-50 px-6 py-2 rounded-xl inline-block">Cannot be added!</p>
+                        </div>
+                        <div className="w-full bg-slate-50 p-6 rounded-3xl border border-gray-100 flex flex-col items-center gap-2">
+                            <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest italic text-center">Reason</p>
+                            <p className="text-sm font-black text-gray-600 italic">{duplicateError.split(': ')[0].replace(/_/g, ' ')}</p>
+                        </div>
+                        <Button
+                            onClick={() => setDuplicateError(null)}
+                            className="w-full h-16 bg-[#1A1C21] text-white font-black uppercase text-xs tracking-[0.3em] rounded-2xl hover:bg-black transition-all shadow-xl italic"
+                        >
+                            Acknowledge & Dismiss
+                        </Button>
+                    </div>
+                </div>
+            )}
         </div>
-      )}
-    </div>
-  )
+    )
 }
 
+function Hash({ className }: { className?: string }) {
+    return <span className={className}>#</span>
+}

@@ -13,7 +13,6 @@ import {
   User,
   Zap,
   ShoppingCart,
-  Delete,
   X
 } from 'lucide-react'
 import { useData } from '@/lib/context/DataContext'
@@ -33,7 +32,7 @@ interface BillItem {
 }
 
 export default function POSPage() {
-  const { inventory } = useData()
+  const { inventory, sellFromPOS } = useData()
   const [billItems, setBillItems] = useState<BillItem[]>([])
   const [query, setQuery] = useState('')
   const [customer, setCustomer] = useState('Walk-in Customer')
@@ -44,42 +43,7 @@ export default function POSPage() {
 
   const searchRef = useRef<HTMLInputElement>(null)
 
-  // Auto-focus search on load
-  useEffect(() => {
-    searchRef.current?.focus()
-  }, [])
-
-  const handleCompleteSale = useCallback(() => {
-    if (billItems.length === 0) {
-      toast.error('Cannot complete empty sale')
-      return
-    }
-    toast.promise(new Promise(resolve => setTimeout(resolve, 1500)), {
-      loading: 'Processing transaction...',
-      success: () => {
-        setBillItems([])
-        setReceived('')
-        return 'Sale completed successfully #POS-TRX-04B'
-      },
-      error: 'Transaction failed'
-    })
-  }, [billItems.length])
-
-  // Keyboard Shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'Enter') {
-        e.preventDefault()
-        handleCompleteSale()
-      }
-      if (e.key === 'Escape') {
-        setQuery('')
-        searchRef.current?.focus()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [billItems])
+  // -- Handlers (Moved up to avoid TDZ ReferenceError) --
 
   const addItem = useCallback((itemId: string) => {
     const product = inventory.find(i => i.id === itemId || i.sku === itemId)
@@ -110,13 +74,37 @@ export default function POSPage() {
     toast.success(`Added ${product.name}`, { duration: 1000 })
   }, [inventory])
 
+  const handleCompleteSale = useCallback(async () => {
+    if (billItems.length === 0) {
+      toast.error('Cannot complete empty issue')
+      return
+    }
+
+    try {
+      await toast.promise(async () => {
+        await sellFromPOS(
+          billItems.map(i => ({ id: i.id, qty: i.qty, price: i.price })),
+          customer
+        )
+      }, {
+        loading: 'Processing Sale...',
+        success: 'Sale Complete. Inventory Updated.',
+        error: (err) => err.message || 'Sale Failed'
+      })
+      setBillItems([])
+      setReceived('')
+    } catch (err) {
+      console.error(err)
+    }
+  }, [billItems, sellFromPOS, customer])
+
   const handleQuerySubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!query) return
     addItem(query)
   }
 
-  const updateQty = (id: string, delta: number) => {
+  const updateQty = useCallback((id: string, delta: number) => {
     setBillItems(prev => prev.map(i => {
       if (i.id === id) {
         const newQty = Math.max(1, i.qty + delta)
@@ -124,26 +112,58 @@ export default function POSPage() {
       }
       return { ...i, isNew: false }
     }))
-  }
+  }, []);
 
-  const removeItem = (id: string) => {
+  const removeItem = useCallback((id: string) => {
     setBillItems(prev => prev.filter(i => i.id !== id))
     toast.error('Item removed from bill')
-  }
+  }, []);
 
-  const clearBill = () => {
-    if (billItems.length === 0) return
-    setBillItems([])
-    toast.info('Bill cleared')
-  }
+  const clearBill = useCallback(() => {
+    setBillItems(prev => {
+      if (prev.length === 0) return prev
+      toast.info('Bill cleared')
+      return []
+    })
+  }, []);
+
+  // -- Effects --
+
+  // Auto-focus search on load
+  useEffect(() => {
+    searchRef.current?.focus()
+  }, [])
+
+  // Keyboard Shortcuts & Barcode Listener
+  useEffect(() => {
+    const onScan = (e: any) => {
+      const { item } = e.detail;
+      if (item) addItem(item.id);
+    };
+    window.addEventListener('barcode-scanned', onScan);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'Enter') {
+        e.preventDefault()
+        handleCompleteSale()
+      }
+      if (e.key === 'Escape') {
+        setQuery('')
+        searchRef.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('barcode-scanned', onScan);
+      window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [billItems, addItem, handleCompleteSale])
 
   // Calculations
   const subtotal = useMemo(() => billItems.reduce((acc, i) => acc + i.total, 0), [billItems])
   const tax = subtotal * 0.0825 // 8.25% fixed tax
   const total = subtotal + tax - discount
   const balance = received ? Math.max(0, parseFloat(received) - total) : 0
-
-
 
   return (
     <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-130px)] gap-6 lg:gap-8 font-sans pb-20 lg:pb-0">
@@ -160,7 +180,6 @@ export default function POSPage() {
             className="h-16 rounded-2xl bg-white border-gray-100 shadow-sm text-lg font-bold placeholder:italic transition-all focus:ring-4 focus:ring-primary/5 focus:border-primary"
           />
           <div className="absolute right-5 top-1/2 -translate-y-1/2 flex items-center gap-2">
-            <span className="text-sm font-black text-gray-400 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100 uppercase tracking-widest italic">Fast Scan Mode</span>
             <Zap className="w-4 h-4 text-amber-400 fill-amber-400 animate-pulse" />
           </div>
         </form>
@@ -214,10 +233,10 @@ export default function POSPage() {
                         </div>
                       </td>
                       <td className="px-6 py-6 text-right font-black text-gray-400 italic text-sm tabular-nums">
-                        ₹{item.price.toLocaleString()}
+                        ₹{item.price.toLocaleString('en-IN')}
                       </td>
                       <td className="px-8 py-6 text-right font-black text-text-main italic text-base tracking-tighter tabular-nums">
-                        ₹{item.total.toLocaleString()}
+                        ₹{item.total.toLocaleString('en-IN')}
                       </td>
                       <td className="px-8 py-6 text-right">
                         <button
@@ -305,7 +324,7 @@ export default function POSPage() {
           <div className="space-y-4 relative z-10">
             <div className="flex justify-between items-center opacity-60 text-sm font-black uppercase tracking-widest">
               <span>Gross Amount</span>
-              <span>₹{subtotal.toLocaleString()}</span>
+              <span>₹{subtotal.toLocaleString('en-IN')}</span>
             </div>
             <div className="flex justify-between items-center px-1 py-1">
               <span className="opacity-60 text-sm font-black uppercase tracking-widest italic">Inventory Tax (8.25%)</span>
@@ -329,7 +348,7 @@ export default function POSPage() {
                 <p className="text-sm font-black text-blue-200 uppercase tracking-[0.2em] italic mb-2">Net Payable Amount</p>
                 <p className="text-5xl font-black tracking-tighter italic select-none leading-none">
                   <span className="text-xl mr-1 opacity-40">₹</span>
-                  {total.toLocaleString()}
+                  {total.toLocaleString('en-IN')}
                 </p>
               </div>
               <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center opacity-40">

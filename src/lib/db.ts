@@ -12,6 +12,8 @@ export interface DbItem {
   brand: string
   location: string
   threshold: number
+  barcode: string
+  is_serialized?: boolean
 }
 
 export interface DbEngineer {
@@ -43,6 +45,8 @@ export interface DbTransaction {
   price?: number
   from_warehouse: string | null
   to_warehouse: string | null
+  from_location?: "STORE" | "ENGINEER"
+  to_location?: "STORE" | "ENGINEER"
   engineer_id?: string
   reference: string
   date: string
@@ -62,16 +66,16 @@ const DATA_FILE = path.join(process.cwd(), '.data.json')
 // ---- Initial Mock Data ----
 const initialData: DbData = {
   items: [
-    { id: "ITM001", name: "Dell Latitude 7420", sku: "DLL-LAT-7420", category: "Computing", unit: "pcs", price: 85000, brand: "Dell", location: "Bangalore HQ", threshold: 5 },
-    { id: "ITM002", name: "Cisco Catalyst 9200L", sku: "CS-RT-9200L", category: "Networking", unit: "pcs", price: 145000, brand: "Cisco", location: "Main Warehouse", threshold: 2 },
-    { id: "ITM003", name: "Logitech MX Master 3S", sku: "LOG-MX-3S", category: "Peripherals", unit: "pcs", price: 9500, brand: "Logitech", location: "IT Hub", threshold: 10 },
-    { id: "ITM004", name: "Samsung Odyssey G7 32\"", sku: "SAM-ODY-G7", category: "Displays", unit: "pcs", price: 42000, brand: "Samsung", location: "Bangalore HQ", threshold: 3 },
-    { id: "ITM005", name: "Ubiquiti UniFi 6 Pro", sku: "UBI-U6-PRO", category: "Networking", unit: "pcs", price: 18000, brand: "Ubiquiti", location: "Main Warehouse", threshold: 8 },
-    { id: "ITM006", name: "Apple MacBook Pro M3 14\"", sku: "APL-MBP-M3", category: "Computing", unit: "pcs", price: 169000, brand: "Apple", location: "IT Hub", threshold: 2 },
-    { id: "ITM007", name: "Seagate IronWolf 8TB HDD", sku: "SEA-IW-8TB", category: "Storage", unit: "pcs", price: 15500, brand: "Seagate", location: "Server Room", threshold: 12 },
-    { id: "ITM008", name: "Nvidia RTX 4090 FE", sku: "NVI-4090-FE", category: "Graphics", unit: "pcs", price: 155000, brand: "Nvidia", location: "IT Hub", threshold: 1 },
-    { id: "ITM009", name: "APC Smart-UPS 1500VA", sku: "APC-SU-1500", category: "Power", unit: "pcs", price: 32000, brand: "APC", location: "Electrical Room", threshold: 4 },
-    { id: "ITM010", name: "Steelcase Gesture Chair", sku: "STC-GES-GRY", category: "Furniture", unit: "pcs", price: 88000, brand: "Steelcase", location: "Bangalore HQ", threshold: 2 }
+    { id: "ITM001", name: "Dell Latitude 7420", sku: "DLL-LAT-7420", category: "Computing", unit: "pcs", price: 85000, brand: "Dell", location: "Bangalore HQ", threshold: 5, barcode: "100001", is_serialized: true },
+    { id: "ITM002", name: "Cisco Catalyst 9200L", sku: "CS-RT-9200L", category: "Networking", unit: "pcs", price: 145000, brand: "Cisco", location: "Main Warehouse", threshold: 2, barcode: "100002", is_serialized: true },
+    { id: "ITM003", name: "Logitech MX Master 3S", sku: "LOG-MX-3S", category: "Peripherals", unit: "pcs", price: 9500, brand: "Logitech", location: "IT Hub", threshold: 10, barcode: "100003" },
+    { id: "ITM004", name: "Samsung Odyssey G7 32\"", sku: "SAM-ODY-G7", category: "Displays", unit: "pcs", price: 42000, brand: "Samsung", location: "Bangalore HQ", threshold: 3, barcode: "100004" },
+    { id: "ITM005", name: "Ubiquiti UniFi 6 Pro", sku: "UBI-U6-PRO", category: "Networking", unit: "pcs", price: 18000, brand: "Ubiquiti", location: "Main Warehouse", threshold: 8, barcode: "100005" },
+    { id: "ITM006", name: "Apple MacBook Pro M3 14\"", sku: "APL-MBP-M3", category: "Computing", unit: "pcs", price: 169000, brand: "Apple", location: "IT Hub", threshold: 2, barcode: "100006", is_serialized: true },
+    { id: "ITM007", name: "Seagate IronWolf 8TB HDD", sku: "SEA-IW-8TB", category: "Storage", unit: "pcs", price: 15500, brand: "Seagate", location: "Server Room", threshold: 12, barcode: "100007" },
+    { id: "ITM008", name: "Nvidia RTX 4090 FE", sku: "NVI-4090-FE", category: "Graphics", unit: "pcs", price: 155000, brand: "Nvidia", location: "IT Hub", threshold: 1, barcode: "100008", is_serialized: true },
+    { id: "ITM009", name: "APC Smart-UPS 1500VA", sku: "APC-SU-1500", category: "Power", unit: "pcs", price: 32000, brand: "APC", location: "Electrical Room", threshold: 4, barcode: "100009", is_serialized: true },
+    { id: "ITM010", name: "Steelcase Gesture Chair", sku: "STC-GES-GRY", category: "Furniture", unit: "pcs", price: 88000, brand: "Steelcase", location: "Bangalore HQ", threshold: 2, barcode: "100010" }
   ],
   engineers: [
     { id: "ENG001", name: "Ravi Kumar" },

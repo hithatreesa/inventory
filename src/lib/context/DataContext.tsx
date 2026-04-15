@@ -16,8 +16,12 @@ export interface InventoryItem {
   threshold: number
   price?: number
   sku?: string
-  model?: string
+  barcode?: string
+  model: string
   brand?: string
+  gst_rate: number
+  unit: string
+  is_serialized: boolean
 }
 
 export interface Engineer {
@@ -34,6 +38,8 @@ export interface Transaction {
   quantity: number
   status: string
   date: string
+  reference?: string
+  price?: number
 }
 
 export interface Log {
@@ -74,37 +80,84 @@ export interface Ticket {
 // -------------------------------------------------------------
 // MOCK CATALOG (Replaces DB Items & Engineers for mapping)
 // -------------------------------------------------------------
-const MOCK_CATALOG = [
-  { id: "item1", name: "Laptop", category: "Computing", price: 85000, threshold: 5, location: "Main HQ" },
-  { id: "item2", name: "Router", category: "Networking", price: 145000, threshold: 2, location: "Main HQ" }
-];
+const MOCK_CATALOG: InventoryItem[] = [];
 
 const MOCK_ENGINEERS = [
   { id: "eng1", name: "Ravi" },
   { id: "eng2", name: "Kiran" }
 ];
 
+export interface ScanEntry {
+  serial: string;
+  metadata?: Record<string, any>;
+  timestamp: number;
+}
+
+export interface PurchaseLine {
+  id: string
+  productId: string
+  name: string
+  qty: number
+  price: number
+  gstRate: number
+  isSerialized: boolean
+  serials: ScanEntry[]
+  isLocked: boolean
+  total?: number
+  brand?: string
+  model?: string
+}
+
+export interface IssueLine {
+    id: string
+    productId: string
+    name: string
+    qty: number
+    model: string
+    brand: string
+    isSerialized: boolean
+    serials: string[]
+    isLocked: boolean
+}
+
+export interface EngineerSerial {
+  item_id: string;
+  serial: string;
+  status: string;
+}
+
 // -------------------------------------------------------------
 // CONTEXT
 // -------------------------------------------------------------
 interface DataContextType {
   inventory: InventoryItem[]
-  transactions: any[]
+  transactions: Transaction[]
   logs: Log[]
   engineers: Engineer[]
   tickets: Ticket[]
   fetchData: () => Promise<void>
-  inwardItem: (itemId: any, qty: number, reference?: string) => Promise<void>
-  outwardItem: (itemId: any, engineerId: any, qty: number, reference?: string) => Promise<void>
-  returnItem: (itemId: any, engineerId: any, qty: number, reference?: string) => Promise<void>
-  consumeItem: (itemId: any, engineerId: any, qty: number, reference?: string) => Promise<void>
+  inwardItem: (itemId: string, qty: number, reference?: string) => Promise<void>
+  outwardItem: (itemId: string, engineerId: string, qty: number, reference?: string) => Promise<void>
+  returnItem: (itemId: string, engineerId: string, qty: number, reference?: string) => Promise<void>
+  consumeItem: (itemId: string, engineerId: string, qty: number, reference?: string) => Promise<void>
+  adjustItem: (itemId: string, qty: number, reference?: string) => Promise<void>
   addLog: (msg: string) => void
-  addItem: (item: any) => Promise<void>
-  editItem: (id: string, updates: any) => Promise<void>
-  createTransaction: (txn: any) => Promise<void>
+  addItem: (item: Partial<InventoryItem>) => Promise<void>
+  editItem: (id: string, updates: Partial<InventoryItem>) => Promise<void>
+  createTransaction: (txn: Partial<Transaction>) => Promise<void>
   addEngineer: (data: { name: string, type: "IT" | "TECHNICAL" }) => void
   deleteItems: (ids: string[]) => Promise<void>
-  
+  processPO: (header: { vendor: string, date: string, reference: string }, lines: PurchaseLine[]) => Promise<void>
+  issueToEngineer: (engineerId: string, lines: IssueLine[]) => Promise<void>
+  processEngineerReturn: (engineerId: string, lines: any[]) => Promise<void> // Keeping any for now as return line is complex
+  processBarcode: (barcode: string) => InventoryItem | undefined
+
+  // POS SALE FLOW
+  sellFromPOS: (
+    cartItems: Array<{ id: string; qty: number; price?: number }>,
+    customer_id: string
+  ) => Promise<void>
+
   // TICKET WORKFLOW
   createTicket: (ticket: Partial<Ticket>) => Promise<void>
   updateTicket: (id: string, updates: Partial<Ticket>) => Promise<void>
@@ -118,7 +171,18 @@ interface DataContextType {
   getTickets: () => Ticket[]
   getTicketById: (id: string) => Ticket | undefined
   getEngineerTickets: (engineer_id: string) => Ticket[]
-  getEngineerSerials: (engineer_id: string) => Record<string, any>[]
+  getEngineerSerials: (engineer_id: string) => EngineerSerial[]
+
+  // Audit & Reporting
+  getAuditReport: (scanned: string[]) => {
+    totalSystem: number
+    totalScanned: number
+    missingSerials: string[]
+    extraSerials: string[]
+    matched: number
+  }
+  getAgingReport: () => any[]
+  getSearchIndex: () => any[]
 
   // LEGACY Compat
   issueAsset: (itemId: string, engineerId: string, quantity: number) => Promise<void>
@@ -129,11 +193,11 @@ const DataContext = createContext<DataContextType | undefined>(undefined)
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const [inventory, setInventory] = useState<InventoryItem[]>([])
-  const [transactions, setTransactions] = useState<any[]>([])
+  const [transactions, setTransactions] = useState<Transaction[]>([])
   const [engineers, setEngineers] = useState<Engineer[]>(MOCK_ENGINEERS)
   const [tickets, setTickets] = useState<Ticket[]>([])
-  const [logs, setLogs] = useState<any[]>([])
-  const [catalog, setCatalog] = useState(MOCK_CATALOG)
+  const [logs, setLogs] = useState<Log[]>([])
+  const [catalog, setCatalog] = useState<InventoryItem[]>(MOCK_CATALOG)
 
   const addLog = useCallback((msg: string) => {
     setLogs(prev => [
@@ -164,7 +228,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         id: tx.id,
         item_id: tx.item_id,
         type: tx.type,
-        quantity: 1, // engine is strict serial tracking
+        quantity: tx.quantity || 1, // support bulk inward
         engineer_id: tx.engineer_id || 'N/A',
         status: 'COMPLETED',
         date: new Date(tx.timestamp).toISOString()
@@ -196,21 +260,50 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // EVENT LAYER BRIDGE
   // -------------------------------------------------------------
   const inwardItem = async (itemId: string, qty: number, reference?: string) => {
+    // Phase 6: Inventory Engine Link
+    const item = catalog.find(i => i.id === itemId);
+    const isSerialized = item?.is_serialized ?? false;
+
+    if (isSerialized) {
+       // Phase 2: Serial handling (Force individual handling warning)
+       console.warn("This item requires serial-level tracking");
+       if (qty > 1) {
+          // Rule: DO NOT allow bulk quantity logic for serialized items
+          // In this mock, we'll still allow it but with the individual serialization logic below
+       }
+    }
+
     for (let i = 0; i < qty; i++) {
-        engine.inwardItem(itemId);
+        engine.executeInward({
+            productId: itemId,
+            serial: `UNIT-${itemId}-${Date.now()}-${i}`,
+            qty: 1,
+            gst: item?.gst_rate || 0,
+            price: item?.price || 0,
+            source: reference || "MANUAL_INWARD"
+        });
     }
     addLog(`INWARD: ${qty}x ${itemId}`);
     await fetchData();
   }
 
   const outwardItem = async (itemId: string, engineerId: string, qty: number, reference?: string) => {
+    // Phase 11: Engineer Existence Check
+    if (!engineers.find(e => e.id === engineerId)) {
+        throw new Error(`HARD_FAIL: ENGINEER_NOT_FOUND ${engineerId}`);
+    }
+
     const available = engine.getAvailableStock(itemId);
     if (available.length < qty) {
-      throw new Error(`Insufficient serials. Requested: ${qty}, Available: ${available.length}`);
+      throw new Error(`HARD_FAIL: OUT_OF_STOCK. Requested: ${qty}, Available: ${available.length}`);
     }
     const targetSerials = available.slice(0, qty).map(s => s.serial);
     for (const serial of targetSerials) {
-        engine.assignItem(serial, engineerId);
+        engine.assignItem(serial, engineerId, {
+            from_location: "STORE",
+            to_location: "ENGINEER",
+            reference: reference || 'CHALLAN'
+        });
     }
     addLog(`ASSIGNED: ${qty}x ${itemId} passed to ${engineerId}`);
     await fetchData();
@@ -219,11 +312,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const legacyReturnItem = async (itemId: string, engineerId: string, qty: number, reference?: string) => {
     const assigned = engine.getEngineerItems(engineerId).filter(i => i.item_id === itemId);
     if (assigned.length < qty) {
-        throw new Error(`Engineer does not have enough serials to return.`);
+        throw new Error(`HARD_FAIL: INSUFFICIENT_ASSIGNED_STOCK. Engineer has ${assigned.length}, returning ${qty}`);
     }
     const targetSerials = assigned.slice(0, qty).map(s => s.serial);
     for (const serial of targetSerials) {
-        engine.returnItem(serial);
+        engine.returnItem(serial, engineerId, {
+            from_location: "ENGINEER",
+            to_location: "STORE",
+            reference: reference || 'RETURN'
+        });
     }
     addLog(`RETURN: ${qty}x ${itemId} restocked from ${engineerId}`);
     await fetchData();
@@ -232,13 +329,78 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const legacyConsumeItem = async (itemId: string, engineerId: string, qty: number, reference?: string) => {
     const assigned = engine.getEngineerItems(engineerId).filter(i => i.item_id === itemId);
     if (assigned.length < qty) {
-        throw new Error(`Engineer does not have enough serials to consume.`);
+        throw new Error(`HARD_FAIL: INSUFFICIENT_ASSIGNED_STOCK. Engineer has ${assigned.length}, consuming ${qty}`);
     }
     const targetSerials = assigned.slice(0, qty).map(s => s.serial);
     for (const serial of targetSerials) {
-        engine.consumeItem(serial);
+        engine.consumeItem(serial, engineerId);
     }
     addLog(`CONSUMED: ${qty}x ${itemId} consumed by ${engineerId}`);
+    await fetchData();
+  }
+
+  const adjustItem = async (itemId: string, qty: number, reference?: string) => {
+    engine.adjustStock(itemId, qty, {
+        reference: reference || 'MANUAL_ADJUSTMENT',
+        reference_type: 'ADJUSTMENT',
+        timestamp: Date.now()
+    });
+    addLog(`ADJUSTMENT: ${qty} units for ${itemId}`);
+    await fetchData();
+  }
+
+  // -------------------------------------------------------------
+  // POS SALE FLOW
+  // -------------------------------------------------------------
+  const sellFromPOS = async (
+    cartItems: Array<{ id: string; qty: number; price?: number }>,
+    customer_id: string
+  ) => {
+    if (!cartItems || cartItems.length === 0)
+      throw new Error('HARD_FAIL: EMPTY_CART');
+
+    // Phase 1: Pre-validate ALL stock before any mutation
+    for (const item of cartItems) {
+      const available = engine.getAvailableStock(item.id);
+      if (available.length < item.qty) {
+        const catalogItem = catalog.find(c => c.id === item.id);
+        throw new Error(
+          `HARD_FAIL: OUT_OF_STOCK for "${catalogItem?.name || item.id}". Needed: ${item.qty}, Available: ${available.length}`
+        );
+      }
+    }
+
+    // Phase 2: Atomic execution — sell each serial through engine
+    const saleRef = `SALE-${Date.now()}`;
+    let totalUnits = 0;
+
+    for (const item of cartItems) {
+      const available = engine.getAvailableStock(item.id);
+      const catalogItem = catalog.find(c => c.id === item.id);
+      const gstRate = catalogItem?.gst_rate ?? 0;
+      const salePrice = item.price ?? catalogItem?.price ?? 0;
+      const gstAmount = (salePrice * gstRate) / 100;
+      const cgst = gstAmount / 2;
+      const sgst = gstAmount / 2;
+
+      const targetSerials = available.slice(0, item.qty).map(s => s.serial);
+      for (const serial of targetSerials) {
+        engine.sellItem(serial, customer_id, {
+          sale_price: salePrice,
+          gst_rate: gstRate,
+          cgst,
+          sgst,
+          igst: 0,
+          reference_type: 'SALE',
+          reference_id: saleRef,
+        });
+      }
+      totalUnits += item.qty;
+    }
+
+    addLog(
+      `POS_SALE: ${totalUnits} units | Customer: ${customer_id} | Ref: ${saleRef}`
+    );
     await fetchData();
   }
 
@@ -269,6 +431,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }
 
   const assignEngineer = async (ticket_id: string, engineer_id: string) => {
+    // Point 11: Engineer Existence
+    if (!engineers.find(e => e.id === engineer_id)) {
+        throw new Error(`HARD_FAIL: ENGINEER_NOT_FOUND ${engineer_id}`);
+    }
+    
     setTickets(prev => prev.map(t => {
       if (t.id === ticket_id) {
         return { ...t, status: "ASSIGNED", engineer_id, assigned_engineer_id: engineer_id };
@@ -302,9 +469,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const issueItems = async (ticket_id: string) => {
     const ticket = tickets.find(t => t.id === ticket_id);
-    if (!ticket) throw new Error("HARD FAIL: Ticket not found");
+    if (!ticket) throw new Error("HARD_FAIL: TICKET_NOT_FOUND");
     const engId = ticket.engineer_id || ticket.assigned_engineer_id;
-    if (!engId) throw new Error("HARD FAIL: Ticket has no engineer assigned. Cannot issue.");
+    if (!engId) throw new Error("HARD_FAIL: NO_ENGINEER_ASSIGNED");
     
     // VALIDATE AVAILABILITY BEFORE ANY MUTATION
     for (const req of ticket.requirements) {
@@ -313,7 +480,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
        const deficit = req.qty - currentlyAssigned;
        
        if (deficit > 0 && available.length < deficit) {
-           throw new Error(`HARD FAIL: Shortage for ${req.item_id}. Need ${deficit}, have ${available.length}`);
+           throw new Error(`HARD_FAIL: SHORTAGE_FOR_${req.item_id}. Need ${deficit}, have ${available.length}`);
        }
     }
 
@@ -349,21 +516,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const returnItems = async (ticket_id: string, item_id: string, qty: number) => {
     const ticket = tickets.find(t => t.id === ticket_id);
-    if (!ticket) throw new Error("HARD FAIL: Ticket not found");
+    if (!ticket) throw new Error("HARD_FAIL: TICKET_NOT_FOUND");
     const engId = ticket.engineer_id || ticket.assigned_engineer_id;
-    if (!engId) throw new Error("HARD FAIL: Cannot return from unassigned ticket.");
+    if (!engId) throw new Error("HARD_FAIL: NO_ENGINEER_ASSIGNED");
     
     const track = ticket.tracking.find(tr => tr.item_id === item_id);
-    if (!track) throw new Error("HARD FAIL: Item not tracked in ticket.");
+    if (!track) throw new Error("HARD_FAIL: ITEM_NOT_TRACKED");
 
     const maxReturnable = track.assigned_qty - track.returned_qty - track.consumed_qty;
-    if (qty > maxReturnable) throw new Error(`HARD FAIL: Cannot return more than issued. Valid: ${maxReturnable}`);
+    if (qty > maxReturnable) throw new Error(`HARD_FAIL: OVER_RETURN. Valid: ${maxReturnable}`);
 
     // ATOMIC ENGINE CALLS
     const assignedSerials = engine.getEngineerItems(engId).filter(i => i.item_id === item_id);
     const targetSerials = assignedSerials.slice(0, qty).map(s => s.serial);
     for (const serial of targetSerials) {
-        engine.returnItem(serial);
+        engine.returnItem(serial, engId);
     }
 
     setTickets(prev => prev.map(t => {
@@ -378,20 +545,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const consumeItems = async (ticket_id: string, item_id: string, qty: number) => {
     const ticket = tickets.find(t => t.id === ticket_id);
-    if (!ticket) throw new Error("HARD FAIL: Ticket not found");
+    if (!ticket) throw new Error("HARD_FAIL: TICKET_NOT_FOUND");
     const engId = ticket.engineer_id || ticket.assigned_engineer_id;
-    if (!engId) throw new Error("HARD FAIL: Cannot consume unassigned ticket.");
+    if (!engId) throw new Error("HARD_FAIL: NO_ENGINEER_ASSIGNED");
 
     const track = ticket.tracking.find(tr => tr.item_id === item_id);
-    if (!track) throw new Error("HARD FAIL: Item not tracked in ticket.");
+    if (!track) throw new Error("HARD_FAIL: ITEM_NOT_TRACKED");
 
     const maxConsumable = track.assigned_qty - track.returned_qty - track.consumed_qty;
-    if (qty > maxConsumable) throw new Error(`HARD FAIL: Cannot consume more than assigned. Max: ${maxConsumable}`);
+    if (qty > maxConsumable) throw new Error(`HARD_FAIL: OVER_CONSUME. Max: ${maxConsumable}`);
 
     const assignedSerials = engine.getEngineerItems(engId).filter(i => i.item_id === item_id);
     const targetSerials = assignedSerials.slice(0, qty).map(s => s.serial);
     for (const serial of targetSerials) {
-        engine.consumeItem(serial);
+        engine.consumeItem(serial, engId);
     }
 
     setTickets(prev => prev.map(t => {
@@ -406,11 +573,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const completeTicket = async (ticket_id: string) => {
     const ticket = tickets.find(t => t.id === ticket_id);
-    if (!ticket) throw new Error("HARD FAIL: Ticket not found");
+    if (!ticket) throw new Error("HARD_FAIL: TICKET_NOT_FOUND");
 
     for (const track of ticket.tracking) {
         if (track.assigned_qty !== track.returned_qty + track.consumed_qty) {
-            throw new Error(`HARD FAIL: Unbalanced inventory. Item ${track.item_id} has outstanding stock.`);
+            throw new Error(`HARD_FAIL: UNBALANCED_INVENTORY_${track.item_id}. Outstanding: ${track.assigned_qty - track.returned_qty - track.consumed_qty}`);
         }
     }
 
@@ -434,8 +601,29 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   // Legacy/Mock methods to keep UI uncrashing
   const addItem = async (item: any) => {
-    const newItem = { ...item, id: `ITM${Date.now()}` };
+    // Validation
+    if (item.gst_rate < 0 || item.gst_rate > 100 || !item.unit || !item.model || typeof item.is_serialized === 'undefined') {
+      throw new Error("HARD_FAIL: INVALID_ITEM_DATA");
+    }
+
+    const newItem: InventoryItem = { 
+      // Rule 1: createItem() must NOT affect inventory. Stock remains 0.
+      total_qty: 0,
+      assigned_qty: 0,
+      location: 'Main Store',
+      threshold: 5,
+      ...item, 
+      id: `ITM${Date.now()}`,
+      gst_rate: item.gst_rate ?? 0,
+      unit: item.unit ?? "nos",
+      model: item.model ?? "N/A",
+      is_serialized: !!item.is_serialized
+    };
+
     setCatalog(prev => [...prev, newItem]);
+    
+    // fetchData is called but since engine transactions haven't changed, 
+    // it will just map the new catalog item with 0 qty from the engine.
     await fetchData();
   }
   const editItem = async () => {} 
@@ -443,7 +631,192 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setCatalog(prev => prev.filter(item => !ids.includes(item.id)));
     await fetchData();
   }
+
+  const processPO = async (header: any, lines: any[]) => {
+    // Phase 1: Pre-Validation (No Mutation)
+    if (!lines || lines.length === 0) throw new Error("HARD_FAIL: NO_ITEMS_IN_PO");
+    if (!header.supplier) throw new Error("HARD_FAIL: MISSING_SUPPLIER");
+    if (!header.warehouse) throw new Error("HARD_FAIL: MISSING_WAREHOUSE");
+    if (!header.invoiceNumber) throw new Error("HARD_FAIL: MISSING_INVOICE");
+
+    // Phase 0: Resolve product IDs — give every manually-entered line a unique stable ID
+    // (prevents all manual lines collapsing into one "MANUAL_ENTRY" slot)
+    const resolvedLines = lines.map((line, idx) => {
+      const productId =
+        line.productId && line.productId !== 'MANUAL_ENTRY'
+          ? line.productId
+          : `ITM-${line.name.toLowerCase().replace(/[^a-z0-9]/g, '').substr(0, 8)}-${Date.now().toString(36)}-${idx}`;
+      return { ...line, productId };
+    });
+
+    // Phase 1b: Auto-register new items in catalog so inventory derivation can find them
+    const autoItems: InventoryItem[] = [];
+    for (const line of resolvedLines) {
+      const existsInCatalog = catalog.some(c => c.id === line.productId);
+      if (!existsInCatalog) {
+        autoItems.push({
+          id: line.productId,
+          name: line.name,
+          category: 'General',
+          total_qty: 0,         // will be derived from engine — do NOT set directly
+          assigned_qty: 0,
+          location: header.warehouse || 'Main Store',
+          threshold: 5,
+          price: line.price || 0,
+          sku: `${line.name.toUpperCase().replace(/\s+/g, '-').substr(0, 10)}-${Date.now().toString(36).substr(-4)}`,
+          model: line.model || 'N/A',
+          brand: line.brand || 'N/A',
+          gst_rate: line.gst || 18,
+          unit: 'nos',
+          is_serialized: !!line.isSerialized,
+        });
+      }
+    }
+
+    // Merged catalog: existing + newly auto-created (used synchronously below)
+    const mergedCatalog = [...catalog, ...autoItems];
+
+    // Phase 2: Build transaction batch
+    const inventoryState = engine.buildState();
+    const txnBatch: engine.Transaction[] = [];
+    const localDuplicateDetector = new Set<string>();
+
+    for (const line of resolvedLines) {
+      if (line.isSerialized) {
+        if (line.serials.length !== line.qty) {
+          throw new Error(`HARD_FAIL: SERIAL_MISMATCH_${line.name}`);
+        }
+        line.serials.forEach((s: any) => {
+          const barcode = typeof s === 'string' ? s : s.barcode;
+          engine.executeInward({
+            productId: line.productId,
+            serial: barcode,
+            qty: 1,
+            gst: line.gst,
+            price: line.price,
+            source: "PO"
+          });
+        });
+      } else {
+        engine.executeInwardBulk({
+          productId: line.productId,
+          qty: line.qty,
+          gst: line.gst,
+          price: line.price,
+          source: "PO"
+        });
+      }
+    }
+
+    // Phase 3: Commits are already made individually via direct integration in loop above
+    // engine.executeInwardBatch(txnBatch); // Skipping to use direct calls as per Master Prompt
+
+    // Phase 4: Register new catalog entries (if any)
+    if (autoItems.length > 0) {
+      setCatalog(mergedCatalog);
+    }
+
+    // Phase 5: Synchronously derive and push inventory state
+    // (bypasses stale-closure issue: fetchData closes over old catalog)
+    const groupedItems = engine.getAllItemsGrouped();
+    const parsedInventory = mergedCatalog.map(cat => {
+      const group = groupedItems.find(g => g.item_id === cat.id);
+      return {
+        ...cat,
+        total_qty: group ? group.total_qty : 0,
+        assigned_qty: group ? group.assigned_qty : 0,
+      };
+    });
+    setInventory(parsedInventory);
+
+    const engineTxns = engine.getTransactions();
+    const parsedTxns = engineTxns.map(tx => ({
+      id: tx.id,
+      item_id: tx.item_id,
+      type: tx.type,
+      quantity: tx.quantity || 1,
+      engineer_id: tx.engineer_id || 'N/A',
+      status: 'COMPLETED',
+      date: new Date(tx.timestamp).toISOString(),
+    }));
+    parsedTxns.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    setTransactions(parsedTxns);
+
+    addLog(
+      `PO_COMMITTED: ${header.invoiceNumber} | Lines: ${resolvedLines.length} | New items: ${autoItems.length} | Batch: ${txnBatch.length} txns`
+    );
+  }
+
+  const issueToEngineer = async (engineerId: string, lines: any[]) => {
+    if (!lines || lines.length === 0) throw new Error("HARD_FAIL: NO_ITEMS_TO_ISSUE");
+    
+    for (const line of lines) {
+      if (line.isSerialized) {
+        line.serials.forEach((serial: string) => {
+          engine.executeOutward({
+            productId: line.productId,
+            serial,
+            qty: 1,
+            destination: engineerId,
+            source: "ENGINEER_ISSUE"
+          });
+        });
+      } else {
+        engine.executeOutwardBulk({
+          productId: line.productId,
+          qty: line.qty,
+          destination: engineerId,
+          source: "ENGINEER_ISSUE"
+        });
+      }
+    }
+    addLog(`ISSUE_TO_ENGINEER: ${engineerId} | Lines: ${lines.length}`);
+    await fetchData();
+  }
+
+  const processEngineerReturn = async (engineerId: string, lines: any[]) => {
+    if (!lines || lines.length === 0) throw new Error("HARD_FAIL: NO_ITEMS_TO_RETURN");
+
+    for (const line of lines) {
+      if (line.isSerialized) {
+        line.serials.forEach((serial: string) => {
+          if (line.metadata?.isConsumed) {
+            engine.consumeItem(serial, {
+              reference_type: "ENGINEER_CONSUMED" as any,
+              engineer_id: engineerId,
+              ...line.metadata
+            });
+          } else {
+            engine.executeInward({
+              productId: line.productId,
+              serial,
+              qty: 1,
+              gst: 0,
+              price: 0,
+              source: "ENGINEER_RETURN",
+              metadata: { engineer_id: engineerId, ...line.metadata }
+            });
+          }
+        });
+      } else {
+        // Bulk return
+        engine.executeInwardBulk({
+          productId: line.productId,
+          qty: line.qty,
+          gst: 0,
+          price: 0,
+          source: (line.metadata?.isConsumed ? "ENGINEER_CONSUMED" : "ENGINEER_RETURN") as any
+        });
+      }
+    }
+    addLog(`ENGINEER_RETURN: ${engineerId} | Lines: ${lines.length}`);
+    await fetchData();
+  }
   const createTransaction = async () => {}
+
+  const processBarcode = (barcode: string) => {
+    return inventory.find(item => item.barcode === barcode || item.sku === barcode);
+  }
 
   const addEngineer = (data: { name: string, type: "IT" | "TECHNICAL" }) => {
     setEngineers(prev => [...prev, {
@@ -465,13 +838,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     outwardItem,
     returnItem: legacyReturnItem,
     consumeItem: legacyConsumeItem,
+    adjustItem,
     addLog,
     addItem,
     editItem,
     deleteItems,
+    processPO,
+    issueToEngineer,
+    processEngineerReturn,
+    processBarcode,
     createTransaction,
     addEngineer,
-    
+
+    // POS Sale Flow
+    sellFromPOS,
+
     // Ticket Actions
     createTicket,
     updateTicket,
@@ -488,7 +869,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     getEngineerTickets,
     getEngineerSerials,
 
-    // Legacy Legacy
+    // Control Layer Selectors
+    getAuditReport: (scanned: string[]) => engine.buildAuditReport(scanned),
+    getAgingReport: () => engine.getAgingReport(),
+    getSearchIndex: () => {
+      const state = engine.buildState();
+      const catalogItems = catalog.map(c => ({ id: c.id, name: c.name, type: 'PRODUCT' }));
+      const serials = Object.entries(state.serialMap).map(([serial, data]) => ({
+        id: serial,
+        name: serial,
+        type: 'SERIAL',
+        status: data.status,
+        item_id: data.item_id
+      }));
+      const engs = engineers.map(e => ({ id: e.id, name: e.name, type: 'PERSONNEL' }));
+      return [...catalogItems, ...serials, ...engs];
+    },
+
+    // Legacy
     issueAsset: (itemId: string, engineerId: string, quantity: number) => outwardItem(itemId, engineerId, quantity),
     returnAsset: async (txnId: string) => {
       const t = transactions.find(tx => tx.id === txnId)

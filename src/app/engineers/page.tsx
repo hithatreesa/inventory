@@ -2,9 +2,9 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { User, Activity, Package, Check, X, Clock, Navigation, Plus } from 'lucide-react';
+import { User, Activity, Package, Clock, Navigation, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useData } from '@/lib/context/DataContext';
+import { useData, Engineer, Transaction } from '@/lib/context/DataContext';
 
 export default function EngineerPage() {
   const router = useRouter();
@@ -19,17 +19,17 @@ export default function EngineerPage() {
   }, [engineers, selectedEngineerId]);
 
   const selectedEngineer = useMemo(() => {
-    return engineers.find(e => e.id === selectedEngineerId);
+    return engineers.find((e: Engineer) => e.id === selectedEngineerId);
   }, [engineers, selectedEngineerId]);
 
   // DERIVED STATS FOR ENGINEERS
   const engineersWithStats = useMemo(() => {
-    return engineers.map(eng => {
+    return engineers.map((eng: Engineer) => {
       const serials = getEngineerSerials ? getEngineerSerials(eng.id) : [];
-      const engTxns = (transactions || []).filter(t => t.engineer_id === eng.id);
+      const engTxns = (transactions || []).filter((t: Transaction) => t.engineer_id === eng.id);
       
-      const taken = engTxns.filter(t => t.type === 'ASSIGN').length;
-      const returned = engTxns.filter(t => t.type === 'RETURN').length;
+      const taken = engTxns.filter((t: Transaction) => t.type === 'ASSIGN').length;
+      const returned = engTxns.filter((t: Transaction) => t.type === 'RETURN').length;
 
       return {
         ...eng,
@@ -50,7 +50,11 @@ export default function EngineerPage() {
 
   const engineerTickets = useMemo(() => {
     if (!selectedEngineerId || !getEngineerTickets) return [];
-    return getEngineerTickets(selectedEngineerId).sort((a: any, b: any) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+    return getEngineerTickets(selectedEngineerId).sort((a: any, b: any) => {
+      const dateA = new Date(a.created_at || 0).getTime();
+      const dateB = new Date(b.created_at || 0).getTime();
+      return dateB - dateA;
+    });
   }, [getEngineerTickets, selectedEngineerId]);
 
   return (
@@ -104,14 +108,14 @@ export default function EngineerPage() {
                   </div>
                 </div>
 
-                <div className={cn("grid grid-cols-2 gap-2 pt-2 border-t", selectedEngineerId === eng.id ? "border-white/10" : "border-gray-100")}>
-                  <div className="flex justify-between items-center text-[10px] uppercase font-black tracking-widest">
-                    <span className={selectedEngineerId === eng.id ? "text-white/60" : "text-gray-400"}>Taken</span>
-                    <span className="tabular-nums text-sm">{eng.stats.taken}</span>
+                <div className={cn("flex justify-between items-center pt-2 border-t", selectedEngineerId === eng.id ? "border-white/10" : "border-gray-100")}>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className={cn("text-[9px] font-black uppercase tracking-widest italic", selectedEngineerId === eng.id ? "text-white/50" : "text-gray-400")}>TAKEN :</span>
+                    <span className={cn("text-base font-black tabular-nums", selectedEngineerId === eng.id ? "text-white" : "text-[#003366]")}>{eng.stats.taken}</span>
                   </div>
-                  <div className="flex justify-between items-center text-[10px] uppercase font-black tracking-widest">
-                    <span className={selectedEngineerId === eng.id ? "text-white/60" : "text-gray-400"}>Pending</span>
-                    <span className={cn("tabular-nums text-sm", eng.stats.pending > 0 ? (selectedEngineerId === eng.id ? "text-yellow-400" : "text-orange-500") : "")}>{eng.stats.pending}</span>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className={cn("text-[9px] font-black uppercase tracking-widest italic", selectedEngineerId === eng.id ? "text-white/50" : "text-gray-400")}>PENDING :</span>
+                    <span className={cn("text-base font-black tabular-nums", eng.stats.pending > 0 ? (selectedEngineerId === eng.id ? "text-yellow-400" : "text-orange-500") : (selectedEngineerId === eng.id ? "text-white" : "text-[#003366]"))}>{eng.stats.pending}</span>
                   </div>
                 </div>
               </div>
@@ -140,13 +144,29 @@ export default function EngineerPage() {
           </div>
 
           <div className="relative z-10 flex-1 w-full xl:max-w-md">
-            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-              <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 italic flex items-center gap-2">
-                <Navigation className="w-3 h-3" /> System Status
-              </h4>
-              <div className="bg-white/50 border border-gray-100 border-dashed rounded-xl p-4 flex flex-col items-center justify-center">
-                <Check className="w-5 h-5 text-green-500 mb-1" />
-                <span className="text-xs font-bold text-gray-400 italic">Historical data active</span>
+            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-center justify-between gap-6">
+              <div className="flex-1">
+                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 italic flex items-center gap-2">
+                  <Navigation className="w-3 h-3" /> System Status
+                </h4>
+                <div className="flex items-center gap-3">
+                  <span className="flex w-3 h-3 bg-green-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]"></span>
+                  <span className="text-sm font-black text-[#003366] italic uppercase">Profile Synced</span>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => router.push(`/engineers/issue?id=${selectedEngineerId}`)}
+                  className="h-12 px-6 bg-[#0066FF] text-white rounded-xl text-[10px] font-black uppercase tracking-widest italic hover:bg-blue-700 transition-all shadow-lg flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" /> Issue Items
+                </button>
+                <button
+                  onClick={() => router.push(`/engineers/return?id=${selectedEngineerId}`)}
+                  className="h-12 px-6 bg-white border-2 border-orange-100 text-orange-500 rounded-xl text-[10px] font-black uppercase tracking-widest italic hover:bg-orange-50 transition-all flex items-center gap-2"
+                >
+                  <Activity className="w-4 h-4" /> Process Return
+                </button>
               </div>
             </div>
           </div>
@@ -202,7 +222,7 @@ export default function EngineerPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {engineerTickets.map((t: any) => {
+                  {engineerTickets.map((t) => {
                     return (
                       <tr key={t.id} className="hover:bg-gray-50/30 transition-colors">
                         <td className="px-6 py-4 font-bold text-xs text-gray-400 font-mono tracking-tighter">{t.id}</td>

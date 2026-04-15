@@ -6,6 +6,8 @@ import React, { Suspense } from 'react';
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Navbar } from "@/components/layout/Navbar";
 import { SidebarDependentLayout } from "@/components/layout/SidebarDependentLayout";
+import { GlobalScanner } from "@/components/shared/GlobalScanner";
+import { GlobalSearch } from "@/components/shared/GlobalSearch";
 import { Toaster } from "sonner";
 import "./globals.css";
 
@@ -34,9 +36,11 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased font-sans`}
     >
-      <body className="h-[100dvh] overflow-hidden flex flex-col bg-gray-50 selection:bg-primary/10 selection:text-primary">
+      <body className="h-[100dvh] overflow-x-hidden flex flex-col bg-gray-50 selection:bg-primary/10 selection:text-primary max-w-full">
         <LayoutProvider>
           <DataProvider>
+            <GlobalScanner />
+            <GlobalSearch />
             <Toaster position="top-right" expand={true} richColors closeButton />
             <Sidebar />
             <Suspense fallback={<div className="h-20 bg-white/80 border-b border-border-main fixed top-0 left-0 right-0 z-40 animate-pulse" />}>

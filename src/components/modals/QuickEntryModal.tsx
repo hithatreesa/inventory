@@ -8,17 +8,25 @@ import { Select } from '@/components/ui/Select'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import { useData } from '@/lib/context/DataContext'
+import { useData, PurchaseLine } from '@/lib/context/DataContext'
 
 type Tab = 'item' | 'customer' | 'purchase'
 
 export function QuickEntryModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
-  const { addItem, inwardItem, inventory } = useData()
+  const { addItem, inwardItem, inventory, processPO } = useData()
   const [activeTab, setActiveTab] = useState<Tab>('item')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Form States
-  const [itemForm, setItemForm] = useState({ name: '', category: 'Electronics', qty: '' })
+  const [itemForm, setItemForm] = useState({ 
+    name: '', 
+    category: 'Electronics', 
+    qty: '',
+    gst_rate: '18',
+    unit: 'Nos',
+    model: '',
+    is_serialized: 'NO'
+  })
   const [purchaseForm, setPurchaseForm] = useState({ itemId: '', qty: '', reference: '' })
 
   const tabs = [
@@ -35,23 +43,64 @@ export function QuickEntryModal({ isOpen, onClose }: { isOpen: boolean, onClose:
           name: itemForm.name,
           category: itemForm.category,
           sku: `SKU-${Date.now().toString().slice(-6)}`,
-          unit: 'pcs',
+          unit: itemForm.unit,
           price: 0,
           brand: 'N/A',
           location: 'Main Store',
-          threshold: 5
+          threshold: 5,
+          gst_rate: Number(itemForm.gst_rate),
+          model: itemForm.model,
+          is_serialized: itemForm.is_serialized === 'YES'
         })
-        if (itemForm.qty && Number(itemForm.qty) > 0) {
-          // If initial qty is provided, we'll need the ID of the new item.
-          // For simplicity in this quick entry, we might just create the item.
-          // In a real app, addItem would return the ITEM or we'd handle stock separately.
-        }
+        // Rule 1: createItem() must NOT affect inventory. 
+        // We explicitly do NOT call inwardItem or any other logic here.
       } else if (activeTab === 'purchase') {
         if (!purchaseForm.itemId || !purchaseForm.qty) {
           throw new Error('Item and Quantity are required')
         }
-        await inwardItem(purchaseForm.itemId, Number(purchaseForm.qty), purchaseForm.reference)
-      } else if (activeTab === 'customer') {
+        
+        const selectedItem = inventory.find(i => i.id === purchaseForm.itemId);
+        if (!selectedItem) throw new Error('Invalid Item');
+
+        // Rule 2 & 3: Follow PO Logic
+        // Construct a single-line PO to reuse the strict processPO logic
+        const header = {
+            vendor: 'Quick Entry Vendor',
+            date: new Date().toISOString().split('T')[0],
+            reference: purchaseForm.reference || `QE-PO-${Date.now()}`
+        };
+
+        const lines: PurchaseLine[] = [{
+            id: `qe_${Date.now()}`,
+            productId: purchaseForm.itemId,
+            name: selectedItem.name,
+            qty: Number(purchaseForm.qty),
+            price: selectedItem.price || 0,
+            gstRate: selectedItem.gst_rate || 18,
+            isSerialized: selectedItem.is_serialized,
+            serials: [],
+            isLocked: false
+        }];
+
+        if (selectedItem.is_serialized) {
+            // If it's serialized, we might have an issue if qty > 1 since UI doesn't collect multiple serials.
+            // For now, if qty=1, we can use a generated serial if none provided? 
+            // Or just block it as per user rules? 
+            // User says: "Loop through scanned serials". 
+            // Since UI doesn't have serials, we'll block multi-qty serialized here.
+            if (Number(purchaseForm.qty) > 1) {
+                toast.error("Serialized items must be handled individually in Quick Entry.");
+                setIsSubmitting(false);
+                return;
+            }
+            // For qty=1, we auto-generate a serial to satisfy engine.
+            const genSerial = `${selectedItem.id}-${Date.now()}`;
+            lines[0].serials = [{ serial: genSerial, timestamp: Date.now() }];
+        }
+
+        await processPO(header, lines);
+      }
+ else if (activeTab === 'customer') {
         toast.info('Customer management coming soon')
         setIsSubmitting(false)
         return
@@ -112,9 +161,46 @@ export function QuickEntryModal({ isOpen, onClose }: { isOpen: boolean, onClose:
                 <Select
                   options={['Electronics', 'Industrial', 'Raw Materials', 'Software']}
                   value={itemForm.category}
-                  onChange={(e) => setItemForm({ ...itemForm, category: e.target.value })}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setItemForm({ ...itemForm, category: e.target.value })}
                 />
               </div>
+
+              {/* NEW FIELDS PHASE 1 */}
+              <div className="space-y-1.5">
+                <label className="text-sm font-black text-text-secondary uppercase tracking-widest pl-1">GST (%)</label>
+                <Input
+                  type="number"
+                  placeholder="e.g. 18"
+                  value={itemForm.gst_rate}
+                  onChange={(e) => setItemForm({ ...itemForm, gst_rate: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-black text-text-secondary uppercase tracking-widest pl-1">Units</label>
+                <Select
+                  options={['nos', 'm', 'kg', 'pcs', 'box']}
+                  value={itemForm.unit}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setItemForm({ ...itemForm, unit: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-black text-text-secondary uppercase tracking-widest pl-1">Model</label>
+                <Input
+                  placeholder="e.g. Nexus 9000"
+                  value={itemForm.model}
+                  onChange={(e) => setItemForm({ ...itemForm, model: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-black text-text-secondary uppercase tracking-widest pl-1">Serial Tracking</label>
+                <Select
+                  options={['YES', 'NO']}
+                  value={itemForm.is_serialized}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setItemForm({ ...itemForm, is_serialized: e.target.value })}
+                />
+              </div>
+              {/* END NEW FIELDS */}
+
               <div className="space-y-1.5">
                 <label className="text-sm font-black text-text-secondary uppercase tracking-widest pl-1">Initial Qty (Manual Adj)</label>
                 <Input

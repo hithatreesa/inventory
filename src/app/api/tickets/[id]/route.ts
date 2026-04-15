@@ -12,7 +12,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const ticket = updateTicket(id, body)
     return NextResponse.json({ ticket })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

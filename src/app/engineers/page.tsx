@@ -137,22 +137,20 @@ export default function EngineerPage() {
             </h1>
           </div>
 
-          <div className="relative z-10 flex-1 w-full xl:max-w-md">
-            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 flex items-center justify-end gap-6">
-              <div className="flex gap-3">
-                <button
-                  onClick={() => router.push(`/engineers/issue?id=${selectedEngineerId}`)}
-                  className="h-12 px-6 bg-[#0066FF] text-white rounded-xl text-[10px] font-black uppercase tracking-widest italic hover:bg-blue-700 transition-all shadow-lg flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" /> Issue Items
-                </button>
-                <button
-                  onClick={() => router.push(`/engineers/return?id=${selectedEngineerId}`)}
-                  className="h-12 px-6 bg-white border-2 border-orange-100 text-orange-500 rounded-xl text-[10px] font-black uppercase tracking-widest italic hover:bg-orange-50 transition-all flex items-center gap-2"
-                >
-                  <Activity className="w-4 h-4" /> Process Return
-                </button>
-              </div>
+          <div className="relative z-10 flex justify-end">
+            <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100 flex items-center gap-3 w-fit">
+              <button
+                onClick={() => router.push(`/engineers/issue?id=${selectedEngineerId}`)}
+                className="h-12 px-6 bg-[#003366] text-white rounded-xl text-[10px] font-black uppercase tracking-widest italic hover:bg-blue-900 transition-all shadow-[0_10px_30px_rgba(0,51,102,0.3)] flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" /> Issue Items
+              </button>
+              <button
+                onClick={() => router.push(`/engineers/return?id=${selectedEngineerId}`)}
+                className="h-12 px-6 bg-white border-2 border-orange-100 text-orange-500 rounded-xl text-[10px] font-black uppercase tracking-widest italic hover:bg-orange-50 transition-all flex items-center gap-2"
+              >
+                <Activity className="w-4 h-4" /> Process Return
+              </button>
             </div>
           </div>
         </div>

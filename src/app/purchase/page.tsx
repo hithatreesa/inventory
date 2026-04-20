@@ -123,9 +123,15 @@ export default function PurchaseDashboard() {
           </Button>
           <Button
             onClick={() => setIsItemModalOpen(true)}
-            className="flex-shrink-0 rounded-xl sm:rounded-2xl shadow-xl shadow-primary/20 font-black text-[8px] sm:text-[10px] tracking-widest h-10 sm:h-12 px-6 sm:px-8 italic border border-primary/10 snap-center"
+            className="flex-shrink-0 rounded-xl sm:rounded-2xl shadow-[0_10px_30px_rgba(0,51,102,0.3)] font-black text-[8px] sm:text-[10px] tracking-widest h-10 sm:h-12 px-6 sm:px-8 italic bg-[#003366] text-white snap-center"
           >
-            <Plus className="w-4 h-4 sm:w-5 sm:h-5 mr-1 text-primary" /> ADD ITEM
+            <Plus className="w-4 h-4 sm:w-5 sm:h-5 mr-1 text-white" /> ADD ITEM
+          </Button>
+          <Button
+            onClick={() => router.push('/purchase/entry')}
+            className="flex-shrink-0 rounded-xl sm:rounded-2xl shadow-[0_10px_30px_rgba(0,51,102,0.3)] font-black text-[8px] sm:text-[10px] tracking-widest h-10 sm:h-12 px-6 sm:px-8 italic bg-[#003366] text-white snap-end"
+          >
+            <Plus className="w-4 h-4 sm:w-5 sm:h-5 mr-1" /> NEW ENTRY
           </Button>
           <Button
             onClick={() => router.push('/purchase/new')}

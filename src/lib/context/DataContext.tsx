@@ -80,7 +80,72 @@ export interface Ticket {
 // -------------------------------------------------------------
 // MOCK CATALOG (Replaces DB Items & Engineers for mapping)
 // -------------------------------------------------------------
-const MOCK_CATALOG: InventoryItem[] = [];
+const MOCK_CATALOG: InventoryItem[] = [
+  {
+    id: "ITM001",
+    name: "Dell OptiPlex 7090",
+    category: "Computers",
+    total_qty: 0,
+    assigned_qty: 0,
+    location: "Main Store",
+    threshold: 2,
+    price: 45000,
+    sku: "DELL-OPT-7090",
+    model: "7090",
+    brand: "Dell",
+    gst_rate: 18,
+    unit: "nos",
+    is_serialized: true
+  },
+  {
+    id: "ITM002",
+    name: "Logitech MX Master 3",
+    category: "Peripherals",
+    total_qty: 0,
+    assigned_qty: 0,
+    location: "Main Store",
+    threshold: 10,
+    price: 8500,
+    sku: "LOGI-MX3",
+    model: "MX Master 3",
+    brand: "Logitech",
+    gst_rate: 18,
+    unit: "nos",
+    is_serialized: false
+  },
+  {
+    id: "ITM003",
+    name: "Cisco Catalyst 2960",
+    category: "Networking",
+    total_qty: 0,
+    assigned_qty: 0,
+    location: "Rack B",
+    threshold: 5,
+    price: 35000,
+    sku: "CISCO-2960",
+    model: "Catalyst 2960",
+    brand: "Cisco",
+    gst_rate: 18,
+    unit: "nos",
+    is_serialized: true
+  },
+  {
+    id: "ITM004",
+    name: "CAT6 Ethernet Cable Box (305m)",
+    category: "Cables",
+    total_qty: 0,
+    assigned_qty: 0,
+    location: "Store Room A",
+    threshold: 20,
+    price: 4500,
+    sku: "DNET-CAT6-305",
+    model: "CAT6 Unshielded",
+    brand: "D-Link",
+    gst_rate: 18,
+    unit: "box",
+    is_serialized: false
+  }
+];
 
 const MOCK_ENGINEERS = [
   { id: "eng1", name: "Ravi" },
@@ -200,7 +265,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [catalog, setCatalog] = useState<InventoryItem[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('inventory_catalog');
-      return saved ? JSON.parse(saved) : MOCK_CATALOG;
+      const parsed = saved ? JSON.parse(saved) : [];
+      return parsed.length > 0 ? parsed : MOCK_CATALOG;
     }
     return MOCK_CATALOG;
   })

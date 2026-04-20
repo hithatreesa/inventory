@@ -370,7 +370,7 @@ export default function SalesPage() {
                   }}
                   className="h-14 rounded-2xl bg-white border-gray-100 shadow-sm text-base font-bold placeholder:italic transition-all focus:ring-4 focus:ring-primary/5 focus:border-primary pr-36"
                 />
-                <button 
+                <button
                   type="button"
                   onClick={(e) => {
                     e.preventDefault();
@@ -383,8 +383,8 @@ export default function SalesPage() {
                   }}
                   className={cn(
                     "absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2 px-4 py-2 rounded-xl transition-all z-20 pointer-events-auto",
-                    searchResults.length > 0 
-                      ? "bg-primary text-white shadow-lg shadow-primary/20 hover:scale-105 active:scale-95" 
+                    searchResults.length > 0
+                      ? "bg-primary text-white shadow-lg shadow-primary/20 hover:scale-105 active:scale-95"
                       : "bg-gray-100 text-gray-400 cursor-not-allowed opacity-50"
                   )}
                 >

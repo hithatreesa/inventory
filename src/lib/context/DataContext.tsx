@@ -169,9 +169,48 @@ const MOCK_CATALOG: InventoryItem[] = [
   }
 ];
 
-const MOCK_ENGINEERS = [
-  { id: "eng1", name: "Ravi" },
-  { id: "eng2", name: "Kiran" }
+const MOCK_ENGINEERS: Engineer[] = [
+  { id: "eng1", name: "Ravi", type: "TECHNICAL" },
+  { id: "eng2", name: "Kiran", type: "IT" },
+  { id: "eng3", name: "Sunil", type: "TECHNICAL" },
+  { id: "eng4", name: "Arjun", type: "IT" }
+];
+
+const MOCK_TICKETS: Ticket[] = [
+  {
+    id: "TCK-12345",
+    customer_name: "TechNova Solutions",
+    issue_description: "Network switch setup and cabling",
+    title: "Network Switch Installation",
+    description: "Install Cisco 2960 and run CAT6 cables",
+    status: "ASSIGNED",
+    engineer_id: "eng1",
+    assigned_engineer_id: "eng1",
+    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+    requirements: [
+      { item_id: "ITM003", qty: 1 }, 
+      { item_id: "ITM004", qty: 2 }  
+    ],
+    tracking: [
+      { item_id: "ITM003", assigned_qty: 0, returned_qty: 0, consumed_qty: 0 },
+      { item_id: "ITM004", assigned_qty: 0, returned_qty: 0, consumed_qty: 0 }
+    ]
+  },
+  {
+    id: "TCK-99887",
+    customer_name: "Apex Data Works",
+    issue_description: "Replace faulty workstation peripherals",
+    title: "Mouse Replacement",
+    description: "Replace MX Master 3",
+    status: "CREATED",
+    created_at: new Date(Date.now() - 86400000 * 1).toISOString(),
+    requirements: [
+      { item_id: "ITM002", qty: 3 }
+    ],
+    tracking: [
+      { item_id: "ITM002", assigned_qty: 0, returned_qty: 0, consumed_qty: 0 }
+    ]
+  }
 ];
 
 export interface ScanEntry {
@@ -285,7 +324,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [engineers, setEngineers] = useState<Engineer[]>(MOCK_ENGINEERS)
   const [vendors, setVendors] = useState<Vendor[]>(MOCK_VENDORS)
-  const [tickets, setTickets] = useState<Ticket[]>([])
+  const [tickets, setTickets] = useState<Ticket[]>(MOCK_TICKETS)
   const [logs, setLogs] = useState<Log[]>([])
   const [catalog, setCatalog] = useState<InventoryItem[]>(() => {
     if (typeof window !== 'undefined') {

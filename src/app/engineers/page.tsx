@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 
 export default function EngineerPage() {
   const router = useRouter();
-  const { engineers, inventory, transactions, getEngineerSerials, getEngineerTickets } = useData();
+  const { engineers, inventory, transactions, getEngineerSerials, getEngineerTickets, tickets } = useData();
   const [selectedEngineerId, setSelectedEngineerId] = useState<string>('');
 
   // Initial selection
@@ -31,6 +31,36 @@ export default function EngineerPage() {
     customerName: '',
     items: [{ id: Date.now().toString(), name: '', qty: 1 }]
   });
+
+  // Auto-fill logic
+  const [lastAutofilledTicket, setLastAutofilledTicket] = useState<string>('');
+  useEffect(() => {
+    if (issuedForm.ticketNo && issuedForm.ticketNo !== lastAutofilledTicket) {
+      const ticket = tickets?.find(t => t.id === issuedForm.ticketNo);
+      if (ticket) {
+        setLastAutofilledTicket(ticket.id);
+        
+        const autoItems = ticket.requirements?.length > 0 
+          ? ticket.requirements.map(req => {
+              const invItem = inventory.find(i => i.id === req.item_id);
+              return {
+                 id: Math.random().toString(36).substr(2, 9),
+                 name: invItem?.name || req.item_id,
+                 qty: req.qty
+              };
+            })
+          : [{ id: Math.random().toString(36).substr(2, 9), name: '', qty: 1 }];
+
+        setIssuedForm(prev => ({
+          ...prev,
+          customerName: ticket.customer_name || ticket.title || prev.customerName,
+          items: autoItems
+        }));
+        
+        toast.success(`Auto-filled details for Ticket: ${ticket.id}`);
+      }
+    }
+  }, [issuedForm.ticketNo, tickets, inventory, lastAutofilledTicket]);
 
   const handleAddFormItem = () => {
     setIssuedForm(prev => ({
@@ -203,82 +233,7 @@ export default function EngineerPage() {
           </div>
         </div>
 
-        {/* B. Item Summary Table */}
-        <div className="bg-white rounded-[32px] border border-border-main overflow-hidden shadow-sm flex flex-col">
-          <div className="p-6 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
-            <h3 className="text-lg font-black text-[#003366] italic uppercase tracking-tight">Inventory In Possession</h3>
-          </div>
-          <div className="overflow-x-auto min-h-[150px]">
-            {engineerSerials.length > 0 ? (
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-gray-50/50 border-b border-gray-100">
-                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Item Name</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-center">Serial Number</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-[#003366] uppercase tracking-widest italic text-center bg-primary/5">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {engineerSerials.map((s, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50/30 transition-colors">
-                      <td className="px-6 py-4 font-black text-sm text-[#003366] italic uppercase tracking-tight">{inventory.find(i => i.id === s.item_id)?.name || s.item_id}</td>
-                      <td className="px-6 py-4 font-black text-sm text-gray-400 text-center"><span className="bg-gray-100 px-2 py-1 normal-case tracking-widest rounded text-xs">{s.serial}</span></td>
-                      <td className="px-6 py-4 font-black text-lg text-orange-500 text-center tabular-nums bg-orange-50/30 border-l border-r border-orange-50"><span className="text-xs">{s.status}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div className="p-12 flex flex-col items-center justify-center text-center opacity-50">
-                <Package className="w-10 h-10 mb-3 text-gray-400" />
-                <p className="text-sm font-black uppercase text-gray-400 tracking-widest italic">No Items Issued or Pending</p>
-              </div>
-            )}
-          </div>
-        </div>
 
-        <div className="bg-white rounded-[32px] border border-border-main overflow-hidden shadow-sm flex flex-col">
-          <div className="p-6 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
-            <h3 className="text-lg font-black text-[#003366] italic uppercase tracking-tight">Assigned Tickets</h3>
-          </div>
-          <div className="overflow-x-auto min-h-[200px]">
-            {engineerTickets.length > 0 ? (
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-gray-50/50 border-b border-gray-100">
-                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Ticket ID</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Customer / Context</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {engineerTickets.map((t) => {
-                    return (
-                      <tr key={t.id} className="hover:bg-gray-50/30 transition-colors">
-                        <td className="px-6 py-4 font-bold text-xs text-gray-400 font-mono tracking-tighter">{t.id}</td>
-                        <td className="px-6 py-4 font-black text-xs text-text-main italic uppercase">{t.customer_name || t.title}<br /><span className="text-[10px] text-gray-400 normal-case">{t.issue_description || t.description}</span></td>
-                        <td className="px-6 py-4">
-                          <span className={cn(
-                            "text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md border",
-                            t.status === 'COMPLETED' ? "bg-green-50 text-green-600 border-green-100" :
-                              "bg-blue-50 text-blue-600 border-blue-100"
-                          )}>
-                            {t.status}
-                          </span>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            ) : (
-              <div className="p-12 flex flex-col items-center justify-center text-center opacity-50">
-                <Activity className="w-10 h-10 mb-3 text-gray-400" />
-                <p className="text-sm font-black uppercase text-gray-400 tracking-widest italic">No Active Workflow</p>
-              </div>
-            )}
-          </div>
-        </div>
 
         {/* C. Issued Material Form Card */}
         <div className="bg-white rounded-[32px] border border-border-main overflow-hidden shadow-sm flex flex-col mb-10">
@@ -307,13 +262,24 @@ export default function EngineerPage() {
                   className="w-full h-12 bg-gray-50/50 border border-gray-200 rounded-xl px-4 text-sm font-bold outline-none focus:border-[#003366] transition-all"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 relative">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Engineer Name</label>
-                <input
-                  disabled
-                  value={selectedEngineer?.name || ''}
-                  className="w-full h-12 bg-gray-100 border border-gray-200 rounded-xl px-4 text-sm font-bold text-gray-500 outline-none cursor-not-allowed"
-                />
+                <select
+                  required
+                  value={selectedEngineerId}
+                  onChange={e => setSelectedEngineerId(e.target.value)}
+                  className="w-full h-12 bg-gray-50/50 border border-gray-200 rounded-xl px-4 text-sm font-bold text-[#003366] outline-none focus:border-[#003366] transition-all appearance-none cursor-pointer"
+                >
+                  <option value="" disabled>Select Engineer</option>
+                  {engineers.map(e => (
+                    <option key={e.id} value={e.id}>{e.name} {e.type ? `(${e.type})` : ''}</option>
+                  ))}
+                </select>
+                <div className="absolute right-4 top-[36px] pointer-events-none">
+                  <svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M1.5 1.5L6 6L10.5 1.5" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Customer Name</label>

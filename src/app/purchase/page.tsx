@@ -15,7 +15,6 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { DataTable, Column } from '@/components/tables/DataTable'
 import { MetricCard } from '@/components/shared/MetricCard'
-import { ItemModal } from '@/components/modals/ItemModal'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
@@ -23,7 +22,6 @@ import { useRouter } from 'next/navigation'
 export default function PurchaseDashboard() {
   const router = useRouter()
   const { transactions, inventory, inwardItem } = useData()
-  const [isItemModalOpen, setIsItemModalOpen] = useState(false)
 
   const inventoryMap = useMemo(() => {
     return new Map(inventory.map(i => [i.id, i]))
@@ -145,12 +143,6 @@ export default function PurchaseDashboard() {
           </Button>
         </div>
       </div>
-
-      <ItemModal
-        isOpen={isItemModalOpen}
-        onClose={() => setIsItemModalOpen(false)}
-        item={null}
-      />
 
       {/* Stats Summary */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">

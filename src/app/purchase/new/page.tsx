@@ -22,6 +22,7 @@ import { useData, InventoryItem, PurchaseLine, ScanEntry } from '@/lib/context/D
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { EntityLookup } from '@/components/shared/EntityLookup'
 
 // Point 13: UI Enhancement Sounds (Synthesized via Web Audio)
 const playBeep = (freq = 880, duration = 0.1) => {
@@ -461,26 +462,57 @@ function PurchaseEntryContent() {
 
         {/* Operational Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {[
-            { label: "Supplier", value: header.supplier, icon: Landmark, key: 'supplier', color: 'bg-blue-50 text-blue-600' },
-            { label: "Invoice Number", value: header.invoiceNumber, icon: FileText, key: 'invoiceNumber', color: 'bg-indigo-50 text-indigo-600' },
-            { label: "Warehouse", value: header.warehouse, icon: Truck, key: 'warehouse', color: 'bg-slate-50 text-slate-600' },
-          ].map((c) => (
-            <div key={c.key} className="bg-white p-6 sm:p-8 rounded-[32px] shadow-[0_4px_20px_rgba(0,0,0,0.02)] border border-gray-100/50 flex items-center gap-6 group hover:shadow-xl transition-all duration-500">
-              <div className={cn("w-12 h-12 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 duration-500", c.color)}>
-                <c.icon className="w-8 h-8" />
-              </div>
-              <div className="flex-1 space-y-1">
-                <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest italic">{c.label}</label>
-                <input
-                  value={c.value}
-                  onChange={(e) => setHeader({ ...header, [c.key]: e.target.value })}
-                  className="w-full bg-transparent text-xl font-black text-[#1A1C21] outline-none placeholder:text-gray-100"
-                  placeholder={`Enter ${c.label}...`}
-                />
-              </div>
+          <div className="bg-white p-6 sm:p-8 rounded-[32px] shadow-[0_4px_20px_rgba(0,0,0,0.02)] border border-gray-100/50 flex items-center gap-6 group hover:shadow-xl transition-all duration-500">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 duration-500 bg-blue-50 text-blue-600">
+              <Landmark className="w-8 h-8" />
             </div>
-          ))}
+            <div className="flex-1 space-y-1 relative">
+              <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest italic">Supplier</label>
+              <EntityLookup
+                type="vendor"
+                value={header.supplier}
+                onChange={(val) => setHeader({ ...header, supplier: val })}
+                onSelect={(vendor) => {
+                  setHeader(prev => ({
+                    ...prev,
+                    supplier: vendor.name,
+                  }));
+                }}
+                placeholder="Enter Supplier..."
+                className="w-full bg-transparent text-xl font-black text-[#1A1C21] outline-none placeholder:text-gray-100"
+              />
+            </div>
+          </div>
+
+          <div className="bg-white p-6 sm:p-8 rounded-[32px] shadow-[0_4px_20px_rgba(0,0,0,0.02)] border border-gray-100/50 flex items-center gap-6 group hover:shadow-xl transition-all duration-500">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 duration-500 bg-indigo-50 text-indigo-600">
+              <FileText className="w-8 h-8" />
+            </div>
+            <div className="flex-1 space-y-1">
+              <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest italic">Invoice Number</label>
+              <input
+                value={header.invoiceNumber}
+                onChange={(e) => setHeader({ ...header, invoiceNumber: e.target.value })}
+                className="w-full bg-transparent text-xl font-black text-[#1A1C21] outline-none placeholder:text-gray-100"
+                placeholder="Enter Invoice Number..."
+              />
+            </div>
+          </div>
+
+          <div className="bg-white p-6 sm:p-8 rounded-[32px] shadow-[0_4px_20px_rgba(0,0,0,0.02)] border border-gray-100/50 flex items-center gap-6 group hover:shadow-xl transition-all duration-500">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 duration-500 bg-slate-50 text-slate-600">
+              <Truck className="w-8 h-8" />
+            </div>
+            <div className="flex-1 space-y-1">
+              <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest italic">Warehouse</label>
+              <input
+                value={header.warehouse}
+                onChange={(e) => setHeader({ ...header, warehouse: e.target.value })}
+                className="w-full bg-transparent text-xl font-black text-[#1A1C21] outline-none placeholder:text-gray-100"
+                placeholder="Enter Warehouse..."
+              />
+            </div>
+          </div>
         </div>
 
         {/* Line Items Section */}
@@ -641,11 +673,22 @@ function PurchaseEntryContent() {
                 <div className="grid grid-cols-2 lg:grid-cols-12 gap-3 sm:gap-4 items-end">
                   <div className="col-span-2 lg:col-span-5 space-y-2">
                     <label className="text-[9px] font-black text-primary uppercase tracking-widest italic">Item Selection</label>
-                    <input
+                    <EntityLookup
+                      type="item"
                       value={pendingRow.name}
-                      onChange={(e) => setPendingRow({ ...pendingRow, name: e.target.value })}
-                      onKeyDown={(e) => { if (e.key === 'Enter') commitLine(true); }}
-                      placeholder="Enter item name..."
+                      onChange={(val) => setPendingRow({ ...pendingRow, name: val })}
+                      onSelect={(item) => {
+                        setPendingRow({
+                          ...pendingRow,
+                          item,
+                          name: item.name,
+                          price: item.purchasePrice || item.price || 0,
+                          isSerialized: item.isSerialized || false,
+                          brand: item.brand || 'N/A',
+                          model: item.model || 'N/A'
+                        });
+                      }}
+                      placeholder="Search or Scan Item/Barcode..."
                       className="w-full h-12 bg-white border-2 border-primary/20 rounded-xl px-4 text-base font-black italic outline-none focus:border-primary transition-all shadow-sm"
                     />
                   </div>

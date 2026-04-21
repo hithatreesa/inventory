@@ -1,604 +1,448 @@
 "use client"
 
-import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
-import {
-  Save,
-  CheckCircle2,
-  Plus,
-  FileUp,
-  ExternalLink,
-  Search,
-  Trash2,
-  Minus,
-  ShoppingCart,
-  Package
-} from 'lucide-react'
-import { useData } from '@/lib/context/DataContext'
-import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
-import { Select } from '@/components/ui/Select'
-import { SectionHeader } from '@/components/shared/SectionHeader'
-import { SummaryPanel, SummaryActionCard } from '@/components/shared/SummaryPanel'
-import POSMode from '@/components/POSMode'
-import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { useData } from '@/lib/context/DataContext';
+import { calculateLineAmount, calculateLedgerTotals } from '@/modules/ledger/ledger-engine';
+import { useGlobalKeyboardShortcuts } from '@/modules/ledger/keyboard-handler';
+import { handleGridKeyDown } from '@/modules/ledger/grid-navigation';
+import { LedgerLine, LedgerHeader, BillSundry } from '@/modules/ledger/types';
+import { toast } from 'sonner';
+import { EntityLookup } from '@/components/shared/EntityLookup';
 
-interface SalesItem {
-  id: string
-  name: string
-  sku: string
-  qty: number
-  unitPrice: number
-  gstRate: number
-  category: string
-}
+export default function SalesLedgerEntry() {
+  const router = useRouter();
+  const { inventory, sellFromPOS } = useData();
 
+  const [header, setHeader] = useState<LedgerHeader>({
+    series: 'GST',
+    date: new Date().toISOString().split('T')[0],
+    voucherNumber: '1',
+    type: 'Against Challan',
+    gstType: 'I/GST-18%',
+    partyAccount: '',
+    materialCentre: 'Main Store',
+    narration: '',
+    supplierReference: ''
+  });
 
-export default function SalesPage() {
-  const { inventory, sellFromPOS } = useData()
-  const [invoiceId, setInvoiceId] = useState('')
-
-  useEffect(() => {
-    // Generate stable invoice number only on client to avoid hydration mismatch
-    setInvoiceId(`INV-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 90000) + 10000)}`)
-  }, [])
-  const [mode, setMode] = useState<"ERP" | "POS">("ERP")
-  const [items, setItems] = useState<SalesItem[]>([])
-  const [customerName, setCustomerName] = useState('')
-  const [customerVAT, setCustomerVAT] = useState('')
-  const [customerAddress, setCustomerAddress] = useState('')
-  const [entryDate, setEntryDate] = useState(new Date().toISOString().split('T')[0])
-  const [dueDate, setDueDate] = useState(() => {
-    const d = new Date()
-    d.setDate(d.getDate() + 30)
-    return d.toISOString().split('T')[0]
-  })
-  const [paymentTerms, setPaymentTerms] = useState('Net 30 Days')
-  const [isProcessing, setIsProcessing] = useState(false)
-
-  // Product search
-  const [searchQuery, setSearchQuery] = useState('')
-  const [showSearch, setShowSearch] = useState(false)
-  const searchRef = useRef<HTMLInputElement>(null)
-  const searchContainerRef = useRef<HTMLDivElement>(null)
-
-  // Filter inventory for search dropdown
-  const searchResults = useMemo(() => {
-    if (!searchQuery.trim()) return inventory.slice(0, 8)
-    const q = searchQuery.toLowerCase()
-    return inventory.filter(item =>
-      item.name.toLowerCase().includes(q) ||
-      (item.sku && item.sku.toLowerCase().includes(q)) ||
-      (item.barcode && item.barcode.toLowerCase().includes(q)) ||
-      item.id.toLowerCase().includes(q) ||
-      item.category.toLowerCase().includes(q)
-    ).slice(0, 10)
-  }, [searchQuery, inventory])
-
-  // Close search dropdown on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
-        setShowSearch(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
-  // Add product to invoice line items
-  const addProductToInvoice = useCallback((productId: string) => {
-    const product = inventory.find(i => i.id === productId)
-    if (!product) {
-      toast.error('Product not found in inventory')
-      return
-    }
-
-    if (product.total_qty - product.assigned_qty <= 0) {
-      toast.error(`${product.name} is out of stock`)
-      return
-    }
-
-    setItems(prev => {
-      const existing = prev.find(i => i.id === product.id)
-      if (existing) {
-        // Check stock limit
-        const availableStock = product.total_qty - product.assigned_qty
-        if (existing.qty >= availableStock) {
-          toast.error(`Maximum available stock: ${availableStock}`)
-          return prev
-        }
-        return prev.map(i =>
-          i.id === product.id ? { ...i, qty: i.qty + 1 } : i
-        )
-      }
-      return [...prev, {
-        id: product.id,
-        name: product.name,
-        sku: product.sku || 'N/A',
-        qty: 1,
-        unitPrice: product.price || 0,
-        gstRate: product.gst_rate || 0,
-        category: product.category || 'General'
-      }]
-    })
-
-    setSearchQuery('')
-    setShowSearch(false)
-  }, [inventory])
-
-  // Barcode scan listener — adds scanned item to invoice
-  useEffect(() => {
-    const onScan = (e: CustomEvent<{ item: { id: string, name: string } }>) => {
-      const { item } = e.detail
-      if (!item) return
-      addProductToInvoice(item.id)
-      toast.success(`Scanned: ${item.name}`)
-    }
-    window.addEventListener('barcode-scanned', onScan as EventListener)
-    return () => window.removeEventListener('barcode-scanned', onScan as EventListener)
-  }, [inventory, addProductToInvoice])
-
-  // Update quantity for a line item
-  const updateQty = useCallback((id: string, delta: number) => {
-    setItems(prev => prev.map(item => {
-      if (item.id === id) {
-        const product = inventory.find(p => p.id === id)
-        const availableStock = product ? product.total_qty - product.assigned_qty : 999
-        const newQty = Math.max(1, Math.min(item.qty + delta, availableStock))
-        if (item.qty + delta > availableStock) {
-          toast.error(`Maximum available: ${availableStock}`)
-        }
-        return { ...item, qty: newQty }
-      }
-      return item
+  const [lines, setLines] = useState<LedgerLine[]>(
+    Array.from({ length: 15 }).map((_, i) => ({
+      id: `row-${i}`,
+      sno: i + 1,
+      description: '',
+      qty: 0,
+      unit: '',
+      price: 0,
+      amount: 0,
+      gstRate: 0
     }))
-  }, [inventory])
+  );
 
-  // Update price for a line item
-  const updatePrice = useCallback((id: string, price: number) => {
-    setItems(prev => prev.map(item =>
-      item.id === id ? { ...item, unitPrice: Math.max(0, price) } : item
-    ))
-  }, [])
+  const [sundries, setSundries] = useState<BillSundry[]>([
+    { id: 'sun-1', name: 'Installation charges', percentage: 0, amount: 0 },
+    { id: 'sun-2', name: 'Transportation', percentage: 0, amount: 0 },
+    { id: 'sun-3', name: 'Packing', percentage: 0, amount: 0 },
+    { id: 'sun-4', name: 'Service charges', percentage: 0, amount: 0 },
+    { id: 'sun-5', name: 'Labour', percentage: 0, amount: 0 },
+    { id: 'sun-6', name: 'Rounding Off (+/-)', percentage: 0, amount: 0 }
+  ]);
 
-  // Remove a line item
-  const removeItem = useCallback((id: string) => {
-    setItems(prev => prev.filter(i => i.id !== id))
-    toast.info('Item removed from invoice')
-  }, [])
+  const [isTaxApplied, setIsTaxApplied] = useState(false);
+  const totals = useMemo(() => calculateLedgerTotals(lines, sundries, isTaxApplied), [lines, sundries, isTaxApplied]);
 
-  // Calculations
-  const subtotal = useMemo(() =>
-    items.reduce((acc, item) => acc + (item.qty * item.unitPrice), 0),
-    [items]
-  )
-  const taxTotal = useMemo(() =>
-    items.reduce((acc, item) => acc + (item.qty * item.unitPrice * (item.gstRate / 100)), 0),
-    [items]
-  )
-  const grandTotal = subtotal + taxTotal
-
-  // Weighted average tax rate for display
-  const avgTaxRate = subtotal > 0
-    ? Math.round((taxTotal / subtotal) * 100 * 100) / 100
-    : 0
-
-  // Finalize sale — uses sellFromPOS engine
-  const handleFinalize = useCallback(async () => {
-    if (items.length === 0) {
-      toast.error('Add at least one product to the invoice')
-      return
+  const handleSave = async () => {
+    const validLines = lines.filter(l => l.productId && l.qty > 0 && l.amount > 0);
+    if (validLines.length === 0) {
+      toast.error('Add at least one valid item');
+      return;
     }
-    if (!customerName.trim()) {
-      toast.error('Enter a customer name')
-      return
+    if (!header.partyAccount) {
+      toast.error('Party Account is required');
+      return;
     }
-
-    setIsProcessing(true)
     try {
-      await toast.promise(async () => {
-        await sellFromPOS(
-          items.map(i => ({ id: i.id, qty: i.qty, price: i.unitPrice })),
-          customerName.trim()
-        )
-      }, {
-        loading: 'Processing Sale...',
-        success: `Invoice ${invoiceId} — Sale Complete!`,
-        error: (err: Error) => err.message || 'Sale Failed'
-      })
-      setItems([])
-    } catch {
-      // Error is handled by toast.promise
-    } finally {
-      setIsProcessing(false)
+      const formattedCart = validLines.map(l => ({
+         id: l.productId!,
+         qty: Number(l.qty),
+         price: Number(l.price),
+      }));
+
+      await toast.promise(sellFromPOS(formattedCart, header.partyAccount), {
+        loading: 'Processing Sale Voucher...',
+        success: 'Sale Saved Successfully',
+        error: (err: any) => err.message || 'Failed to save sale'
+      });
+      // Clear or navigate
+      setLines(Array.from({ length: 15 }).map((_, i) => ({
+         id: `new-row-${Date.now()}-${i}`, sno: i + 1, description: '', qty: 0, unit: '', price: 0, amount: 0, gstRate: 0
+      })));
+      setSundries(sundries.map(s => ({...s, name: '', percentage: 0, amount: 0})));
+      setHeader({...header, voucherNumber: String(Number(header.voucherNumber) + 1)});
+    } catch (err) {
+      console.error(err);
     }
-  }, [items, customerName, sellFromPOS, invoiceId])
+  };
 
-  // Save draft (simple local state — just a toast for UX)
-  const handleSaveDraft = useCallback(() => {
-    if (items.length === 0) {
-      toast.info('Nothing to save — add items first')
-      return
-    }
-    toast.success('Draft saved locally')
-  }, [items])
+  useGlobalKeyboardShortcuts({
+    onSave: handleSave,
+    onApplyTax: () => setIsTaxApplied(prev => !prev),
+    onQuit: () => router.push('/dashboard')
+  });
 
-  const headerActions = (
-    <>
-      <Button
-        variant="secondary"
-        onClick={() => setMode(mode === "ERP" ? "POS" : "ERP")}
-        className="px-6 h-10 font-black tracking-widest uppercase text-blue-600 bg-blue-50 hover:bg-blue-100 border-blue-200 shadow-sm mr-auto block lg:inline-flex"
-      >
-        {mode === "ERP" ? "Launch POS" : "EXIT POS"}
-      </Button>
-      <Button variant="secondary" className="px-6 h-10" onClick={handleSaveDraft}>
-        <Save className="w-4 h-4 mr-2" /> Save Draft
-      </Button>
-      <Button
-        onClick={handleFinalize}
-        disabled={isProcessing || items.length === 0}
-        className="px-10 h-10 italic"
-      >
-        <CheckCircle2 className="w-4 h-4 mr-2" /> Finalize &amp; Approve
-      </Button>
-    </>
-  )
+  const addRow = useCallback(() => {
+    setLines(prev => [
+      ...prev,
+      {
+        id: `row-${prev.length}`,
+        sno: prev.length + 1,
+        description: '',
+        qty: 0,
+        unit: '',
+        price: 0,
+        amount: 0,
+        gstRate: 0
+      }
+    ]);
+  }, []);
 
-  if (mode === "POS") {
-    return <POSMode onExit={() => setMode("ERP")} />
-  }
+  const updateLine = (index: number, field: keyof LedgerLine, value: string | number) => {
+    setLines(prev => {
+      const next = [...prev];
+      const row = { ...next[index], [field]: value };
+      
+      if (field === 'qty' || field === 'price') {
+        const qty = field === 'qty' ? Number(value) : Number(row.qty);
+        const price = field === 'price' ? Number(value) : Number(row.price);
+        row.amount = calculateLineAmount(qty, price);
+      }
+      if (field === 'description' && typeof value === 'string') {
+        const match = inventory.find(i => i.name.toLowerCase() === value.trim().toLowerCase());
+        if (match) {
+           row.productId = match.id;
+           row.unit = match.unit || 'nos';
+           row.price = match.price || 0;
+           row.gstRate = match.gst_rate || 0;
+           row.amount = calculateLineAmount(Number(row.qty), match.price || 0);
+        }
+      }
+      next[index] = row;
+      return next;
+    });
+  };
+
+  const updateSundry = (index: number, field: keyof BillSundry, value: string | number) => {
+    setSundries(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  };
 
   return (
-    <div className="space-y-8 pb-12">
-      <SectionHeader
-        title="Sales Invoice"
-        prefix="SALES MANAGEMENT"
-        subtitle={invoiceId ? `Document Identifier: #${invoiceId}` : "Initializing Document..."}
-        actions={headerActions}
-      />
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          {/* Form Top Row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Customer Details */}
-            <div className="glass p-8 rounded-[32px] shadow-sm flex flex-col justify-between min-h-[240px]">
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-sm font-black text-text-secondary uppercase tracking-[0.2em] pl-1">CUSTOMER DETAILS</span>
-              </div>
-              <div className="space-y-3 flex-1">
-                <div className="space-y-1">
-                  <label className="text-xs font-black text-text-secondary pl-1 uppercase tracking-widest">Customer Name *</label>
-                  <Input
-                    placeholder="Enter customer name..."
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    className="h-11"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-black text-text-secondary pl-1 uppercase tracking-widest">GSTIN / VAT</label>
-                    <Input
-                      placeholder="GST Number"
-                      value={customerVAT}
-                      onChange={(e) => setCustomerVAT(e.target.value)}
-                      className="h-10"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-black text-text-secondary pl-1 uppercase tracking-widest">Address</label>
-                    <Input
-                      placeholder="Billing address"
-                      value={customerAddress}
-                      onChange={(e) => setCustomerAddress(e.target.value)}
-                      className="h-10"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Order Logistics */}
-            <div className="glass p-8 rounded-[32px] shadow-sm min-h-[240px] flex flex-col">
-              <span className="text-sm font-black text-text-secondary uppercase tracking-[0.2em] pl-1">ORDER LOGISTICS</span>
-              <div className="grid grid-cols-2 gap-6 mt-6">
-                <div className="space-y-1">
-                  <label className="text-sm font-black text-text-secondary pl-1 uppercase tracking-widest">Entry Date</label>
-                  <Input
-                    type="date"
-                    value={entryDate}
-                    onChange={(e) => setEntryDate(e.target.value)}
-                    className="h-11"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-black text-text-secondary pl-1 uppercase tracking-widest">Due Date</label>
-                  <Input
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    className="h-11"
-                  />
-                </div>
-              </div>
-              <div className="mt-auto pt-6 flex gap-4 items-end">
-                <Select
-                  label="PAYMENT TERMS"
-                  value={paymentTerms}
-                  onChange={(e) => setPaymentTerms(e.target.value)}
-                  options={['Net 30 Days', 'Net 15 Days', 'Immediate', 'COD']}
-                />
-              </div>
-            </div>
+    <div className="flex flex-col min-h-screen text-[13px] font-medium selection:bg-blue-200" style={{ backgroundColor: 'var(--color-ledger-sales)', color: '#000' }}>
+      
+      {/* HEADER SECTION */}
+      <div className="p-2 space-y-1">
+        {/* ROW 1 */}
+        <div className="flex items-center gap-4 py-1">
+          <div className="flex items-center gap-2">
+            <span className="w-12">Series</span>
+            <input 
+              value={header.series} 
+              onChange={e => setHeader({...header, series: e.target.value})}
+              className="bg-transparent border-b border-gray-400 font-bold px-1 w-24 outline-none focus:border-black"
+            />
           </div>
-
-          {/* Line Items Section */}
-          <div className="space-y-4">
-            <div className="flex justify-between items-center px-4">
-              <h3 className="text-xl font-black text-text-main uppercase tracking-tight italic">
-                Line Items
-                {items.length > 0 && (
-                  <span className="text-sm font-bold text-text-secondary ml-3 not-italic">
-                    ({items.length} {items.length === 1 ? 'item' : 'items'})
-                  </span>
-                )}
-              </h3>
-            </div>
-
-            {/* Product Search / Add */}
-            <div ref={searchContainerRef} className="relative px-0">
-              <div className="relative group">
-                <Input
-                  ref={searchRef}
-                  icon={<Search className="w-5 h-5 text-gray-400" />}
-                  placeholder="Search products by name, SKU, barcode, or category..."
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value)
-                    setShowSearch(true)
-                  }}
-                  onFocus={() => setShowSearch(true)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && searchResults.length > 0) {
-                      addProductToInvoice(searchResults[0].id)
-                      setShowSearch(false)
-                      setSearchQuery('')
-                    }
-                  }}
-                  className="h-14 rounded-2xl bg-white border-gray-100 shadow-sm text-base font-bold placeholder:italic transition-all focus:ring-4 focus:ring-primary/5 focus:border-primary pr-36"
-                />
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (searchResults.length > 0) {
-                      addProductToInvoice(searchResults[0].id);
-                      setSearchQuery('');
-                    } else {
-                      toast.error('No product selected');
-                    }
-                  }}
-                  className={cn(
-                    "absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2 px-4 py-2 rounded-xl transition-all z-20 pointer-events-auto",
-                    searchResults.length > 0
-                      ? "bg-primary text-white shadow-lg shadow-primary/20 hover:scale-105 active:scale-95"
-                      : "bg-gray-100 text-gray-400 cursor-not-allowed opacity-50"
-                  )}
-                >
-                  <span className="text-[10px] font-black uppercase tracking-widest italic hidden sm:inline-block">
-                    Add Result
-                  </span>
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Search Dropdown */}
-              {showSearch && (
-                <div className="absolute z-50 w-full mt-2 bg-white rounded-2xl border border-border-main shadow-2xl shadow-primary/10 overflow-hidden animate-in fade-in scale-in duration-200 max-h-[400px] overflow-y-auto custom-scrollbar">
-                  {searchResults.length === 0 ? (
-                    <div className="p-8 text-center">
-                      <Package className="w-10 h-10 text-gray-200 mx-auto mb-3" />
-                      <p className="text-sm font-black text-gray-400 uppercase tracking-widest italic">No products found</p>
-                      <p className="text-xs text-gray-300 mt-1 font-bold">Try a different search term</p>
-                    </div>
-                  ) : (
-                    searchResults.map((product) => {
-                      const available = product.total_qty - product.assigned_qty
-                      const alreadyAdded = items.find(i => i.id === product.id)
-                      return (
-                        <button
-                          key={product.id}
-                          onClick={() => addProductToInvoice(product.id)}
-                          className={cn(
-                            "w-full px-6 py-4 flex items-center justify-between hover:bg-primary/5 transition-all text-left border-b border-gray-50 last:border-0 group",
-                            available <= 0 && "opacity-40 pointer-events-none"
-                          )}
-                        >
-                          <div className="flex items-center gap-4 flex-1 min-w-0">
-                            <div className="w-10 h-10 bg-primary/5 rounded-xl flex items-center justify-center shrink-0 group-hover:bg-primary/10 transition-colors">
-                              <Package className="w-5 h-5 text-primary" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-black text-text-main italic tracking-tight uppercase truncate">
-                                {product.name}
-                              </p>
-                              <div className="flex items-center gap-3 mt-0.5">
-                                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{product.sku || product.id}</span>
-                                <span className="text-xs font-bold text-gray-300">•</span>
-                                <span className="text-xs font-bold text-gray-400">{product.category}</span>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-4 shrink-0">
-                            {alreadyAdded && (
-                              <span className="text-xs font-black text-primary bg-primary/5 px-2 py-1 rounded-lg uppercase">
-                                In Cart ({alreadyAdded.qty})
-                              </span>
-                            )}
-                            <div className="text-right">
-                              <p className="text-sm font-black text-text-main italic tabular-nums">
-                                ₹{(product.price || 0).toLocaleString('en-IN')}
-                              </p>
-                              <p className={cn(
-                                "text-xs font-bold uppercase tracking-widest",
-                                available <= 3 ? "text-warning" : "text-success"
-                              )}>
-                                {available} in stock
-                              </p>
-                            </div>
-                            <Plus className="w-5 h-5 text-primary opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </div>
-                        </button>
-                      )
-                    })
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Items Table */}
-            <div className="bg-white rounded-[32px] border border-border-main shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="text-sm font-black text-text-secondary bg-gray-50/20 uppercase tracking-[0.2em] border-b border-gray-50">
-                      <th className="px-8 py-4">Product</th>
-                      <th className="px-6 py-4 text-center">Qty</th>
-                      <th className="px-6 py-4 text-right">Unit Price</th>
-                      <th className="px-6 py-4 text-center">GST %</th>
-                      <th className="px-8 py-4 text-right">Line Total</th>
-                      <th className="w-16 py-4"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {items.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="py-24 text-center opacity-20">
-                          <ShoppingCart className="w-16 h-16 mx-auto mb-4" />
-                          <p className="text-sm font-black uppercase tracking-[0.3em] italic">Search products above to add items</p>
-                          <p className="text-xs font-bold uppercase tracking-widest mt-2 opacity-60">Or scan a barcode</p>
-                        </td>
-                      </tr>
-                    ) : (
-                      items.map((item) => {
-                        const lineTotal = item.qty * item.unitPrice
-                        const lineTax = lineTotal * (item.gstRate / 100)
-                        return (
-                          <tr key={item.id} className="group hover:bg-gray-50/50 transition-all animate-in fade-in slide-up duration-300">
-                            <td className="px-8 py-5">
-                              <p className="text-sm font-black text-text-main italic tracking-tight uppercase leading-none">{item.name}</p>
-                              <p className="text-xs font-mono text-gray-400 mt-1.5 font-bold tracking-widest">{item.sku}</p>
-                            </td>
-                            <td className="px-6 py-5">
-                              <div className="flex items-center justify-center gap-3 bg-gray-50/50 p-1 rounded-xl border border-gray-100 w-fit mx-auto shadow-inner">
-                                <button
-                                  onClick={() => updateQty(item.id, -1)}
-                                  className="w-8 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-text-secondary hover:bg-red-50 hover:text-red-500 transition-all shadow-sm active:scale-90"
-                                >
-                                  <Minus className="w-3.5 h-3.5" />
-                                </button>
-                                <span className="text-sm font-black w-8 text-center tabular-nums">{item.qty}</span>
-                                <button
-                                  onClick={() => updateQty(item.id, 1)}
-                                  className="w-8 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center text-text-secondary hover:bg-green-50 hover:text-green-500 transition-all shadow-sm active:scale-90"
-                                >
-                                  <Plus className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                            <td className="px-6 py-5 text-right">
-                              <input
-                                type="number"
-                                value={item.unitPrice}
-                                onChange={(e) => updatePrice(item.id, parseFloat(e.target.value) || 0)}
-                                className="w-28 text-right text-sm font-black text-text-main italic tabular-nums bg-transparent border-b border-transparent hover:border-gray-200 focus:border-primary transition-colors outline-none py-1"
-                                min={0}
-                              />
-                            </td>
-                            <td className="px-6 py-5 text-center">
-                              <span className="text-sm font-bold text-text-secondary tabular-nums">{item.gstRate}%</span>
-                            </td>
-                            <td className="px-8 py-5 text-right">
-                              <p className="text-sm font-black text-text-main italic tabular-nums tracking-tighter">
-                                ₹{lineTotal.toLocaleString('en-IN')}
-                              </p>
-                              {item.gstRate > 0 && (
-                                <p className="text-xs font-bold text-gray-400 mt-0.5 tabular-nums">
-                                  +₹{lineTax.toLocaleString('en-IN', { minimumFractionDigits: 0 })} tax
-                                </p>
-                              )}
-                            </td>
-                            <td className="px-4 py-5 text-center">
-                              <button
-                                onClick={() => removeItem(item.id)}
-                                className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Bottom Bar */}
-              {items.length > 0 && (
-                <div className="p-6 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between">
-                  <div className="flex items-center gap-8 font-black text-sm uppercase tracking-widest italic opacity-60">
-                    <div className="flex items-center gap-3">
-                      <span className="text-gray-400">Items:</span>
-                      <span className="text-primary">{items.length}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-gray-400">Total Qty:</span>
-                      <span className="text-primary">{items.reduce((a, b) => a + b.qty, 0)}</span>
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    onClick={() => { setItems([]); toast.info('All items cleared') }}
-                    className="text-red-500 hover:bg-red-50 font-black text-sm tracking-widest uppercase italic"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" /> Clear All
-                  </Button>
-                </div>
-              )}
-            </div>
+          <div className="flex items-center gap-2">
+            <span className="w-10">Date</span>
+            <input 
+               type="date"
+              value={header.date} 
+              onChange={e => setHeader({...header, date: e.target.value})}
+              className="bg-transparent border-b border-gray-400 font-bold px-1 outline-none focus:border-black"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-16">Vch No.</span>
+            <input 
+              value={header.voucherNumber} 
+              onChange={e => setHeader({...header, voucherNumber: e.target.value})}
+              className="bg-transparent border-b border-gray-400 font-bold px-1 w-24 outline-none focus:border-black"
+            />
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="w-10">Type</span>
+            <select
+              value={header.type}
+              onChange={e => setHeader({...header, type: e.target.value})}
+              className="bg-transparent border-b border-gray-400 font-bold px-1 outline-none focus:border-black"
+            >
+              <option>Direct</option>
+              <option>Against Challan</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+             <span className="w-16 text-right">Sale Type</span>
+            <select
+              value={header.gstType}
+              onChange={e => setHeader({...header, gstType: e.target.value})}
+              className="bg-transparent border-b border-gray-400 font-bold px-1 outline-none focus:border-black w-32"
+            >
+              <option>I/GST-18%</option>
+              <option>I/GST-12%</option>
+              <option>I/GST-5%</option>
+              <option>I/GST-Exempt</option>
+              <option>I/GST-MultiRate</option>
+            </select>
           </div>
         </div>
 
-        {/* Totals Sidebar */}
-        <div className="space-y-6">
-          <SummaryPanel
-            title="Invoice Summary"
-            subtotal={subtotal}
-            taxTotal={taxTotal}
-            taxRate={avgTaxRate}
-            logistics="Free Delivery"
-            grandTotal={grandTotal}
-            footerNote="This is a computer-generated invoice. Authorized signature required for approval."
-          />
+        {/* ROW 2 */}
+        <div className="flex items-center gap-4 py-1">
+          <div className="flex items-center gap-2 flex-1">
+            <span className="w-12">Party</span>
+            <EntityLookup 
+              type="vendor"
+              value={header.partyAccount} 
+              onChange={val => setHeader({...header, partyAccount: val})}
+              onSelect={vendor => {
+                setHeader(prev => ({
+                  ...header,
+                  partyAccount: vendor.name,
+                }));
+              }}
+              placeholder="Select Party Account..."
+              className="bg-transparent border-b border-gray-400 font-bold px-1 w-full outline-none focus:border-black relative z-20"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-20">Mat. Centre</span>
+            <input 
+              value={header.materialCentre} 
+              onChange={e => setHeader({...header, materialCentre: e.target.value})}
+              className="bg-transparent border-b border-gray-400 font-bold px-1 w-32 outline-none focus:border-black"
+            />
+          </div>
+        </div>
 
-          <SummaryActionCard
-            icon={ExternalLink}
-            title="Global Currency: Indian Rupee"
-            subtitle="Base Currency: INR"
-          />
-
-          <SummaryActionCard
-            variant="dashed"
-            icon={FileUp}
-            title="Attach External Files"
-            subtitle="PDF / JPG / DRAFT-B"
-          />
+        {/* ROW 3 */}
+        <div className="flex flex-col gap-1 py-1">
+          <div className="flex gap-2">
+            <span className="w-12 pt-1">Narration</span>
+            <textarea 
+              value={header.narration} 
+              onChange={e => setHeader({...header, narration: e.target.value})}
+              className="bg-transparent border-b border-gray-400 font-bold px-1 flex-1 resize-none h-10 outline-none focus:border-black"
+            />
+          </div>
         </div>
       </div>
+
+      {/* MAIN LEDGER GRID */}
+      <div className="border-t border-b border-gray-300 bg-white flex-1 overflow-auto relative">
+        <table className="w-full text-left border-collapse" style={{ minWidth: '800px' }}>
+          <thead className="sticky top-0 bg-[#E8EDF5] border-b border-gray-300 z-10 shadow-sm">
+            <tr>
+              <th className="font-bold py-1 px-2 border-r border-gray-300 w-12 text-center">S.N.</th>
+              <th className="font-bold py-1 px-2 border-r border-gray-300">Item</th>
+              <th className="font-bold py-1 px-2 border-r border-gray-300 w-24 text-right">Qty.</th>
+              <th className="font-bold py-1 px-2 border-r border-gray-300 w-20">Unit</th>
+              <th className="font-bold py-1 px-2 border-r border-gray-300 w-32 text-right">Price (Rs.)</th>
+              <th className="font-bold py-1 px-2 w-32 text-right">Amount (Rs.)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((line, i) => (
+              <tr key={line.id} className="group border-b border-gray-100 hover:bg-[#F5F8FA]">
+                <td className="py-0.5 px-2 border-r border-gray-200 text-center text-gray-500 font-medium bg-gray-50/50">{line.sno}</td>
+                <td className="py-0 border-r border-gray-200 relative">
+                  <EntityLookup
+                    type="item"
+                    value={line.description}
+                    onChange={(val) => updateLine(i, 'description', val)}
+                    onSelect={(item) => {
+                      updateLine(i, 'description', item.name || item.id);
+                    }}
+                    className="w-full bg-transparent outline-none px-2 font-bold focus:bg-blue-50 focus:ring-1 focus:ring-inset focus:ring-blue-400"
+                  />
+                </td>
+                <td className="py-0 border-r border-gray-200">
+                  <input
+                    type="number"
+                    data-row={i} data-col={2}
+                    value={line.qty || ''}
+                    onChange={(e) => updateLine(i, 'qty', e.target.value)}
+                    onKeyDown={(e) => handleGridKeyDown(e, i, 2, lines.length, 5, addRow)}
+                    className="w-full bg-transparent outline-none px-2 text-right font-bold focus:bg-blue-50 focus:ring-1 focus:ring-inset focus:ring-blue-400"
+                  />
+                </td>
+                <td className="py-0 border-r border-gray-200">
+                  <input
+                    data-row={i} data-col={3}
+                    value={line.unit}
+                    onChange={(e) => updateLine(i, 'unit', e.target.value)}
+                    onKeyDown={(e) => handleGridKeyDown(e, i, 3, lines.length, 5, addRow)}
+                    className="w-full bg-transparent outline-none px-2 font-bold focus:bg-blue-50 focus:ring-1 focus:ring-inset focus:ring-blue-400"
+                  />
+                </td>
+                <td className="py-0 border-r border-gray-200">
+                  <input
+                    type="number"
+                    data-row={i} data-col={4}
+                    value={line.price || ''}
+                    onChange={(e) => updateLine(i, 'price', e.target.value)}
+                    onKeyDown={(e) => handleGridKeyDown(e, i, 4, lines.length, 5, addRow)}
+                    className="w-full bg-transparent outline-none px-2 text-right font-bold focus:bg-blue-50 focus:ring-1 focus:ring-inset focus:ring-blue-400"
+                  />
+                </td>
+                <td className="py-0">
+                  <div className="w-full px-2 text-right font-bold text-gray-800 tabular-nums">
+                    {line.amount > 0 ? line.amount.toFixed(2) : ''}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        
+        <datalist id="inventory-sales-items">
+          {inventory.map(item => (
+            <option key={item.id} value={item.name} />
+          ))}
+        </datalist>
+      </div>
+
+      {/* BOTTOM SECTION */}
+      <div className="grid grid-cols-[1fr,1.5fr,1fr] gap-0 border-b border-gray-300 min-h-[160px] bg-[#E6F2FF]">
+        {/* LEFT: Tax Summary */}
+        <div className="border-r border-gray-300 p-2">
+          <div className="fieldset-border relative border border-gray-400 p-2 pt-3 mt-2 h-full bg-[#FAFAFA] border-opacity-60 bg-opacity-60">
+            <span className="absolute -top-2 left-2 bg-transparent px-1 text-xs text-gray-600 font-bold">Tax Summary</span>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-300 text-gray-600">
+                  <th className="font-normal text-left underline pb-1">Tax Rate</th>
+                  <th className="font-normal text-right underline pb-1">Taxable Amt.</th>
+                  <th className="font-normal text-right underline pb-1">IGST</th>
+                  <th className="font-normal text-right underline pb-1">SGST</th>
+                </tr>
+              </thead>
+              <tbody>
+                {totals.taxSummaries.map((tax) => (
+                  <tr key={tax.taxRate}>
+                    <td className="font-bold py-1">{tax.taxRate}%</td>
+                    <td className="text-right font-bold">{tax.taxableAmount.toFixed(2)}</td>
+                    <td className="text-right font-bold">{tax.cgst.toFixed(2)}</td>
+                    <td className="text-right font-bold">{tax.sgst.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="mt-4 flex items-center gap-2">
+               <input type="checkbox" id="stax" checked={isTaxApplied} onChange={() => setIsTaxApplied(!isTaxApplied)} />
+               <label htmlFor="stax" className="text-purple-800 font-bold">Tax Summary</label>
+            </div>
+          </div>
+        </div>
+
+        {/* CENTER: Totals */}
+        <div className="flex flex-col items-center justify-start pt-2 border-r border-gray-300 relative">
+          <div className="w-full flex justify-between px-2 mb-2 items-center">
+            <button 
+              onClick={() => setIsTaxApplied(!isTaxApplied)}
+              className="bg-gray-200 border border-gray-400 px-3 py-1 shadow-sm font-bold hover:bg-gray-300 active:translate-y-[1px]"
+            >
+              Apply Tax (F4)
+            </button>
+            <div className="font-bold text-center pl-10 pr-2">
+               {totals.totalQty > 0 ? totals.totalQty : '0.00'} <span className="font-normal text-gray-600">(Alt. Qty. = 0.00)</span>
+            </div>
+            <div className="font-bold text-lg tabular-nums">
+              {totals.taxableAmount.toFixed(2)}
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT: Bill Sundry */}
+        <div className="bg-white">
+          <table className="w-full text-left border-collapse h-full">
+            <thead className="bg-[#E8EDF5] border-b border-gray-300">
+              <tr>
+                <th className="font-bold py-1 px-2 border-r border-gray-300 w-8 text-center">S.N.</th>
+                <th className="font-bold py-1 px-2 border-r border-gray-300">Bill Sundry</th>
+                <th className="font-bold py-1 px-2 border-r border-gray-300 w-12 text-center">@</th>
+                <th className="font-bold py-1 px-2 text-right w-24">Amount (Rs.)</th>
+              </tr>
+            </thead>
+            <tbody>
+               {sundries.map((sun, i) => (
+                  <tr key={sun.id} className="border-b border-gray-100 h-6">
+                    <td className="px-2 border-r border-gray-200 text-center text-gray-500">{i + 1}</td>
+                    <td className="px-0 border-r border-gray-200">
+                      <input
+                         value={sun.name}
+                         onChange={(e) => updateSundry(i, 'name', e.target.value)}
+                         className="w-full bg-transparent outline-none px-2 font-bold focus:bg-blue-50 focus:ring-1 focus:ring-inset focus:ring-blue-400"
+                      />
+                    </td>
+                    <td className="px-0 border-r border-gray-200">
+                      <input
+                         type="number"
+                         value={sun.percentage || ''}
+                         onChange={(e) => updateSundry(i, 'percentage', e.target.value)}
+                         className="w-full bg-transparent outline-none px-2 text-center font-bold focus:bg-blue-50 focus:ring-1 focus:ring-inset focus:ring-blue-400"
+                      />
+                    </td>
+                    <td className="px-0">
+                      <input
+                         type="number"
+                         value={sun.amount || ''}
+                         onChange={(e) => updateSundry(i, 'amount', e.target.value)}
+                         className="w-full bg-transparent outline-none px-2 text-right font-bold focus:bg-blue-50 focus:ring-1 focus:ring-inset focus:ring-blue-400"
+                      />
+                    </td>
+                  </tr>
+               ))}
+               <tr><td colSpan={4} className="h-full bg-[#FAFAFA] bg-opacity-50"></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* GRAND TOTAL ROW */}
+      <div className="flex justify-end pr-3 py-1 font-black text-2xl tabular-nums tracking-tight">
+        {totals.grandTotal.toFixed(2)}
+      </div>
+
+      {/* FOOTER ACTION BAR */}
+      <div className="sticky bottom-0 bg-[#E6F2FF] border-t border-gray-300 p-1 flex items-center justify-between gap-1 overflow-x-auto shadow-[0_-2px_5px_rgba(0,0,0,0.05)]">
+         <div className="flex gap-1">
+            {['Vch. Detail', 'Master Detail', 'Party Dash Board'].map(t => (
+               <button key={t} className="bg-[#EAEAEA] border border-gray-400 px-3 py-1 font-bold text-black shadow-[1px_1px_0_#FFF] hover:bg-gray-300 active:translate-y-[1px]">
+                  {t}
+               </button>
+            ))}
+            {['VCH IMAGE', 'ACC IMAGE', 'ITEM IMAGE'].map(t => (
+               <button key={t} className="bg-[#D1D9E0] border border-gray-400 px-2 py-1 font-bold text-[10px] text-black shadow-[1px_1px_0_#FFF] hover:bg-gray-400 active:translate-y-[1px] leading-tight">
+                  {t.split(' ').map(w => <div key={w}>{w}</div>)}
+               </button>
+            ))}
+            {['Hold Vch.', 'Update Disc./Markup', 'Check Scheme'].map(t => (
+               <button key={t} className="bg-transparent border-none px-2 py-1 font-bold text-gray-700 underline hover:text-black hover:bg-black/5">
+                  {t}
+               </button>
+            ))}
+         </div>
+         <div className="flex gap-1 pl-4 shrink-0">
+             <button onClick={handleSave} className="bg-white border border-gray-400 px-4 py-1 font-bold shadow-[inset_1px_1px_0_#FFF] hover:bg-gray-100 active:translate-y-[1px]">
+                Save
+             </button>
+             <button onClick={() => router.push('/dashboard')} className="bg-white border border-gray-400 px-4 py-1 font-bold shadow-[inset_1px_1px_0_#FFF] hover:bg-gray-100 active:translate-y-[1px]">
+                Quit
+             </button>
+         </div>
+      </div>
     </div>
-  )
+  );
 }

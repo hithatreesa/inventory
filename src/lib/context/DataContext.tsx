@@ -30,6 +30,28 @@ export interface Engineer {
   type?: "IT" | "TECHNICAL"
 }
 
+export interface Vendor {
+  id: string
+  name: string
+  gst?: string
+  phone?: string
+  email?: string
+  address?: string
+}
+
+const MOCK_VENDORS: Vendor[] = [
+  { id: 'v1', name: 'Aether Logistics', gst: '29ABCDE1234F1Z5', phone: '9876543210' },
+  { id: 'v2', name: 'Nexus Tech Supplies', gst: '27XYZDE1234F2Z1', phone: '9988776655' },
+  { id: 'v3', name: 'Global Impex', gst: '07ABXYZ1234F3Z2', phone: '9123456780' },
+  { id: 'v4', name: 'Apex Hardware Solutions', gst: '22DEFGH5678G4Y6', phone: '9876511223' },
+  { id: 'v5', name: 'Rapid Enterprises', gst: '33HIJKL9012H5X7', phone: '9988711445' },
+  { id: 'v6', name: 'Pioneer IT Distributors', gst: '09MNOPQ3456I6W8', phone: '9123499887' },
+  { id: 'v7', name: 'Stellar Networks', gst: '19RSTUV7890J7V9', phone: '8877665544' },
+  { id: 'v8', name: 'Quantum Core', gst: '24WXYZA1234K8U0', phone: '8123456789' },
+  { id: 'v9', name: 'Orion PC Parts', gst: '11BCDEF5678L9T1', phone: '7766554433' },
+  { id: 'v10', name: 'Matrix Systems', gst: '06GHIJK9012M0S2', phone: '9988771122' },
+];
+
 export interface Transaction {
   id: string
   item_id: string
@@ -199,6 +221,7 @@ interface DataContextType {
   transactions: Transaction[]
   logs: Log[]
   engineers: Engineer[]
+  vendors: Vendor[]
   tickets: Ticket[]
   fetchData: () => Promise<void>
   inwardItem: (itemId: string, qty: number, reference?: string) => Promise<void>
@@ -211,6 +234,7 @@ interface DataContextType {
   editItem: (id: string, updates: Partial<InventoryItem>) => Promise<void>
   createTransaction: (txn: Partial<Transaction>) => Promise<void>
   addEngineer: (data: { name: string, type: "IT" | "TECHNICAL" }) => void
+  addVendor: (vendor: Partial<Vendor>) => void
   deleteItems: (ids: string[]) => Promise<void>
   processPO: (header: { vendor: string, date: string, reference: string }, lines: PurchaseLine[]) => Promise<void>
   issueToEngineer: (engineerId: string, lines: IssueLine[]) => Promise<void>
@@ -260,6 +284,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [engineers, setEngineers] = useState<Engineer[]>(MOCK_ENGINEERS)
+  const [vendors, setVendors] = useState<Vendor[]>(MOCK_VENDORS)
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [logs, setLogs] = useState<Log[]>([])
   const [catalog, setCatalog] = useState<InventoryItem[]>(() => {
@@ -917,11 +942,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     addLog(`ENGINEER ADDED: ${data.name} (${data.type})`);
   }
 
+  const addVendor = useCallback((data: Partial<Vendor>) => {
+    setVendors(prev => [...prev, {
+      id: "vnd_" + Date.now(),
+      name: data.name || 'Unknown',
+      gst: data.gst || '',
+      phone: data.phone || ''
+    }]);
+    addLog(`VENDOR ADDED: ${data.name}`);
+  }, [addLog]);
+
   const value = useMemo(() => ({
     inventory,
     transactions,
     logs,
     engineers,
+    vendors,
     tickets,
     fetchData,
     inwardItem,
@@ -939,6 +975,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     processBarcode,
     createTransaction,
     addEngineer,
+    addVendor,
 
     // POS Sale Flow
     sellFromPOS,
@@ -984,7 +1021,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         await legacyReturnItem(t.item_id, t.engineer_id, 1)
       }
     }
-  }), [inventory, transactions, logs, engineers, tickets, fetchData, addLog])
+  }), [inventory, transactions, logs, engineers, vendors, tickets, fetchData, addLog, addVendor])
 
   return (
     <DataContext.Provider value={value}>

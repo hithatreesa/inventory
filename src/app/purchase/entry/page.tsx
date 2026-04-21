@@ -8,6 +8,7 @@ import { calculateLedgerTotals, calculateLineAmount } from '@/modules/ledger/led
 import { handleGridKeyDown, focusCell } from '@/modules/ledger/grid-navigation';
 import { useGlobalKeyboardShortcuts } from '@/modules/ledger/keyboard-handler';
 import { toast } from 'sonner';
+import { EntityLookup } from '@/components/shared/EntityLookup';
 
 export default function PurchaseLedgerEntry() {
   const router = useRouter();
@@ -160,7 +161,7 @@ export default function PurchaseLedgerEntry() {
 
   return (
     <div className="min-h-screen bg-[var(--color-ledger-purchase)] text-black font-sans uppercase flex flex-col h-screen overflow-hidden">
-      
+
       {/* TOP HEADER */}
       <div className="flex justify-between items-end border-b-2 border-[var(--color-ledger-border)] p-4 shrink-0 bg-white/50">
         <div className="flex items-center gap-6">
@@ -181,38 +182,38 @@ export default function PurchaseLedgerEntry() {
         <div className="grid grid-cols-1 md:grid-cols-12 border-b border-[var(--color-ledger-border)]">
           <div className="col-span-12 md:col-span-2 border-r border-[var(--color-ledger-border)] p-2">
             <label className="block text-[9px] font-bold text-gray-500">SERIES</label>
-            <input 
-              value={header.series} 
-              onChange={e => setHeader({...header, series: e.target.value})}
+            <input
+              value={header.series}
+              onChange={e => setHeader({ ...header, series: e.target.value })}
               className="w-full bg-transparent outline-none font-black text-sm border-b border-gray-300 focus:border-blue-500 py-1"
             />
           </div>
           <div className="col-span-12 md:col-span-2 border-r border-[var(--color-ledger-border)] p-2">
             <label className="block text-[9px] font-bold text-gray-500">DATE (DAY)</label>
             <div className="flex items-center gap-2 border-b border-gray-300 focus-within:border-blue-500 py-1">
-               <input 
-                 type="date"
-                 value={header.date} 
-                 onChange={e => setHeader({...header, date: e.target.value})}
-                 className="bg-transparent outline-none font-black text-sm w-full"
-               />
+              <input
+                type="date"
+                value={header.date}
+                onChange={e => setHeader({ ...header, date: e.target.value })}
+                className="bg-transparent outline-none font-black text-sm w-full"
+              />
             </div>
           </div>
           <div className="col-span-12 md:col-span-3 border-r border-[var(--color-ledger-border)] p-2">
             <label className="block text-[9px] font-bold text-gray-500">SUPPLIER REF. / INV NO.</label>
-            <input 
-              value={header.supplierReference} 
-              onChange={e => setHeader({...header, supplierReference: e.target.value})}
+            <input
+              value={header.supplierReference}
+              onChange={e => setHeader({ ...header, supplierReference: e.target.value })}
               placeholder="e.g. INV-2023-100"
               className="w-full bg-transparent outline-none font-black text-blue-700 text-sm border-b border-gray-300 focus:border-blue-500 py-1"
             />
           </div>
           <div className="col-span-12 md:col-span-3 border-r border-[var(--color-ledger-border)] p-2">
             <label className="block text-[9px] font-bold text-gray-500">PURCHASE TYPE</label>
-            <select 
-               value={header.gstType}
-               onChange={e => setHeader({...header, gstType: e.target.value})}
-               className="w-full bg-transparent outline-none font-black text-sm border-b border-gray-300 focus:border-blue-500 py-1"
+            <select
+              value={header.gstType}
+              onChange={e => setHeader({ ...header, gstType: e.target.value })}
+              className="w-full bg-transparent outline-none font-black text-sm border-b border-gray-300 focus:border-blue-500 py-1"
             >
               <option>LGST 18% (Registered)</option>
               <option>IGST 18% (Interstate)</option>
@@ -227,18 +228,25 @@ export default function PurchaseLedgerEntry() {
         <div className="grid grid-cols-1 md:grid-cols-12 border-b border-[var(--color-ledger-border)]">
           <div className="col-span-12 md:col-span-8 border-r border-[var(--color-ledger-border)] p-2">
             <label className="block text-[9px] font-bold text-gray-500">PARTY ACCOUNT NAME (FULL WIDTH)</label>
-            <input 
-              value={header.partyAccount} 
-              onChange={e => setHeader({...header, partyAccount: e.target.value})}
+            <EntityLookup
+              type="vendor"
+              value={header.partyAccount}
+              onChange={val => setHeader({ ...header, partyAccount: val })}
+              onSelect={vendor => {
+                setHeader(prev => ({
+                  ...header,
+                  partyAccount: vendor.name,
+                }));
+              }}
               placeholder="Select Ledger (Press Space)"
               className="w-full bg-transparent outline-none font-black text-blue-700 text-base border-b border-gray-300 focus:border-blue-500 py-1 placeholder:text-gray-300 placeholder:italic"
             />
           </div>
           <div className="col-span-12 md:col-span-4 p-2">
             <label className="block text-[9px] font-bold text-gray-500">MATERIAL CENTRE</label>
-            <input 
-              value={header.materialCentre} 
-              onChange={e => setHeader({...header, materialCentre: e.target.value})}
+            <input
+              value={header.materialCentre}
+              onChange={e => setHeader({ ...header, materialCentre: e.target.value })}
               className="w-full bg-transparent outline-none font-black text-sm border-b border-gray-300 focus:border-blue-500 py-1"
             />
           </div>
@@ -247,9 +255,9 @@ export default function PurchaseLedgerEntry() {
         <div className="grid grid-cols-1 md:grid-cols-12">
           <div className="col-span-12 md:col-span-4 border-r border-[var(--color-ledger-border)] p-2">
             <label className="block text-[9px] font-bold text-gray-500">ITC ELIGIBILITY</label>
-            <select 
+            <select
               value={header.itcEligibility}
-              onChange={e => setHeader({...header, itcEligibility: e.target.value})}
+              onChange={e => setHeader({ ...header, itcEligibility: e.target.value })}
               className="w-full bg-transparent outline-none font-black text-sm border-b border-gray-300 focus:border-blue-500 py-1"
             >
               <option>Input Goods/Services</option>
@@ -259,9 +267,9 @@ export default function PurchaseLedgerEntry() {
           </div>
           <div className="col-span-12 md:col-span-8 p-2">
             <label className="block text-[9px] font-bold text-gray-500">NARRATION / REMARK</label>
-            <input 
-              value={header.narration} 
-              onChange={e => setHeader({...header, narration: e.target.value})}
+            <input
+              value={header.narration}
+              onChange={e => setHeader({ ...header, narration: e.target.value })}
               placeholder="Being goods purchased vide Bill No..."
               className="w-full bg-transparent outline-none font-bold text-sm border-b border-gray-300 focus:border-blue-500 py-1 italic text-gray-600 placeholder:text-gray-300"
             />
@@ -290,17 +298,19 @@ export default function PurchaseLedgerEntry() {
                     <span className={line.qty > 0 ? "text-blue-600" : ""}>{line.sno}.</span>
                   ) : rowIndex + 1}
                 </td>
-                <td className="border-r border-gray-100 px-2 py-1">
-                  <input
-                    type="text"
+                <td className="border-r border-gray-100 px-2 py-1 relative">
+                  <EntityLookup
+                    type="item"
                     value={line.description}
-                    onChange={(e) => updateLine(rowIndex, 'description', e.target.value)}
-                    onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 1, lines.length, 5, addRow)}
-                    data-row={rowIndex}
-                    data-col={1}
-                    className="w-full bg-transparent outline-none font-black text-sm focus:bg-blue-50 px-1"
+                    onChange={(val) => updateLine(rowIndex, 'description', val)}
+                    onSelect={(item) => {
+                      // Simulating the item assignment block
+                      updateLine(rowIndex, 'description', item.name || item.id);
+                    }}
                     placeholder={rowIndex === 0 && !line.description ? "Start typing item name..." : ""}
+                    className="w-full bg-transparent outline-none font-black text-sm focus:bg-blue-50 px-1"
                   />
+                  {/* Keep the grid keyboard handler passive listener mapping by rendering a hidden input to capture generic data-row, data-col if required or simply rely on EntityLookup */}
                 </td>
                 <td className="border-r border-gray-100 px-2 py-1">
                   <input
@@ -346,7 +356,7 @@ export default function PurchaseLedgerEntry() {
 
       {/* BOTTOM PANELS */}
       <div className="h-44 shrink-0 flex bg-[var(--color-ledger-purchase)] border-b border-[var(--color-ledger-border)]">
-        
+
         {/* Tax Summary */}
         <div className="w-1/4 border-r border-[var(--color-ledger-border)] p-4 flex flex-col bg-white/50">
           <div className="text-[9px] font-black bg-gray-100 px-2 py-1 border border-gray-200 mb-2">TAX SUMMARY</div>
@@ -362,11 +372,11 @@ export default function PurchaseLedgerEntry() {
                   <span className="font-mono font-black">{tax.taxableAmount.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-xs text-blue-600">
-                  <span className="font-bold">CGST ({(tax.taxRate/2).toFixed(1)}%)</span>
+                  <span className="font-bold">CGST ({(tax.taxRate / 2).toFixed(1)}%)</span>
                   <span className="font-mono">{tax.cgst.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-xs text-blue-600">
-                  <span className="font-bold">SGST ({(tax.taxRate/2).toFixed(1)}%)</span>
+                  <span className="font-bold">SGST ({(tax.taxRate / 2).toFixed(1)}%)</span>
                   <span className="font-mono">{tax.sgst.toFixed(2)}</span>
                 </div>
               </div>
@@ -378,13 +388,13 @@ export default function PurchaseLedgerEntry() {
 
         {/* Center Totals */}
         <div className="w-2/4 border-r border-[var(--color-ledger-border)] p-6 flex flex-col justify-between items-center bg-[var(--color-ledger-purchase)]/30">
-          <button 
+          <button
             onClick={toggleTax}
             className={`px-8 py-2 font-black text-sm shadow border transition-colors ${isTaxApplied ? 'bg-red-600 text-white border-red-700 hover:bg-red-700' : 'bg-[#1E3A8A] text-white border-blue-900 hover:bg-blue-800'}`}
           >
             {isTaxApplied ? "REMOVE TAX (F4)" : "APPLY TAX (F4)"}
           </button>
-          
+
           <div className="w-full flex justify-between items-end mt-4">
             <div className="flex gap-8 px-4">
               <div className="text-center">
@@ -397,8 +407,8 @@ export default function PurchaseLedgerEntry() {
               </div>
             </div>
             <div className="bg-black text-white px-6 py-3 ml-auto shadow-xl">
-               <div className="text-[10px] text-gray-400 font-bold tracking-widest mb-1">GRAND TOTAL (₹)</div>
-               <div className="text-3xl font-black font-mono tracking-tighter">{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+              <div className="text-[10px] text-gray-400 font-bold tracking-widest mb-1">GRAND TOTAL (₹)</div>
+              <div className="text-3xl font-black font-mono tracking-tighter">{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
             </div>
           </div>
         </div>
@@ -409,17 +419,17 @@ export default function PurchaseLedgerEntry() {
           <div className="flex-1 space-y-2">
             {sundries.map((sundry, index) => (
               <div key={sundry.id} className="flex justify-between items-center text-xs">
-                 <span className="font-bold">{sundry.name}</span>
-                 <input 
-                   type="number" 
-                   value={sundry.amount || ''} 
-                   onChange={(e) => {
-                     const newSundries = [...sundries];
-                     newSundries[index].amount = Number(e.target.value);
-                     setSundries(newSundries);
-                   }}
-                   className={`w-20 text-right bg-transparent outline-none font-mono font-black ${sundry.amount < 0 ? 'text-red-600' : ''}`}
-                 />
+                <span className="font-bold">{sundry.name}</span>
+                <input
+                  type="number"
+                  value={sundry.amount || ''}
+                  onChange={(e) => {
+                    const newSundries = [...sundries];
+                    newSundries[index].amount = Number(e.target.value);
+                    setSundries(newSundries);
+                  }}
+                  className={`w-20 text-right bg-transparent outline-none font-mono font-black ${sundry.amount < 0 ? 'text-red-600' : ''}`}
+                />
               </div>
             ))}
           </div>
@@ -432,33 +442,33 @@ export default function PurchaseLedgerEntry() {
 
       {/* FIXED FOOTER */}
       <div className="shrink-0 h-10 bg-[#0F172A] text-white flex items-center shadow-inner overflow-x-auto text-[9px] font-black tracking-widest">
-         <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
-           <span><span className="text-blue-400 border-b border-blue-400">V</span>CH DETAIL</span>
-         </button>
-         <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
-           <span>MASTER DETAIL</span>
-         </button>
-         <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
-           <span>PARTY DASH</span>
-         </button>
-         <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
-           <span>VCH IMAGE</span>
-         </button>
-         <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
-           <span>HOLD VCH</span>
-         </button>
-         <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
-           <span>UPDATE DISC</span>
-         </button>
-         <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
-           <span>CHECK SCHEME</span>
-         </button>
-         <button onClick={handleSave} className="px-8 h-full bg-[#1E3A8A] border-r border-blue-900 hover:bg-blue-800 flex items-center gap-2 ml-auto shadow-md">
-           SAVE (F2)
-         </button>
-         <button onClick={handleQuit} className="px-6 h-full bg-[#7F1D1D] hover:bg-red-800 flex items-center gap-2">
-           QUIT (ESC)
-         </button>
+        <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
+          <span><span className="text-blue-400 border-b border-blue-400">V</span>CH DETAIL</span>
+        </button>
+        <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
+          <span>MASTER DETAIL</span>
+        </button>
+        <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
+          <span>PARTY DASH</span>
+        </button>
+        <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
+          <span>VCH IMAGE</span>
+        </button>
+        <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
+          <span>HOLD VCH</span>
+        </button>
+        <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
+          <span>UPDATE DISC</span>
+        </button>
+        <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
+          <span>CHECK SCHEME</span>
+        </button>
+        <button onClick={handleSave} className="px-8 h-full bg-[#1E3A8A] border-r border-blue-900 hover:bg-blue-800 flex items-center gap-2 ml-auto shadow-md">
+          SAVE (F2)
+        </button>
+        <button onClick={handleQuit} className="px-6 h-full bg-[#7F1D1D] hover:bg-red-800 flex items-center gap-2">
+          QUIT (ESC)
+        </button>
       </div>
     </div>
   );

@@ -25,26 +25,38 @@ export default function PurchaseDashboard() {
   const { transactions, inventory, inwardItem } = useData()
   const [isItemModalOpen, setIsItemModalOpen] = useState(false)
 
+  const inventoryMap = useMemo(() => {
+    return new Map(inventory.map(i => [i.id, i]))
+  }, [inventory])
+
   const purchaseHistory = useMemo(() => {
     return transactions
-      .filter(t => t.type === 'INWARD')
-      .map(t => {
-        const item = inventory.find(i => i.id === t.item_id)
-        return {
-          id: `PO-${t.id}`,
-          vendor: t.reference || 'Auto-Procured',
-          date: t.date,
-          amount: t.quantity * (item?.price || 0),
-          status: 'Completed',
-          items: t.quantity,
-          itemName: item?.name || 'Unknown'
+      .reduce((acc: any[], t) => {
+        if (t.type === 'INWARD') {
+          const item = inventoryMap.get(t.item_id)
+          acc.push({
+            id: `PO-${t.id}`,
+            vendor: t.reference || 'Auto-Procured',
+            date: t.date,
+            amount: t.quantity * (item?.price || 0),
+            status: 'Completed',
+            items: t.quantity,
+            itemName: item?.name || 'Unknown'
+          })
         }
-      })
-  }, [transactions, inventory])
+        return acc
+      }, [])
+  }, [transactions, inventoryMap])
 
   const stats = useMemo(() => {
     const totalSpent = purchaseHistory.reduce((acc, p) => acc + p.amount, 0)
-    const pending = transactions.filter(t => t.status === 'PENDING').length
+    let pending = 0
+
+    // Single pass for pending status count
+    for (let i = 0; i < transactions.length; i++) {
+      if (transactions[i].status === 'PENDING') pending++
+    }
+
     return {
       totalSpent,
       pending,
@@ -52,7 +64,7 @@ export default function PurchaseDashboard() {
     }
   }, [purchaseHistory, transactions])
 
-  const columns: Column<any>[] = [
+  const columns: Column<any>[] = useMemo(() => [
     {
       header: 'ORDER ID',
       cell: (order) => (
@@ -94,15 +106,13 @@ export default function PurchaseDashboard() {
       header: 'STATUS',
       align: 'right',
       cell: (order) => (
-        <span className={cn(
-          "inline-flex items-center gap-2 font-black italic text-sm tracking-tight uppercase text-green-600"
-        )}>
+        <span className={cn("inline-flex items-center gap-2 font-black italic text-sm tracking-tight uppercase text-green-600")}>
           <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
           {order.status}
         </span>
       )
     }
-  ]
+  ], [])
 
   return (
     <div className="space-y-8 pb-12">
@@ -120,12 +130,6 @@ export default function PurchaseDashboard() {
             onClick={() => toast.info('Export started')}
           >
             <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-2" /> EXPORT
-          </Button>
-          <Button
-            onClick={() => setIsItemModalOpen(true)}
-            className="flex-shrink-0 rounded-xl sm:rounded-2xl shadow-[0_10px_30px_rgba(0,51,102,0.3)] font-black text-[8px] sm:text-[10px] tracking-widest h-10 sm:h-12 px-6 sm:px-8 italic bg-[#003366] text-white snap-center"
-          >
-            <Plus className="w-4 h-4 sm:w-5 sm:h-5 mr-1 text-white" /> ADD ITEM
           </Button>
           <Button
             onClick={() => router.push('/purchase/entry')}

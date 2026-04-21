@@ -2,9 +2,11 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { User, Package, Clock, Plus, Activity } from 'lucide-react';
+import { User, Package, Clock, Plus, Activity, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useData, Engineer, Transaction } from '@/lib/context/DataContext';
+import { EntityLookup } from '@/components/shared/EntityLookup';
+import { toast } from 'sonner';
 
 export default function EngineerPage() {
   const router = useRouter();
@@ -22,12 +24,58 @@ export default function EngineerPage() {
     return engineers.find((e: Engineer) => e.id === selectedEngineerId);
   }, [engineers, selectedEngineerId]);
 
+  // Form State for Issued Material
+  const [issuedForm, setIssuedForm] = useState({
+    ticketNo: '',
+    date: new Date().toISOString().split('T')[0],
+    customerName: '',
+    items: [{ id: Date.now().toString(), name: '', qty: 1 }]
+  });
+
+  const handleAddFormItem = () => {
+    setIssuedForm(prev => ({
+      ...prev,
+      items: [...prev.items, { id: Date.now().toString(), name: '', qty: 1 }]
+    }));
+  };
+
+  const handleUpdateFormItem = (id: string, field: string, value: any) => {
+    setIssuedForm(prev => ({
+      ...prev,
+      items: prev.items.map(item => item.id === id ? { ...item, [field]: value } : item)
+    }));
+  };
+
+  const handleRemoveFormItem = (id: string) => {
+    if (issuedForm.items.length <= 1) return;
+    setIssuedForm(prev => ({
+      ...prev,
+      items: prev.items.filter(item => item.id !== id)
+    }));
+  };
+
+  const submitIssuedForm = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (issuedForm.items.some(i => !i.name)) {
+      toast.error("Please fill in all item names");
+      return;
+    }
+    toast.success("Material Issue Recorded Successfully!");
+    // Form submission mock logic - resets the form
+    setIssuedForm({
+      ticketNo: '',
+      date: new Date().toISOString().split('T')[0],
+      customerName: '',
+      items: [{ id: Date.now().toString(), name: '', qty: 1 }]
+    });
+  };
+
   // DERIVED STATS FOR ENGINEERS
   const engineersWithStats = useMemo(() => {
     return engineers.map((eng: Engineer) => {
       const serials = getEngineerSerials ? getEngineerSerials(eng.id) : [];
       const engTxns = (transactions || []).filter((t: Transaction) => t.engineer_id === eng.id);
-      
+
       const taken = engTxns.filter((t: Transaction) => t.type === 'ASSIGN').length;
       const returned = engTxns.filter((t: Transaction) => t.type === 'RETURN').length;
 
@@ -230,6 +278,115 @@ export default function EngineerPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* C. Issued Material Form Card */}
+        <div className="bg-white rounded-[32px] border border-border-main overflow-hidden shadow-sm flex flex-col mb-10">
+          <div className="p-6 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
+            <h3 className="text-lg font-black text-[#003366] italic uppercase tracking-tight">Issued Material</h3>
+          </div>
+          <form onSubmit={submitIssuedForm} className="p-6 lg:p-8 flex flex-col gap-6">
+            <div className="flex flex-col gap-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Ticket Number</label>
+                <input
+                  required
+                  placeholder="e.g. TCK-12345"
+                  value={issuedForm.ticketNo}
+                  onChange={e => setIssuedForm({ ...issuedForm, ticketNo: e.target.value })}
+                  className="w-full h-12 bg-gray-50/50 border border-gray-200 rounded-xl px-4 text-sm font-bold placeholder:text-gray-300 outline-none focus:border-[#003366] transition-all"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Date</label>
+                <input
+                  required
+                  type="date"
+                  value={issuedForm.date}
+                  onChange={e => setIssuedForm({ ...issuedForm, date: e.target.value })}
+                  className="w-full h-12 bg-gray-50/50 border border-gray-200 rounded-xl px-4 text-sm font-bold outline-none focus:border-[#003366] transition-all"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Engineer Name</label>
+                <input
+                  disabled
+                  value={selectedEngineer?.name || ''}
+                  className="w-full h-12 bg-gray-100 border border-gray-200 rounded-xl px-4 text-sm font-bold text-gray-500 outline-none cursor-not-allowed"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Customer Name</label>
+                <input
+                  required
+                  placeholder="Company / Client Name"
+                  value={issuedForm.customerName}
+                  onChange={e => setIssuedForm({ ...issuedForm, customerName: e.target.value })}
+                  className="w-full h-12 bg-gray-50/50 border border-gray-200 rounded-xl px-4 text-sm font-bold placeholder:text-gray-300 outline-none focus:border-[#003366] transition-all"
+                />
+              </div>
+            </div>
+
+            <div className="pt-4 mt-2 border-t border-gray-50 space-y-4">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-black text-[#003366] uppercase tracking-widest pl-1 italic">Items Consumed</label>
+              </div>
+
+              <div className="space-y-3">
+                {issuedForm.items.map((item, idx) => (
+                  <div key={item.id} className="flex flex-col sm:flex-row gap-3 items-end">
+                    <div className="w-full sm:flex-1">
+                      <div className="relative">
+                        <EntityLookup
+                          type="item"
+                          placeholder="Search item..."
+                          value={item.name}
+                          onChange={val => handleUpdateFormItem(item.id, 'name', val)}
+                          onSelect={selected => handleUpdateFormItem(item.id, 'name', selected.name || selected.id)}
+                          className="w-full h-12 bg-white border border-gray-200 rounded-xl px-4 text-sm font-bold outline-none focus:border-[#003366] transition-all shadow-sm"
+                        />
+                      </div>
+                    </div>
+                    <div className="w-full sm:w-24 shrink-0 relative">
+                      <input
+                        type="number"
+                        min="1"
+                        required
+                        value={item.qty}
+                        onChange={e => handleUpdateFormItem(item.id, 'qty', parseInt(e.target.value) || 1)}
+                        className="w-full h-12 bg-white border border-gray-200 rounded-xl text-center text-sm font-black outline-none focus:border-[#003366] transition-all shadow-sm"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveFormItem(item.id)}
+                      disabled={issuedForm.items.length === 1}
+                      className="h-12 px-4 rounded-xl text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-30 flex items-center justify-center shrink-0 border border-transparent hover:border-red-100"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAddFormItem}
+                className="text-[10px] font-black uppercase tracking-widest italic text-[#003366] hover:text-blue-700 underline underline-offset-4 pt-2"
+              >
+                + Add Another Item
+              </button>
+            </div>
+
+            <div className="pt-6 flex justify-end">
+              <button
+                type="submit"
+                className="px-8 h-12 bg-[#003366] text-white rounded-xl text-[10px] font-black uppercase tracking-widest italic hover:bg-blue-900 transition-all shadow-md flex items-center gap-2"
+              >
+                Submit Record
+              </button>
+            </div>
+          </form>
         </div>
 
       </div>

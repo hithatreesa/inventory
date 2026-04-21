@@ -188,7 +188,7 @@ function DetailedReportContent() {
                               <span className={cn(
                                  "h-6 px-3 rounded-lg font-black italic text-[9px] uppercase tracking-tighter flex items-center justify-center border border-transparent shadow-sm",
                                  row.status === 'Critical' ? 'bg-red-50 text-red-600' : row.status === 'Verified' ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-400'
-                               )}>
+                              )}>
                                  {row.status}
                               </span>
                            </td>

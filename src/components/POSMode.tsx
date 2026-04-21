@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useData } from '@/lib/context/DataContext';
 import { toast } from 'sonner';
+import { EntityLookup } from '@/components/shared/EntityLookup';
 
 interface POSModeProps {
   onExit: () => void;
@@ -12,6 +13,7 @@ export default function POSMode({ onExit }: POSModeProps) {
   const { inventory, outwardItem, engineers } = useData();
   const [cart, setCart] = useState<any[]>([]);
   const [barcodeInput, setBarcodeInput] = useState("");
+  const [customer, setCustomer] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Point 20: Use a dedicated Terminal ID for POS sales
@@ -111,16 +113,14 @@ export default function POSMode({ onExit }: POSModeProps) {
           
           {/* STEP 6: BARCODE INPUT */}
           <div className="p-6 border-b border-gray-100 bg-gray-50/50">
-             <input
-               autoFocus
+             <EntityLookup
+               type="item"
                placeholder="Scan barcode or type SKU (e.g. CAM-001)..."
                value={barcodeInput}
-               onChange={(e) => setBarcodeInput(e.target.value)}
-               onKeyDown={(e) => {
-                 if (e.key === "Enter") {
-                   addItemByBarcode(barcodeInput);
-                   setBarcodeInput("");
-                 }
+               onChange={setBarcodeInput}
+               onSelect={(item) => {
+                 addItemByBarcode(item.sku || item.barcode || item.id);
+                 setBarcodeInput("");
                }}
                className="w-full h-16 bg-white border-2 border-gray-200 rounded-[20px] px-8 font-mono text-lg font-bold tracking-tight focus:border-[#003366] focus:bg-white transition-all outline-none"
              />
@@ -173,9 +173,23 @@ export default function POSMode({ onExit }: POSModeProps) {
         </div>
 
         {/* RIGHT (30%) -> Summary + Actions */}
-        <div className="lg:col-span-4 bg-gray-50/50 flex flex-col h-full right-0 p-6 lg:p-8 border-t lg:border-t-0 fixed lg:relative bottom-0 w-full z-20 rounded-t-[32px] lg:rounded-none shadow-[0_-10px_40px_rgba(0,0,0,0.05)] lg:shadow-none">
-           <div className="flex-1 hidden lg:block">
-             <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic mb-6">Order Totals</h2>
+        <div className="lg:col-span-4 bg-gray-50/50 flex flex-col h-full right-0 p-6 lg:p-8 border-t lg:border-t-0 fixed lg:relative bottom-0 w-full z-20 rounded-t-[32px] lg:shadow-none shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
+           <div className="flex-1 hidden lg:flex flex-col">
+             
+             {/* Customer Lookup */}
+             <div className="mb-6 relative z-50">
+               <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic mb-2">Customer / Party</h2>
+               <EntityLookup 
+                  type="vendor"
+                  value={customer} 
+                  onChange={setCustomer}
+                  onSelect={v => setCustomer(v.name)}
+                  placeholder="Walk-in Customer..."
+                  className="w-full bg-white border border-gray-200 rounded-[12px] px-4 py-3 font-bold text-sm tracking-tight focus:border-[#003366] outline-none"
+               />
+             </div>
+
+             <h2 className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic mb-4">Order Totals</h2>
              
              <div className="space-y-3">
                <div className="flex justify-between items-center bg-white p-4 rounded-[20px] border border-gray-100">

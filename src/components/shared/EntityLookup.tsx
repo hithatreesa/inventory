@@ -64,6 +64,7 @@ function useItemLookup(value: string) {
       gst_rate: i.gst_rate,
       isSerialized: i.is_serialized || false,
       purchasePrice: i.price,
+      stock: (i.total_qty || 0) - (i.assigned_qty || 0),
       type: 'item'
     }));
   }, [debouncedValue, inventory]);
@@ -244,7 +245,9 @@ export function EntityLookup({ type, value, onChange, onSelect, placeholder, cla
                     onMouseEnter={() => setSelectedIndex(idx + 1)}
                     className={`px-3 py-2 border-l-2 cursor-pointer transition-colors ${selectedIndex === idx + 1 ? 'bg-blue-50/50 border-blue-500' : 'border-transparent hover:bg-gray-50'}`}
                   >
-                    <div className={selectedIndex === idx + 1 ? 'font-black text-blue-900' : 'font-bold text-gray-700'}>{item.name}</div>
+                    <div className={selectedIndex === idx + 1 ? 'font-black text-blue-900' : 'font-bold text-gray-700'}>
+                      {item.name} {type === 'item' && <span className="opacity-60 italic text-[10px]">({(item as any).stock})</span>}
+                    </div>
                     <div className="text-[10px] text-gray-500 flex flex-wrap gap-x-3 gap-y-1 mt-1">
                       {type === 'vendor' ? (
                         <>

@@ -42,7 +42,9 @@ export default function RootLayout({
             <GlobalScanner />
             <GlobalSearch />
             <Toaster position="top-right" expand={true} richColors closeButton />
-            <Sidebar />
+            <Suspense fallback={<div className="w-20 bg-sidebar-bg border-r border-border-main animate-pulse" />}>
+              <Sidebar />
+            </Suspense>
             <Suspense fallback={<div className="h-20 bg-white/80 border-b border-border-main fixed top-0 left-0 right-0 z-40 animate-pulse" />}>
               <Navbar />
             </Suspense>

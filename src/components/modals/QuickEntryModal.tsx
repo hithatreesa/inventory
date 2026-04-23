@@ -67,7 +67,9 @@ export function QuickEntryModal({ isOpen, onClose }: { isOpen: boolean, onClose:
         const header = {
             vendor: 'Quick Entry Vendor',
             date: new Date().toISOString().split('T')[0],
-            reference: purchaseForm.reference || `QE-PO-${Date.now()}`
+            reference: purchaseForm.reference || `QE-PO-${Date.now()}`,
+            warehouse: 'Main Store',
+            invoiceNumber: 'AUTO-QE-' + Date.now()
         };
 
         const lines: PurchaseLine[] = [{

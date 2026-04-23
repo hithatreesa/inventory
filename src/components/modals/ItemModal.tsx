@@ -22,51 +22,80 @@ export function ItemModal({
   const { addItem, editItem } = useData()
   const [isSubmitting, setIsSubmitting] = useState(false)
   
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    name: string;
+    category: string;
+    sku: string;
+    unit: string;
+    purchase_price: string;
+    sale_price: string;
+    brand: string;
+    location: string;
+    threshold: string;
+    gst_rate: string;
+    hsn_code: string;
+    model: string;
+    is_serialized: 'YES' | 'NO';
+    barcode: string;
+    min_stock: string;
+    status: 'ACTIVE' | 'INACTIVE';
+  }>({
     name: '',
     category: 'Hardware',
     sku: '',
     unit: 'nos',
-    price: '',
+    purchase_price: '',
+    sale_price: '',
     brand: '',
     location: 'Main Store',
     threshold: '5',
     gst_rate: '18',
+    hsn_code: '',
     model: '',
     is_serialized: 'NO',
-    barcode: ''
+    barcode: '',
+    min_stock: '0',
+    status: 'ACTIVE'
   })
 
   useEffect(() => {
-    if (item) {
+    if (item && isOpen) {
       setForm({
         name: item.name || '',
         category: item.category || 'Hardware',
         sku: item.sku || '',
         unit: item.unit || 'nos',
-        price: item.price?.toString() || '',
+        purchase_price: item.purchase_price?.toString() || '',
+        sale_price: item.sale_price?.toString() || item.price?.toString() || '',
         brand: item.brand || '',
         location: item.location || 'Main Store',
         threshold: item.threshold?.toString() || '5',
-        gst_rate: item.gst_rate?.toString() || '0',
+        gst_rate: item.gst_rate?.toString() || '18',
+        hsn_code: item.hsn_code || '',
         model: item.model || '',
         is_serialized: item.is_serialized ? 'YES' : 'NO',
-        barcode: item.barcode || ''
+        barcode: item.barcode || '',
+        min_stock: item.min_stock?.toString() || '0',
+        status: (item.status === 'INACTIVE' ? 'INACTIVE' : 'ACTIVE')
       })
-    } else {
+    } else if (isOpen) {
       setForm({
         name: '',
         category: 'Hardware',
         sku: '',
         unit: 'nos',
-        price: '',
+        purchase_price: '',
+        sale_price: '',
         brand: '',
         location: 'Main Store',
         threshold: '5',
         gst_rate: '18',
+        hsn_code: '',
         model: '',
         is_serialized: 'NO',
-        barcode: ''
+        barcode: '',
+        min_stock: '0',
+        status: 'ACTIVE'
       })
     }
   }, [item, isOpen])
@@ -77,10 +106,14 @@ export function ItemModal({
     try {
       const payload = {
         ...form,
-        price: Number(form.price),
+        purchase_price: Number(form.purchase_price),
+        sale_price: Number(form.sale_price),
+        price: Number(form.sale_price), // Legacy
         threshold: Number(form.threshold),
         gst_rate: Number(form.gst_rate),
-        is_serialized: form.is_serialized === 'YES'
+        min_stock: Number(form.min_stock),
+        is_serialized: form.is_serialized === 'YES',
+        status: form.status as 'ACTIVE' | 'INACTIVE'
       }
 
       if (item) {
@@ -176,6 +209,17 @@ export function ItemModal({
           </div>
 
           <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">HSN / SAC Code</label>
+            <Input 
+              required
+              placeholder="8471" 
+              value={form.hsn_code}
+              onChange={e => setForm({...form, hsn_code: e.target.value})}
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div className="space-y-1.5">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">GST (%)</label>
             <Input 
               type="number"
@@ -201,7 +245,7 @@ export function ItemModal({
             <Select 
               options={['YES', 'NO']}
               value={form.is_serialized}
-              onChange={e => setForm({...form, is_serialized: e.target.value})}
+              onChange={e => setForm({...form, is_serialized: e.target.value as 'YES' | 'NO'})}
               disabled={isSubmitting}
             />
           </div>
@@ -217,12 +261,23 @@ export function ItemModal({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Price (₹)</label>
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Purchase Price (₹)</label>
             <Input 
               type="number"
               placeholder="0.00" 
-              value={form.price}
-              onChange={e => setForm({...form, price: e.target.value})}
+              value={form.purchase_price}
+              onChange={e => setForm({...form, purchase_price: e.target.value})}
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Sale Price (₹)</label>
+            <Input 
+              type="number"
+              placeholder="0.00" 
+              value={form.sale_price}
+              onChange={e => setForm({...form, sale_price: e.target.value})}
               disabled={isSubmitting}
             />
           </div>
@@ -244,6 +299,16 @@ export function ItemModal({
               placeholder="5" 
               value={form.threshold}
               onChange={e => setForm({...form, threshold: e.target.value})}
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Status</label>
+            <Select 
+              options={['ACTIVE', 'INACTIVE']}
+              value={form.status}
+              onChange={e => setForm({...form, status: e.target.value as 'ACTIVE' | 'INACTIVE'})}
               disabled={isSubmitting}
             />
           </div>

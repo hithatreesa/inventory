@@ -9,7 +9,9 @@ export type TransactionType =
   | "ASSIGN"
   | "RETURN"
   | "CONSUMED"
-  | "ADJUSTMENT";
+  | "ADJUSTMENT"
+  | "EXPENSE"
+  | "REVENUE";
 
 export interface Transaction {
   id: string
@@ -49,6 +51,10 @@ export interface Transaction {
 
   timestamp: number
   created_at?: number
+  sub_type?: string
+  notes?: string
+  expense_id?: string
+  amount?: number
 }
 
 // Internal Tracking State
@@ -66,6 +72,14 @@ export interface SummaryCounts {
   ASSIGNED: number
   SOLD: number
   CONSUMED: number
+}
+
+export interface TicketSummary {
+  revenue: number
+  cost: number
+  expense: number
+  profit: number
+  margin: number
 }
 
 // --------------------------------------------------
@@ -110,10 +124,19 @@ loadLedger();
 serialCounters["ITM001"] = 2;
 serialCounters["ITM002"] = 1;
 transactions.push(
-  { id: "MOCK-1", type: "INWARD", serial: "ITM001-1", item_id: "ITM001", timestamp: 1000, quantity: 1, to_location: "STORE" },
-  { id: "MOCK-2", type: "INWARD", serial: "ITM001-2", item_id: "ITM001", timestamp: 1001, quantity: 1, to_location: "STORE" },
-  { id: "MOCK-3", type: "INWARD", serial: "ITM002-1", item_id: "ITM002", timestamp: 1002, quantity: 1, to_location: "STORE" },
-  { id: "MOCK-4", type: "ASSIGN", serial: "ITM001-1", item_id: "ITM001", engineer_id: "ENG001", timestamp: 1003, quantity: 1, from_location: "STORE", to_location: "ENGINEER" }
+  { id: "MOCK-1", type: "INWARD", serial: "ITM001-1", item_id: "ITM001", timestamp: Date.now(), quantity: 1, to_location: "STORE" },
+  { id: "MOCK-2", type: "INWARD", serial: "ITM001-2", item_id: "ITM001", timestamp: Date.now(), quantity: 1, to_location: "STORE" },
+  { id: "MOCK-3", type: "INWARD", serial: "ITM002-1", item_id: "ITM002", timestamp: Date.now(), quantity: 1, to_location: "STORE" },
+  { id: "MOCK-4", type: "ASSIGN", serial: "ITM001-1", item_id: "ITM001", engineer_id: "eng1", timestamp: Date.now(), quantity: 1, from_location: "STORE", to_location: "ENGINEER" },
+  
+  // TICKET-101 Test Case
+  { id: "TXN-T101-1", type: "OUTWARD", serial: "ITM001-2", item_id: "ITM001", timestamp: Date.now() - 86400000, quantity: 1, reference: "TICKET-101", purchase_price: 38000, engineer_id: "eng1" },
+  { id: "TXN-T101-2", type: "EXPENSE", serial: "EXP-101", item_id: "exp1", timestamp: Date.now() - 86400000, quantity: 1, reference: "TICKET-101", price: 500, sub_type: "INTERNAL" },
+  { id: "TXN-T101-3", type: "REVENUE", serial: "REV-101", item_id: "REVENUE", timestamp: Date.now() - 86400000, quantity: 1, reference: "TICKET-101", price: 45000 },
+
+  // TICKET-202 Test Case
+  { id: "TXN-T202-1", type: "OUTWARD", serial: "ITM002-1", item_id: "ITM002", timestamp: Date.now() - 172800000, quantity: 1, reference: "TICKET-202", purchase_price: 6500, engineer_id: "eng2" },
+  { id: "TXN-T202-2", type: "REVENUE", serial: "REV-202", item_id: "REVENUE", timestamp: Date.now() - 172800000, quantity: 1, reference: "TICKET-202", price: 12000 }
 );
 
 // --------------------------------------------------
@@ -144,6 +167,10 @@ function validateStateTransition(current: SerialState["status"] | undefined, act
     case "CONSUMED":
       if (current !== "ASSIGNED")
         throw new Error(`HARD_FAIL: CANNOT_CONSUMED_FROM_${current || "NON_EXISTENT"}`);
+      break;
+    case "EXPENSE":
+    case "REVENUE":
+      // Financial logs do not affect physical serial state
       break;
   }
 }
@@ -226,21 +253,98 @@ export function buildState(
   // Build summaryCounts
   const summaryCounts: SummaryCounts = { IN_STOCK: 0, ASSIGNED: 0, SOLD: 0, CONSUMED: 0 };
   for (const s of Object.values(serialMap)) {
-    summaryCounts[s.status] += s.quantity;
+    if (summaryCounts[s.status] !== undefined) {
+      summaryCounts[s.status] += s.quantity;
+    }
   }
-
-  debugLog(
-    `STATE REBUILT. Serials: ${Object.keys(serialMap).length} | ${JSON.stringify(summaryCounts)}`
-  );
 
   _cachedTxnsLength = txns.length;
   _cachedState = { serialMap, summaryCounts };
   return _cachedState;
 }
 
+export function getTicketProfit(ticketNo: string, txns: Transaction[] = transactions): TicketSummary {
+  const ticketTxns = txns.filter(t => t.reference === ticketNo);
+  
+  let revenue = 0;
+  let cost = 0;
+  let expense = 0;
+
+  ticketTxns.forEach(t => {
+    if (t.type === 'REVENUE') {
+      revenue += (t.amount || (t.quantity * (t.price || 0)));
+    } else if (t.type === 'OUTWARD') {
+      // Rule 2: Always use cost_snapshot (t.price or t.amount)
+      cost += (t.amount || (t.quantity * (t.price || 0)));
+    } else if (t.type === 'EXPENSE') {
+      expense += (t.amount || (t.quantity * (t.price || 0)));
+    }
+  });
+
+  const profit = revenue - cost - expense;
+  const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
+
+  return { revenue, cost, expense, profit, margin };
+}
+
 // --------------------------------------------------
 // CORE ENGINE FUNCTIONS
 // --------------------------------------------------
+
+export function validateTransaction(txn: any, ledger: Transaction[] = transactions) {
+  const state = buildState(ledger);
+  
+  // Rule 7: Ticket Linking
+  if (!txn.reference && txn.type !== 'ADJUSTMENT' && txn.type !== 'INWARD') {
+    throw new Error("HARD_FAIL: MISSING_TICKET");
+  }
+
+  // Rule 5 & 6: Financial Valuations
+  if ((txn.type === 'EXPENSE' || txn.type === 'REVENUE' || txn.type === 'OUTWARD') && 
+      (txn.amount === undefined && txn.price === undefined)) {
+    throw new Error("HARD_FAIL: INVALID_AMOUNT");
+  }
+
+  if (txn.type === 'EXPENSE' && (txn.amount || 0) <= 0) {
+    throw new Error("HARD_FAIL: INVALID_AMOUNT (Expense must be > 0)");
+  }
+
+  // Rule 3: Inventory Logic
+  if (txn.type === 'OUTWARD' || txn.type === 'ASSIGN') {
+    const current = state.serialMap[txn.serial];
+    if (!current || current.status !== 'IN_STOCK') {
+      throw new Error(`HARD_FAIL: INVALID_STOCK (Serial ${txn.serial} not in stock)`);
+    }
+  }
+
+  // Rule 4: Return Logic
+  if (txn.type === 'RETURN') {
+    const current = state.serialMap[txn.serial];
+    if (!current || (current.status !== 'ASSIGNED' && current.status !== 'SOLD')) {
+      throw new Error(`HARD_FAIL: INVALID_RETURN (Serial ${txn.serial} not issued)`);
+    }
+  }
+
+  // Rule 8: Duplicate Protection
+  if (txn.type === 'INWARD' || txn.type === 'ADJUSTMENT') {
+    if (state.serialMap[txn.serial]) {
+      throw new Error(`HARD_FAIL: DUPLICATE_SERIAL (${txn.serial})`);
+    }
+  }
+}
+
+export function commitTransaction(txn: any) {
+  validateTransaction(txn);
+  const finalTxn: Transaction = {
+    ...txn,
+    id: txn.id || `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+    timestamp: txn.timestamp || Date.now(),
+    quantity: txn.quantity || 1
+  };
+  transactions.push(finalTxn);
+  saveLedger();
+  return transactions;
+}
 
 export function executeInward(params: { 
   productId: string, 
@@ -253,31 +357,18 @@ export function executeInward(params: {
 }) {
   const { productId, serial, qty, gst, price, source, metadata } = params;
 
-  if (typeof serialCounters[productId] === "undefined") {
-    serialCounters[productId] = 0;
-  }
-
-  const state = buildState(transactions);
-  validateStateTransition(state.serialMap[serial]?.status, "INWARD");
-
-  const txn: Transaction = {
-    id: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+  return commitTransaction({
+    id: `TXN-IN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
     type: "INWARD",
     serial,
     item_id: productId,
-    timestamp: Date.now(),
     quantity: qty || 1,
     gst_rate: gst,
     purchase_price: price,
     reference_type: source as any,
-    created_at: Date.now(),
     ...metadata,
-  };
-
-  debugLog("LEDGER_INWARD:", txn);
-  transactions.push(txn);
-  saveLedger();
-  return serial;
+    timestamp: Date.now(),
+  });
 }
 
 export function executeInwardBulk(params: {
@@ -292,24 +383,18 @@ export function executeInwardBulk(params: {
   if (qty <= 0) throw new Error("HARD_FAIL: INVALID_QUANTITY");
   const serial = `BULK-${productId}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
 
-  const txn: Transaction = {
-    id: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+  return commitTransaction({
+    id: `TXN-BULK-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
     type: "INWARD",
     serial,
     item_id: productId,
-    timestamp: Date.now(),
     quantity: qty,
     gst_rate: gst,
     purchase_price: price,
     reference_type: source as any,
-    created_at: Date.now(),
     ...metadata,
-  };
-
-  debugLog("LEDGER_INWARD_BULK:", txn);
-  transactions.push(txn);
-  saveLedger();
-  return serial;
+    timestamp: Date.now(),
+  });
 }
 
 export function executeInwardBatch(batch: Transaction[]) {
@@ -333,34 +418,26 @@ export function executeOutward(params: {
   productId: string,
   serial: string,
   qty: number,
-  destination: string,
-  source: string,
+  customer_id?: string,
   metadata?: Partial<Transaction>
 }) {
-  const { productId, serial, qty, destination, source, metadata } = params;
+  const { productId, serial, qty, customer_id, metadata } = params;
   const state = buildState(transactions);
   const item = state.serialMap[serial];
 
   if (!item) throw new Error(`HARD_FAIL: SERIAL_NOT_FOUND ${serial}`);
-  validateStateTransition(item.status, "OUTWARD");
 
-  const txn: Transaction = {
-    id: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+  return commitTransaction({
+    id: `TXN-OUT-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
     type: "OUTWARD",
     serial,
-    item_id: productId,
-    engineer_id: destination,
-    timestamp: Date.now(),
-    quantity: 1,
-    reference_type: source as any,
-    created_at: Date.now(),
+    item_id: item.item_id,
+    customer_id,
+    quantity: item.quantity,
+    reference_type: "SALE",
     ...metadata,
-  };
-
-  debugLog("LEDGER_OUTWARD:", txn);
-  transactions.push(txn);
-  saveLedger();
-  return serial;
+    timestamp: Date.now(),
+  });
 }
 
 export function executeOutwardBulk(params: {
@@ -423,109 +500,79 @@ export function assignItem(serial: string, engineer_id: string, metadata?: Parti
   const state = buildState(transactions);
   const item = state.serialMap[serial];
 
-  validateStateTransition(item?.status, "ASSIGN");
-
-  const txn: Transaction = {
-    id: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+  return commitTransaction({
+    id: `TXN-ASSIGN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
     type: "ASSIGN",
     serial,
-    item_id: item.item_id,
+    item_id: item?.item_id || 'N/A',
     engineer_id,
-    timestamp: Date.now(),
-    quantity: item.quantity,
-    created_at: Date.now(),
+    quantity: item?.quantity || 1,
     ...metadata,
-  };
-
-  debugLog("ASSIGN:", txn);
-  transactions.push(txn);
-  saveLedger();
+    timestamp: Date.now(),
+  });
 }
 
 export function returnItem(serial: string, engineer_id: string, metadata?: Partial<Transaction>) {
   const state = buildState(transactions);
   const item = state.serialMap[serial];
 
-  validateStateTransition(item?.status, "RETURN");
-
   // Ownership lock: only the assigned holder can return (skip for SOLD returns)
-  if (item.status === "ASSIGNED" && item.currentHolder !== engineer_id) {
+  if (item?.status === "ASSIGNED" && item.currentHolder !== engineer_id) {
     throw new Error(
       `HARD_FAIL: INVALID_OWNER ${serial}. Expected ${item.currentHolder}, provided ${engineer_id}`
     );
   }
 
-  const txn: Transaction = {
-    id: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+  return commitTransaction({
+    id: `TXN-RET-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
     type: "RETURN",
     serial,
-    item_id: item.item_id,
+    item_id: item?.item_id || 'N/A',
     engineer_id,
-    timestamp: Date.now(),
-    quantity: item.quantity,
-    created_at: Date.now(),
+    quantity: item?.quantity || 1,
     ...metadata,
-  };
-
-  debugLog("RETURN:", txn);
-  transactions.push(txn);
-  saveLedger();
+    timestamp: Date.now(),
+  });
 }
 
 export function consumeItem(serial: string, engineer_id: string, metadata?: Partial<Transaction>) {
   const state = buildState(transactions);
   const item = state.serialMap[serial];
 
-  validateStateTransition(item?.status, "CONSUMED");
-
-  if (item.currentHolder !== engineer_id) {
+  if (item?.currentHolder !== engineer_id) {
     throw new Error(
-      `HARD_FAIL: INVALID_OWNER ${serial}. Expected ${item.currentHolder}, provided ${engineer_id}`
+      `HARD_FAIL: INVALID_OWNER ${serial}. Expected ${item?.currentHolder}, provided ${engineer_id}`
     );
   }
 
-  const txn: Transaction = {
-    id: `TXN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+  return commitTransaction({
+    id: `TXN-CONS-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
     type: "CONSUMED",
     serial,
-    item_id: item.item_id,
+    item_id: item?.item_id || 'N/A',
     engineer_id,
-    timestamp: Date.now(),
-    quantity: item.quantity,
-    created_at: Date.now(),
+    quantity: item?.quantity || 1,
     ...metadata,
-  };
-
-  debugLog("CONSUMED:", txn);
-  transactions.push(txn);
-  saveLedger();
+    timestamp: Date.now(),
+  });
 }
 
 export function adjustStock(item_id: string, qty: number, metadata?: Partial<Transaction>): string[] {
   if (qty <= 0) throw new Error("HARD_FAIL: INVALID_ADJUSTMENT_QTY");
   const serials: string[] = [];
-  const adjRef = `ADJ-${Date.now()}`;
 
   for (let i = 0; i < qty; i++) {
     const serial = `ADJ-${item_id}-${Date.now()}-${i}`;
-    const txn: Transaction = {
-      id: `TXN-ADJ-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    commitTransaction({
       type: "ADJUSTMENT",
       serial,
       item_id,
-      timestamp: Date.now(),
       quantity: 1,
-      reference_type: "ADJUSTMENT",
-      reference_id: adjRef,
-      created_at: Date.now(),
       ...metadata,
-    };
-    transactions.push(txn);
+      timestamp: Date.now()
+    });
     serials.push(serial);
   }
-  saveLedger();
-
-  debugLog(`ADJUSTMENT: ${qty} units for ${item_id}`);
   return serials;
 }
 
@@ -628,8 +675,8 @@ export function buildAuditReport(scannedSerials: string[]) {
   };
 }
 
-export function getAgingReport() {
-  const state = buildState(transactions);
+export function getAgingReport(ledger: Transaction[] = transactions) {
+  const state = buildState(ledger);
   const agingReport: any[] = [];
 
   for (const [serial, data] of Object.entries(state.serialMap)) {

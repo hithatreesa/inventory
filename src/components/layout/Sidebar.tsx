@@ -2,7 +2,7 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import {
   LayoutDashboard,
   Package,
@@ -11,7 +11,11 @@ import {
   FileText,
   LogOut,
   Zap,
-  User
+  User,
+  Settings,
+  ChevronDown,
+  Wallet,
+  Ticket
 } from 'lucide-react'
 import { useLayout } from '@/lib/context/LayoutContext'
 import { cn } from '@/lib/utils'
@@ -24,12 +28,22 @@ const navItems = [
   { name: 'POS', icon: Zap, href: '/pos' },
   { name: 'PURCHASES', icon: ShoppingCart, href: '/purchase' },
   { name: 'SALES', icon: TrendingUp, href: '/sales' },
+  { name: 'RETURNS', icon: Wallet, href: '/returns' },
   { name: 'REPORTS', icon: FileText, href: '/reports' },
+]
+
+const masterSubItems = [
+  { name: 'ITEMS MASTER', icon: Package, href: '/master?v=items' },
+  { name: 'VENDOR MASTER', icon: User, href: '/master?v=vendors' },
+  { name: 'GST MASTER', icon: Zap, href: '/master?v=gst' },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const v = searchParams.get('v') || 'items'
   const { isCollapsed, isMobileOpen, closeMobileSidebar } = useLayout()
+  const [isMasterExpanded, setIsMasterExpanded] = React.useState(pathname.startsWith('/master'))
 
   const handleLogout = () => {
     toast.info('Logging out...', {
@@ -105,6 +119,60 @@ export function Sidebar() {
               </Link>
             )
           })}
+
+          {/* MASTER DROPDOWN */}
+          <div className="space-y-1">
+            <button
+              onClick={() => setIsMasterExpanded(!isMasterExpanded)}
+              className={cn(
+                "w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 group relative overflow-hidden",
+                pathname.startsWith('/master')
+                  ? "bg-primary/5 text-primary border border-primary/10"
+                  : "text-text-secondary hover:bg-white hover:text-primary hover:shadow-lg hover:shadow-black/5",
+                isCollapsed && "justify-center px-0"
+              )}
+            >
+              <Settings className={cn(
+                "w-5 h-5 transition-transform group-hover:rotate-90 shrink-0",
+                pathname.startsWith('/master') ? "text-primary" : "text-text-secondary group-hover:text-primary"
+              )} />
+              {!isCollapsed && (
+                <>
+                  <span className="text-sm font-black tracking-[0.2em] whitespace-nowrap animate-in fade-in duration-300">MASTER HUB</span>
+                  <ChevronDown className={cn(
+                    "w-4 h-4 ml-auto transition-transform duration-300",
+                    isMasterExpanded && "rotate-180"
+                  )} />
+                </>
+              )}
+            </button>
+
+            {isMasterExpanded && !isCollapsed && (
+              <div className="pl-4 space-y-1 animate-in slide-in-from-top-2 duration-300">
+                {masterSubItems.map((sub) => {
+                  const subSearchParams = new URL(sub.href, 'http://localhost').searchParams
+                  const subV = subSearchParams.get('v')
+                  const isActive = pathname === '/master' && v === subV
+
+                  return (
+                    <Link
+                      key={sub.href}
+                      href={sub.href}
+                      className={cn(
+                        "flex items-center gap-4 px-4 py-2.5 rounded-xl transition-all duration-200 group relative",
+                        isActive
+                          ? "text-primary bg-primary/10 font-bold"
+                          : "text-gray-400 hover:text-primary hover:bg-white"
+                      )}
+                    >
+                      <sub.icon className="w-4 h-4 shrink-0" />
+                      <span className="text-[10px] font-black tracking-widest uppercase italic">{sub.name}</span>
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </nav>
 
         <div className={cn("p-6 border-t border-border-main space-y-6 transition-all duration-300", isCollapsed && "p-4")}>
@@ -113,9 +181,7 @@ export function Sidebar() {
             "flex items-center gap-3 p-4 bg-white rounded-[20px] border border-gray-100 shadow-sm cursor-pointer hover:bg-white/80 transition-all overflow-hidden",
             isCollapsed && "p-2 justify-center"
           )}>
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-white font-black text-sm shadow-lg shadow-primary/20 shrink-0">
-              AT
-            </div>
+            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-white font-black text-sm shadow-lg shadow-primary/20 shrink-0" />
             {!isCollapsed && (
               <>
                 <div className="flex-1 min-w-0 animate-in fade-in duration-500">
@@ -145,4 +211,3 @@ export function Sidebar() {
     </>
   )
 }
-

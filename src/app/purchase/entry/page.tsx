@@ -9,6 +9,7 @@ import { handleGridKeyDown, focusCell } from '@/modules/ledger/grid-navigation';
 import { useGlobalKeyboardShortcuts } from '@/modules/ledger/keyboard-handler';
 import { toast } from 'sonner';
 import { EntityLookup } from '@/components/shared/EntityLookup';
+import { cn } from '@/lib/utils';
 
 export default function PurchaseLedgerEntry() {
   const router = useRouter();
@@ -28,7 +29,7 @@ export default function PurchaseLedgerEntry() {
   });
 
   const [lines, setLines] = useState<LedgerLine[]>([
-    { id: '1', sno: 1, description: '', qty: 0, unit: '', price: 0, amount: 0, gstRate: 18 }
+    { id: '1', sno: 1, description: '', qty: 0, unit: '', price: 0, amount: 0, gstRate: 18, isLocked: false, serials: [] }
   ]);
 
   const [sundries, setSundries] = useState<BillSundry[]>([
@@ -57,7 +58,8 @@ export default function PurchaseLedgerEntry() {
         unit: '',
         price: 0,
         amount: 0,
-        gstRate: 18
+        gstRate: 0,
+        isLocked: false
       }));
       return [...currentLines, ...pad];
     }
@@ -75,15 +77,21 @@ export default function PurchaseLedgerEntry() {
 
       if (field === 'qty' || field === 'price') {
         line.amount = calculateLineAmount(Number(line.qty) || 0, Number(line.price) || 0);
-      } else if (field === 'description') {
-        const item = inventory.find(i => i.name.toLowerCase() === String(value).toLowerCase() || i.id === value || i.sku === value);
-        if (item) {
-          line.productId = item.id;
-          line.description = item.name;
-          line.price = item.price || 0;
-          line.unit = 'NOS.';
-          line.gstRate = item.gst_rate || 18;
-          line.amount = calculateLineAmount(Number(line.qty) || 0, Number(line.price) || 0);
+      } else if (field === 'description' && typeof value === 'object') {
+        // SSOT Entity Selection
+        const item = value;
+        line.productId = item.id;
+        line.description = item.name;
+        line.price = item.purchase_price || 0;
+        line.unit = (item.unit || 'NOS.').toUpperCase();
+        line.gstRate = item.gst_rate || 0;
+        line.isLocked = true; // Mark as master-derived
+        line.amount = calculateLineAmount(Number(line.qty) || 0, Number(line.price) || 0);
+      } else if (field === 'description' && typeof value === 'string') {
+        line.description = value;
+        if (!value) {
+            line.productId = undefined;
+            line.isLocked = false;
         }
       }
 
@@ -103,7 +111,9 @@ export default function PurchaseLedgerEntry() {
         unit: '',
         price: 0,
         amount: 0,
-        gstRate: 18
+        gstRate: 18,
+        isLocked: false,
+        serials: []
       }];
     });
   }, []);
@@ -123,20 +133,28 @@ export default function PurchaseLedgerEntry() {
       await processPO({
         vendor: header.partyAccount,
         date: header.date,
-        reference: header.supplierReference || header.voucherNumber
-      }, validLines.map(l => ({
-        id: `po_line_${Date.now()}_${l.sno}`,
-        productId: l.productId || `NONINV-${Date.now()}`,
-        name: l.description,
-        brand: 'N/A',
-        model: 'N/A',
-        qty: Number(l.qty),
-        price: Number(l.price),
-        gstRate: l.gstRate || 0,
-        isSerialized: false,
-        serials: [],
-        isLocked: false
-      })));
+        reference: header.supplierReference || header.voucherNumber,
+        warehouse: header.materialCentre,
+        invoiceNumber: header.supplierReference || header.voucherNumber
+      }, validLines.map(l => {
+        const masterItem = inventory.find(i => i.id === l.productId);
+        return {
+          id: `po_line_${Date.now()}_${l.sno}`,
+          productId: l.productId!,
+          name: l.description,
+          brand: masterItem?.brand || 'N/A',
+          model: masterItem?.model || 'N/A',
+          qty: Number(l.qty),
+          price: Number(l.price),
+          gstRate: l.gstRate || 0,
+          isSerialized: masterItem?.is_serialized || false,
+          serials: (l.serials || []).map(s => ({
+            serial: s,
+            timestamp: Date.now()
+          })),
+          isLocked: false
+        }
+      }));
       toast.success('Purchase Voucher Saved Successfully!');
       router.push('/purchase');
     } catch (e: any) {
@@ -227,7 +245,7 @@ export default function PurchaseLedgerEntry() {
 
         <div className="grid grid-cols-1 md:grid-cols-12 border-b border-[var(--color-ledger-border)]">
           <div className="col-span-12 md:col-span-8 border-r border-[var(--color-ledger-border)] p-2">
-            <label className="block text-[9px] font-bold text-gray-500">PARTY ACCOUNT NAME (FULL WIDTH)</label>
+            <label className="block text-[9px] font-bold text-gray-500">CUSTOMER NAME (PARTY ACCOUNT)</label>
             <EntityLookup
               type="vendor"
               value={header.partyAccount}
@@ -284,7 +302,9 @@ export default function PurchaseLedgerEntry() {
             <tr>
               <th className="border-r border-[#475569] px-2 py-2 text-center w-12">S.N.</th>
               <th className="border-r border-[#475569] px-4 py-2 text-left">ITEM DESCRIPTION & SPECIFICATION</th>
+              <th className="border-r border-[#475569] px-4 py-2 text-left w-48">CUSTOMER</th>
               <th className="border-r border-[#475569] px-2 py-2 text-right w-24">QTY.</th>
+              <th className="border-r border-[#475569] px-2 py-2 text-left w-64">SERIALS (CSV)</th>
               <th className="border-r border-[#475569] px-2 py-2 text-center w-20">UNIT</th>
               <th className="border-r border-[#475569] px-2 py-2 text-right w-32">PRICE (₹)</th>
               <th className="px-4 py-2 text-right w-36">AMOUNT (₹)</th>
@@ -303,10 +323,7 @@ export default function PurchaseLedgerEntry() {
                     type="item"
                     value={line.description}
                     onChange={(val) => updateLine(rowIndex, 'description', val)}
-                    onSelect={(item) => {
-                      // Simulating the item assignment block
-                      updateLine(rowIndex, 'description', item.name || item.id);
-                    }}
+                    onSelect={(item) => updateLine(rowIndex, 'description', item)}
                     placeholder={rowIndex === 0 && !line.description ? "Start typing item name..." : ""}
                     className="w-full bg-transparent outline-none font-black text-sm focus:bg-blue-50 px-1"
                   />
@@ -314,13 +331,37 @@ export default function PurchaseLedgerEntry() {
                 </td>
                 <td className="border-r border-gray-100 px-2 py-1">
                   <input
+                    type="text"
+                    value={line.customerName || ''}
+                    onChange={(e) => updateLine(rowIndex, 'customerName', e.target.value)}
+                    onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 5, lines.length, 6, addRow)}
+                    data-row={rowIndex}
+                    data-col={5}
+                    placeholder="Ref. Customer"
+                    className="w-full bg-transparent outline-none font-bold text-[10px] uppercase focus:bg-blue-50 px-1 placeholder:text-gray-200"
+                  />
+                </td>
+                <td className="border-r border-gray-100 px-2 py-1">
+                  <input
                     type="number"
                     value={line.qty || ''}
                     onChange={(e) => updateLine(rowIndex, 'qty', e.target.value)}
-                    onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 2, lines.length, 5, addRow)}
+                    onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 2, lines.length, 6, addRow)}
                     data-row={rowIndex}
                     data-col={2}
                     className="w-full bg-transparent outline-none font-mono text-sm text-right focus:bg-blue-50 px-1"
+                  />
+                </td>
+                <td className="border-r border-gray-100 px-2 py-1">
+                  <input
+                    type="text"
+                    value={line.serials?.join(',') || ''}
+                    onChange={(e) => updateLine(rowIndex, 'serials', e.target.value.split(',').map(s => s.trim()).filter(s => s !== ''))}
+                    onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 7, lines.length, 6, addRow)}
+                    data-row={rowIndex}
+                    data-col={7}
+                    placeholder="S1, S2..."
+                    className="w-full bg-transparent outline-none font-bold text-[10px] uppercase focus:bg-blue-50 px-1 placeholder:text-gray-200"
                   />
                 </td>
                 <td className="border-r border-gray-100 px-2 py-1">
@@ -342,7 +383,11 @@ export default function PurchaseLedgerEntry() {
                     onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 4, lines.length, 5, addRow)}
                     data-row={rowIndex}
                     data-col={4}
-                    className="w-full bg-transparent outline-none font-mono text-sm text-right focus:bg-blue-50 px-1"
+                    disabled={line.isLocked}
+                    className={cn(
+                      "w-full bg-transparent outline-none font-mono text-sm text-right px-1",
+                      line.isLocked ? "text-blue-700 opacity-60" : "focus:bg-blue-50"
+                    )}
                   />
                 </td>
                 <td className="px-4 py-1 text-right font-mono text-sm font-black text-black">

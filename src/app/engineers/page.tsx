@@ -4,7 +4,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, Package, Clock, Plus, Activity, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useData, Engineer, Transaction } from '@/lib/context/DataContext';
+import { useData, Engineer, Transaction, Vendor, Ticket, TicketRequirement } from '@/lib/context/DataContext';
 import { EntityLookup } from '@/components/shared/EntityLookup';
 import { toast } from 'sonner';
 
@@ -24,12 +24,11 @@ export default function EngineerPage() {
     return engineers.find((e: Engineer) => e.id === selectedEngineerId);
   }, [engineers, selectedEngineerId]);
 
-  // Form State for Issued Material
   const [issuedForm, setIssuedForm] = useState({
     ticketNo: '',
     date: new Date().toISOString().split('T')[0],
     customerName: '',
-    items: [{ id: Date.now().toString(), name: '', qty: 1 }]
+    items: [{ id: Date.now().toString(), productId: '', name: '', qty: 1, reference: '' }]
   });
 
   // Auto-fill logic
@@ -39,24 +38,26 @@ export default function EngineerPage() {
       const ticket = tickets?.find(t => t.id === issuedForm.ticketNo);
       if (ticket) {
         setLastAutofilledTicket(ticket.id);
-        
-        const autoItems = ticket.requirements?.length > 0 
-          ? ticket.requirements.map(req => {
-              const invItem = inventory.find(i => i.id === req.item_id);
-              return {
-                 id: Math.random().toString(36).substr(2, 9),
-                 name: invItem?.name || req.item_id,
-                 qty: req.qty
-              };
-            })
-          : [{ id: Math.random().toString(36).substr(2, 9), name: '', qty: 1 }];
+
+        const autoItems = ticket.requirements?.length > 0
+          ? ticket.requirements.map((req: TicketRequirement) => {
+            const invItem = inventory.find(i => i.id === req.item_id);
+            return {
+              id: Math.random().toString(36).substr(2, 9),
+              productId: req.item_id,
+              name: invItem?.name || req.item_id,
+              qty: req.qty,
+              reference: ''
+            };
+          })
+          : [{ id: Math.random().toString(36).substr(2, 9), productId: '', name: '', qty: 1, reference: '' }];
 
         setIssuedForm(prev => ({
           ...prev,
           customerName: ticket.customer_name || ticket.title || prev.customerName,
           items: autoItems
         }));
-        
+
         toast.success(`Auto-filled details for Ticket: ${ticket.id}`);
       }
     }
@@ -65,7 +66,7 @@ export default function EngineerPage() {
   const handleAddFormItem = () => {
     setIssuedForm(prev => ({
       ...prev,
-      items: [...prev.items, { id: Date.now().toString(), name: '', qty: 1 }]
+      items: [...prev.items, { id: Date.now().toString(), productId: '', name: '', qty: 1, reference: '' }]
     }));
   };
 
@@ -84,20 +85,50 @@ export default function EngineerPage() {
     }));
   };
 
-  const submitIssuedForm = (e: React.FormEvent) => {
+  const { issueToEngineer } = useData();
+
+  const submitIssuedForm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (issuedForm.items.some(i => !i.name)) {
-      toast.error("Please fill in all item names");
+    
+    if (!selectedEngineerId) {
+      toast.error("HARD_FAIL: NO_ENGINEER_SELECTED");
       return;
     }
-    toast.success("Material Issue Recorded Successfully!");
-    // Form submission mock logic - resets the form
-    setIssuedForm({
-      ticketNo: '',
-      date: new Date().toISOString().split('T')[0],
-      customerName: '',
-      items: [{ id: Date.now().toString(), name: '', qty: 1 }]
-    });
+
+    if (issuedForm.items.some(i => !i.productId)) {
+      toast.error("HARD_FAIL: ALL_ITEMS_MUST_LINK_TO_MASTER");
+      return;
+    }
+
+    try {
+      await toast.promise(issueToEngineer(selectedEngineerId, issuedForm.items.map(i => {
+        const invItem = inventory.find(inv => inv.id === i.productId);
+        return {
+          id: i.id,
+          productId: i.productId,
+          name: invItem?.name || i.name,
+          qty: i.qty,
+          model: invItem?.model || 'N/A',
+          brand: invItem?.brand || 'N/A',
+          isSerialized: invItem?.is_serialized || false,
+          serials: [],
+          isLocked: false
+        };
+      })), {
+        loading: 'Recording Material Issue...',
+        success: 'Material Issue Recorded Successfully!',
+        error: (err: any) => err.message || 'Issue Failed'
+      });
+
+      setIssuedForm({
+        ticketNo: '',
+        date: new Date().toISOString().split('T')[0],
+        customerName: '',
+        items: [{ id: Date.now().toString(), productId: '', name: '', qty: 1, reference: '' }]
+      });
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   // DERIVED STATS FOR ENGINEERS
@@ -128,7 +159,7 @@ export default function EngineerPage() {
 
   const engineerTickets = useMemo(() => {
     if (!selectedEngineerId || !getEngineerTickets) return [];
-    return getEngineerTickets(selectedEngineerId).sort((a: any, b: any) => {
+    return getEngineerTickets(selectedEngineerId).sort((a: Ticket, b: Ticket) => {
       const dateA = new Date(a.created_at || 0).getTime();
       const dateB = new Date(b.created_at || 0).getTime();
       return dateB - dateA;
@@ -206,32 +237,7 @@ export default function EngineerPage() {
       {/* ➡️ RIGHT PANEL: ENGINEER DETAILS */}
       <div className="w-full lg:w-2/3 flex flex-col gap-6">
 
-        {/* Detail Header & Active Services */}
-        <div className="bg-white rounded-[32px] border border-border-main p-6 lg:p-8 shadow-sm flex flex-col xl:flex-row gap-8 items-start xl:items-center justify-between overflow-hidden relative">
 
-          <div className="relative z-10">
-            <h1 className="text-4xl font-black text-[#003366] italic tracking-tighter uppercase mb-2">
-              {selectedEngineer?.name || 'Select Engineer'}
-            </h1>
-          </div>
-
-          <div className="relative z-10 flex justify-end">
-            <div className="bg-gray-50 p-3 rounded-2xl border border-gray-100 flex items-center gap-3 w-fit">
-              <button
-                onClick={() => router.push(`/engineers/issue?id=${selectedEngineerId}`)}
-                className="h-12 px-6 bg-[#003366] text-white rounded-xl text-[10px] font-black uppercase tracking-widest italic hover:bg-blue-900 transition-all shadow-[0_10px_30px_rgba(0,51,102,0.3)] flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" /> Issue Items
-              </button>
-              <button
-                onClick={() => router.push(`/engineers/return?id=${selectedEngineerId}`)}
-                className="h-12 px-6 bg-white border-2 border-orange-100 text-orange-500 rounded-xl text-[10px] font-black uppercase tracking-widest italic hover:bg-orange-50 transition-all flex items-center gap-2"
-              >
-                <Activity className="w-4 h-4" /> Process Return
-              </button>
-            </div>
-          </div>
-        </div>
 
 
 
@@ -277,19 +283,29 @@ export default function EngineerPage() {
                 </select>
                 <div className="absolute right-4 top-[36px] pointer-events-none">
                   <svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M1.5 1.5L6 6L10.5 1.5" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M1.5 1.5L6 6L10.5 1.5" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Customer Name</label>
-                <input
-                  required
-                  placeholder="Company / Client Name"
-                  value={issuedForm.customerName}
-                  onChange={e => setIssuedForm({ ...issuedForm, customerName: e.target.value })}
-                  className="w-full h-12 bg-gray-50/50 border border-gray-200 rounded-xl px-4 text-sm font-bold placeholder:text-gray-300 outline-none focus:border-[#003366] transition-all"
-                />
+              <div className="flex flex-col gap-4">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Customer Assignment</label>
+                
+                <div className="flex items-center gap-4 bg-gray-50/50 p-4 rounded-2xl border border-gray-100 group cursor-pointer hover:bg-primary/5 transition-all">
+                  <div className="w-12 h-12 bg-white rounded-xl border border-gray-100 flex items-center justify-center text-primary shadow-sm group-hover:scale-105 transition-transform shrink-0">
+                    <User className="w-6 h-6" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] font-black text-text-secondary uppercase tracking-widest opacity-60">Account Identity</p>
+                    <EntityLookup
+                      type="vendor"
+                      value={issuedForm.customerName}
+                      onChange={val => setIssuedForm({ ...issuedForm, customerName: val })}
+                      onSelect={(v: Vendor) => setIssuedForm({ ...issuedForm, customerName: v.name })}
+                      placeholder="Walk-in Customer"
+                      className="w-full bg-transparent outline-none font-black text-text-main italic tracking-tight uppercase text-sm"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -301,19 +317,30 @@ export default function EngineerPage() {
               <div className="space-y-3">
                 {issuedForm.items.map((item, idx) => (
                   <div key={item.id} className="flex flex-col sm:flex-row gap-3 items-end">
-                    <div className="w-full sm:flex-1">
+                    <div className="w-full sm:flex-[2]">
                       <div className="relative">
                         <EntityLookup
                           type="item"
                           placeholder="Search item..."
                           value={item.name}
                           onChange={val => handleUpdateFormItem(item.id, 'name', val)}
-                          onSelect={selected => handleUpdateFormItem(item.id, 'name', selected.name || selected.id)}
+                          onSelect={selected => {
+                            handleUpdateFormItem(item.id, 'name', selected.name);
+                            handleUpdateFormItem(item.id, 'productId', selected.id);
+                          }}
                           className="w-full h-12 bg-white border border-gray-200 rounded-xl px-4 text-sm font-bold outline-none focus:border-[#003366] transition-all shadow-sm"
                         />
                       </div>
                     </div>
-                    <div className="w-full sm:w-24 shrink-0 relative">
+                    <div className="w-full sm:flex-1">
+                      <input
+                        placeholder="Reference..."
+                        value={item.reference}
+                        onChange={e => handleUpdateFormItem(item.id, 'reference', e.target.value)}
+                        className="w-full h-12 bg-white border border-gray-200 rounded-xl px-4 text-sm font-bold placeholder:text-gray-300 outline-none focus:border-[#003366] transition-all shadow-sm"
+                      />
+                    </div>
+                    <div className="w-full sm:w-20 shrink-0 relative">
                       <input
                         type="number"
                         min="1"

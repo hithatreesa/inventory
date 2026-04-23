@@ -8,6 +8,9 @@ export interface LedgerLine {
   price: number;
   amount: number;
   gstRate: number;
+  customerName?: string;
+  isLocked?: boolean;
+  serials?: string[];
 }
 
 export interface LedgerHeader {

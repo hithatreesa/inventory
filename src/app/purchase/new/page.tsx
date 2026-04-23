@@ -15,7 +15,8 @@ import {
   Truck,
   FileText,
   Barcode,
-  ShoppingCart
+  ShoppingCart,
+  Wallet
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useData, InventoryItem, PurchaseLine, ScanEntry } from '@/lib/context/DataContext'
@@ -69,6 +70,10 @@ function PurchaseEntryContent() {
 
   // Invoice Lines
   const [lines, setLines] = useState<PurchaseLine[]>([])
+  
+  // Bill Sundry / Additional Charges
+  const [sundry, setSundry] = useState<any[]>([])
+  const [pendingSundry, setPendingSundry] = useState<{ name: string, amount: number, gstRate: number, expenseId: string } | null>(null)
 
   // Point: Handle Reorder Redirection
   useEffect(() => {
@@ -170,8 +175,10 @@ function PurchaseEntryContent() {
       await toast.promise(processPO({
         vendor: header.supplier,
         date: header.date,
-        reference: header.invoiceNumber
-      }, lines), {
+        reference: header.invoiceNumber,
+        warehouse: header.warehouse,
+        invoiceNumber: header.invoiceNumber
+      }, lines, sundry), {
         loading: 'Committing Procurement Ledger...',
         success: 'Purchase Successful | Stock Updated',
         error: (err: { message?: string }) => err.message || 'Procurement Failed'
@@ -182,7 +189,7 @@ function PurchaseEntryContent() {
     }
   }, [scanSession, lines, header, processPO, router]);
 
-  const { subtotal, totalGst, grandTotal } = useMemo(() => {
+  const { subtotal, totalGst, sundryTotal, grandTotal } = useMemo(() => {
     let sub = 0
     let gstSum = 0
 
@@ -194,12 +201,20 @@ function PurchaseEntryContent() {
       gstSum += lineGst
     })
 
+    let sunSum = 0
+    sundry.forEach(s => {
+      const amt = Number(s.amount) || 0
+      const gst = amt * ((s.gstRate || 0) / 100)
+      sunSum += amt + gst
+    })
+
     return {
       subtotal: sub,
       totalGst: gstSum,
-      grandTotal: sub + gstSum
+      sundryTotal: sunSum,
+      grandTotal: sub + gstSum + sunSum
     }
-  }, [lines])
+  }, [lines, sundry])
 
   const removeLine = useCallback((id: string) => {
     if (scanSession?.lineId === id) {
@@ -290,7 +305,7 @@ function PurchaseEntryContent() {
   // --- Actions ---
 
   const startAdding = useCallback(() => {
-    setPendingRow({ item: null, name: '', price: 0, qty: 1, isSerialized: false, model: 'N/A', brand: 'N/A' })
+    setPendingRow({ item: null, name: '', price: 0, qty: 1, isSerialized: false, model: '', brand: '' })
   }, []);
 
   const triggerScan = useCallback((lineId: string, customLines?: PurchaseLine[]) => {
@@ -317,8 +332,14 @@ function PurchaseEntryContent() {
 
     const item = pendingRow.item
 
+    if (!item || !item.id) {
+      playError();
+      toast.error("HARD_FAIL: ITEM_MUST_BE_SELECTED_FROM_MASTER");
+      return;
+    }
+
     // Point 5: GST Master Derivation & Hard Fail
-    if (item && (typeof item.gst_rate === 'undefined' || item.gst_rate === null)) {
+    if (typeof item.gst_rate === 'undefined' || item.gst_rate === null) {
       playError();
       toast.error("HARD_FAIL: GST_NOT_DEFINED_IN_ITEM_MASTER");
       throw new Error(`GST_NOT_DEFINED_FOR_PRODUCT: ${item.name}`);
@@ -326,14 +347,14 @@ function PurchaseEntryContent() {
 
     const newLine: PurchaseLine = {
       id: `po_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-      productId: item?.id || 'MANUAL_ENTRY',
-      name: pendingRow.name,
-      brand: item?.brand || pendingRow.brand || 'N/A',
-      model: item?.model || pendingRow.model || 'N/A',
+      productId: item.id, // SSOT: MUST NOT BE NULL
+      name: item.name,
+      brand: item.brand || 'N/A',
+      model: item.model || 'N/A',
       qty: pendingRow.qty,
       price: pendingRow.price,
-      gstRate: item?.gst_rate ?? 18,
-      isSerialized: pendingRow.isSerialized,
+      gstRate: item.gst_rate,
+      isSerialized: item.is_serialized || false,
       serials: [],
       isLocked: false
     }
@@ -682,8 +703,8 @@ function PurchaseEntryContent() {
                           ...pendingRow,
                           item,
                           name: item.name,
-                          price: item.purchasePrice || item.price || 0,
-                          isSerialized: item.isSerialized || false,
+                          price: item.purchase_price || item.price || 0,
+                          isSerialized: item.is_serialized || false,
                           brand: item.brand || 'N/A',
                           model: item.model || 'N/A'
                         });
@@ -695,16 +716,15 @@ function PurchaseEntryContent() {
 
                   <div className="col-span-1 lg:col-span-2 space-y-2">
                     <label className="text-[9px] font-black text-primary uppercase tracking-widest italic text-center block">Serial Track</label>
-                    <button
-                      onClick={() => setPendingRow({ ...pendingRow, isSerialized: !pendingRow.isSerialized })}
+                    <div
                       className={cn(
                         "w-full h-12 rounded-xl flex flex-col items-center justify-center transition-all border-2",
-                        pendingRow.isSerialized ? "bg-primary text-white border-primary shadow-lg shadow-primary/20" : "bg-white text-gray-300 border-gray-100"
+                        pendingRow.isSerialized ? "bg-amber-50 text-amber-600 border-amber-200" : "bg-gray-50 text-gray-300 border-gray-100"
                       )}
                     >
                       <span className="text-[9px] font-black uppercase tracking-widest leading-none">{pendingRow.isSerialized ? 'SERIAL' : 'BATCH'}</span>
-                      <span className="text-[7px] font-bold opacity-50 uppercase leading-none">TRACKING</span>
-                    </button>
+                      <span className="text-[7px] font-bold opacity-50 uppercase leading-none">MASTER_DEFINED</span>
+                    </div>
                   </div>
 
                   <div className="col-span-1 lg:col-span-1 space-y-2">
@@ -752,6 +772,95 @@ function PurchaseEntryContent() {
           </div>
         </div>
 
+        {/* Bill Sundry / Additional Charges Section */}
+        <div className="bg-white rounded-[32px] shadow-[0_8px_30px_rgba(0,0,0,0.02)] border border-gray-100/50">
+          <div className="px-10 py-8 border-b border-gray-50 flex justify-between items-center bg-amber-50/20">
+            <h2 className="text-sm font-black text-[#1A1C21] uppercase tracking-[0.2em] italic">Bill Sundry / Additional Charges</h2>
+            <button
+              onClick={() => setPendingSundry({ name: '', amount: 0, gstRate: 0, expenseId: '' })}
+              disabled={!!pendingSundry || !!scanSession}
+              className="flex items-center gap-2 text-[10px] font-black text-amber-600 uppercase tracking-widest hover:opacity-70 transition-all disabled:opacity-20 italic"
+            >
+              <Plus className="w-4 h-4 bg-amber-500 text-white rounded-full p-0.5" />
+              Add Expense
+            </button>
+          </div>
+
+          <div className="divide-y divide-gray-50">
+            {sundry.map((s, idx) => (
+              <div key={idx} className="grid grid-cols-12 px-10 py-6 items-center hover:bg-gray-50/50 transition-all">
+                <div className="col-span-5 flex items-center gap-4">
+                  <Wallet className="w-5 h-5 text-gray-300" />
+                  <span className="text-base font-black text-[#1A1C21] italic">{s.name}</span>
+                </div>
+                <div className="col-span-3">
+                  <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">Amount: ₹{s.amount.toLocaleString()}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-[10px] font-black text-amber-500 uppercase italic">GST {s.gstRate}%</span>
+                </div>
+                <div className="col-span-2 flex justify-end">
+                  <button 
+                    onClick={() => setSundry(prev => prev.filter((_, i) => i !== idx))}
+                    className="p-2 text-red-300 hover:text-red-500 transition-all"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {pendingSundry && (
+              <div className="p-6 bg-amber-50/30 border-t-2 border-amber-200/50 animate-in slide-in-from-bottom-2 duration-300">
+                <div className="grid grid-cols-12 gap-4 items-end">
+                  <div className="col-span-6 space-y-2">
+                    <label className="text-[9px] font-black text-amber-600 uppercase tracking-widest italic">Expense Type</label>
+                    <EntityLookup 
+                      type="expense"
+                      value={pendingSundry.name}
+                      onChange={(val) => setPendingSundry({...pendingSundry, name: val})}
+                      onSelect={(exp) => setPendingSundry({
+                        ...pendingSundry,
+                        name: exp.name,
+                        expenseId: exp.id,
+                        gstRate: exp.gst_rate || 0,
+                        amount: exp.default_amount || 0
+                      })}
+                      placeholder="Search Transport, Installation..."
+                      className="w-full h-12 bg-white border-2 border-amber-100 rounded-xl px-4 text-base font-black italic outline-none"
+                    />
+                  </div>
+                  <div className="col-span-3 space-y-2">
+                    <label className="text-[9px] font-black text-amber-600 uppercase tracking-widest italic">Amount (₹)</label>
+                    <input 
+                      type="number"
+                      value={pendingSundry.amount || ''}
+                      onChange={(e) => setPendingSundry({...pendingSundry, amount: parseFloat(e.target.value) || 0})}
+                      className="w-full h-12 bg-white border-2 border-amber-100 rounded-xl px-4 text-lg font-black text-right italic outline-none"
+                    />
+                  </div>
+                  <div className="col-span-3 flex gap-2 h-12">
+                    <button onClick={() => setPendingSundry(null)} className="flex-1 bg-white border border-gray-100 text-gray-400 rounded-xl hover:bg-gray-50 transition-all flex items-center justify-center">
+                      <X className="w-5 h-5" />
+                    </button>
+                    <button 
+                      onClick={() => {
+                        if (!pendingSundry.expenseId) return toast.error("Select from master");
+                        if (pendingSundry.amount <= 0) return toast.error("Amount must be > 0");
+                        setSundry([...sundry, pendingSundry]);
+                        setPendingSundry(null);
+                      }}
+                      className="flex-1 bg-amber-500 text-white rounded-xl shadow-lg shadow-amber-500/20 hover:scale-105 transition-all flex items-center justify-center"
+                    >
+                      <CheckCircle2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Footer Section Fix */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 pt-10 pb-20">
           <div className="col-span-1 lg:col-span-12 xl:col-span-7 bg-[#EDF2F7]/50 rounded-[32px] p-6 sm:p-10 space-y-6">
@@ -767,7 +876,9 @@ function PurchaseEntryContent() {
           <div className="col-span-1 lg:col-span-12 xl:col-span-5 flex flex-col justify-end space-y-8">
             <div className="space-y-4">
               {[
-                { label: "Order Total (Est.)", value: `₹${subtotal.toLocaleString('en-IN')}`, highlight: true },
+                { label: "Order Total (Est.)", value: `₹${subtotal.toLocaleString('en-IN')}`, highlight: false },
+                { label: "Additional Charges", value: `₹${sundryTotal.toLocaleString('en-IN')}`, highlight: false },
+                { label: "Grand Total", value: `₹${grandTotal.toLocaleString('en-IN')}`, highlight: true },
                 { label: "Carrier", value: "Standard Freight", highlight: false },
                 { label: "Exp. Arrival", value: "April 14, 2026", highlight: false },
               ].map((row, i) => (

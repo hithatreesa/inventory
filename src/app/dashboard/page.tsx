@@ -49,7 +49,7 @@ export default function DashboardPage() {
    // Construction of safeData payload formatted for user-provided DashboardDataLayer
    const data = useMemo(() => {
       return {
-         sales: transactions.filter((t: Transaction) => t.type === 'SALE' || t.type === 'OUTWARD').map((t: Transaction) => {
+         sales: transactions.filter((t: Transaction) => t.type === 'OUTWARD').map((t: Transaction) => {
             const match = inventory.find((i: InventoryItem) => i.id == t.item_id);
             const matchPrice = match?.price || 0;
             return {
@@ -58,7 +58,7 @@ export default function DashboardPage() {
                items: [{ qty: t.quantity, costPrice: matchPrice, price: t.price || matchPrice, category: match?.category, name: match?.name }]
             }
          }),
-         purchases: transactions.filter((t: Transaction) => t.type === 'PURCHASE' || t.type === 'INWARD').map((t: Transaction) => {
+         purchases: transactions.filter((t: Transaction) => t.type === 'INWARD').map((t: Transaction) => {
             return {
                date: t.date || new Date().toISOString().split("T")[0],
                total: t.quantity * (t.price || 0)
@@ -73,22 +73,6 @@ export default function DashboardPage() {
 
    const stats = useDashboardData({ data });
 
-   // Aggregate Engineer Stats for the new Status Section
-   const engineerStats = useMemo(() => {
-      return (engineers || []).map((eng: Engineer) => {
-         let taken = 0;
-         let returned = 0;
-         transactions.filter((t: Transaction) => t.engineer_id === eng.id).forEach((t: Transaction) => {
-            if (t.type === 'OUTWARD' || t.type === 'ISSUE') taken += Number(t.quantity);
-            if (t.type === 'RETURN') returned += Number(t.quantity);
-         });
-         return {
-            ...eng,
-            taken,
-            pending: taken - returned
-         };
-      }).filter(eng => eng.taken > 0);
-   }, [engineers, transactions]);
 
    const totalCatSales = useMemo(() => (stats.categorySales).reduce((sum: number, c: { value: number }) => sum + c.value, 0), [stats.categorySales]);
 
@@ -174,54 +158,6 @@ export default function DashboardPage() {
                onClick={() => setActiveMetric("stock-value")}
             />
          </div>
-
-
-
-         {/* NEW: PERSONNEL DEPLOYMENT SECTION (AS REQUESTED) */}
-         {engineerStats.length > 0 && (
-            <div className="w-full">
-               <div className="flex items-center justify-between mb-3 px-1">
-                  <h3 className="text-[10px] font-black text-[#003366] uppercase tracking-[0.2em] italic flex items-center gap-2 opacity-60">
-                     <Activity className="w-3 h-3" /> Personnel Deployment Awareness
-                  </h3>
-               </div>
-               <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar snap-x">
-                  {engineerStats.map((eng, idx) => (
-                     <div key={eng.id || idx} className="min-w-[280px] bg-[#003366] rounded-[24px] p-5 shadow-xl shadow-blue-900/10 flex flex-col justify-between relative overflow-hidden group snap-start">
-                        {/* Decorative Icon */}
-                        <div className="absolute top-4 right-4 w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex flex-col items-center justify-center">
-                           <Package className="w-4 h-4 text-blue-300 opacity-60" />
-                           <span className="text-[9px] font-black text-white leading-none mt-1">{eng.pending}</span>
-                        </div>
-
-                        <div className="relative z-10">
-                           <h2 className="text-xl font-black text-white italic tracking-tight uppercase leading-tight mb-1">
-                              {eng.name}
-                           </h2>
-                           <p className="flex items-center gap-1.5 text-[9px] font-black text-blue-300/80 uppercase tracking-widest italic">
-                              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" /> Standby & Active
-                           </p>
-                        </div>
-                        <div className="mt-8 pt-4 border-t border-white/10 flex items-center justify-between">
-
-                           <div className="flex items-baseline gap-1.5">
-                              <span className="text-[9px] font-black text-blue-300/50 uppercase tracking-widest italic">TAKEN :</span>
-                              <span className="text-white text-base font-black tabular-nums">{eng.taken}</span>
-                           </div>
-
-                           <div className="flex items-baseline gap-1.5">
-                              <span className="text-[9px] font-black text-blue-300/50 uppercase tracking-widest italic">PENDING :</span>
-                              <span className="text-yellow-400 text-base font-black tabular-nums">{eng.pending}</span>
-                           </div>
-
-                        </div>
-
-                     </div>
-                  ))}
-               </div>
-            </div>
-         )}
-
 
          {/* SECTION 3: ANALYTICS & MONITORING */}
          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
@@ -361,7 +297,7 @@ export default function DashboardPage() {
                         <div key={i} className="bg-white/5 border border-white/10 p-2.5 rounded-xl hover:bg-white/10 transition-all flex items-center justify-between group/line">
                            <div className="flex-1">
                               <p className="text-[10px] font-black uppercase italic tracking-tight text-white mb-1 leading-none">{item.name}</p>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-3">
                                  <span className="text-[8px] font-black text-blue-300 uppercase tracking-widest">Stock: {item.qty}</span>
                                  <div className="w-1 h-1 rounded-full bg-blue-400" />
                                  <span className="text-[8px] font-black text-orange-400 uppercase tracking-widest">Velocity: {item.velocity}/day</span>

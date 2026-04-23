@@ -118,15 +118,15 @@ export default function InventoryPage() {
                doc.save(`Company_Inventory_${dateStr}.pdf`);
             } else if (type === 'engineer') {
                doc.text(`Engineer Asset Assignment Report - ${dateStr}`, 14, 15);
-               const inUseTxns = transactions.filter((t: { status: string }) => t.status === 'In Use');
-               const tableData = inUseTxns.map((t: { item_id: string, engineer_id: string, quantity: number }) => {
+               const inUseTxns = transactions.filter((t: any) => t.status === 'In Use' && t.engineer_id);
+               const tableData = inUseTxns.map((t: any) => {
                   const item = inventory.find(i => i.id == t.item_id);
                   const eng = (engineers || []).find((e: { id: string }) => e.id == t.engineer_id);
                   return [
-                     eng ? eng.name : t.engineer_id,
+                     eng ? eng.name : (t.engineer_id || 'N/A'),
                      item ? item.name : 'Unknown Item',
                      item ? (item.sku || 'N/A') : 'N/A',
-                     t.quantity.toString()
+                     (t.quantity || 0).toString()
                   ];
                });
                autoTable(doc, {

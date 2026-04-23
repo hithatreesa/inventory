@@ -24,8 +24,11 @@ export function VendorModal({
     name: '',
     address: '',
     email: '',
-    gst: '',
-    phone: ''
+    gstin: '',
+    phone: '',
+    state: '',
+    contact_person: '',
+    payment_terms: ''
   })
 
   useEffect(() => {
@@ -35,8 +38,11 @@ export function VendorModal({
         name: initialName,
         address: '',
         email: '',
-        gst: '',
-        phone: ''
+        gstin: '',
+        phone: '',
+        state: '',
+        contact_person: '',
+        payment_terms: ''
       }))
     }
   }, [isOpen, initialName])
@@ -46,12 +52,14 @@ export function VendorModal({
     setIsSubmitting(true)
     try {
       const payload = {
-        isNew: true, // Tag it so caller knows if needed, though addVendor creates id natively now
         name: form.name.trim(),
         address: form.address.trim(),
         email: form.email.trim(),
-        gst: form.gst.trim(),
-        phone: form.phone.trim()
+        gstin: form.gstin.trim(),
+        phone: form.phone.trim(),
+        state: form.state.trim(),
+        contact_person: form.contact_person.trim(),
+        payment_terms: form.payment_terms.trim()
       }
 
       const newVendor = addVendor(payload)
@@ -93,8 +101,8 @@ export function VendorModal({
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">GST Number</label>
             <Input 
               placeholder="e.g. 29ABCDE1234F1Z5" 
-              value={form.gst}
-              onChange={e => setForm({...form, gst: e.target.value.toUpperCase()})}
+              value={form.gstin}
+              onChange={e => setForm({...form, gstin: e.target.value.toUpperCase()})}
               disabled={isSubmitting}
               className="font-mono tracking-widest"
             />
@@ -112,12 +120,31 @@ export function VendorModal({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Phone Number</label>
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">State / Province</label>
             <Input 
-              type="tel"
-              placeholder="e.g. 9876543210" 
-              value={form.phone}
-              onChange={e => setForm({...form, phone: e.target.value})}
+              placeholder="e.g. Maharashtra" 
+              value={form.state}
+              onChange={e => setForm({...form, state: e.target.value})}
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Contact Person</label>
+            <Input 
+              placeholder="Name of POC" 
+              value={form.contact_person}
+              onChange={e => setForm({...form, contact_person: e.target.value})}
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Payment Terms</label>
+            <Input 
+              placeholder="e.g. Net 30 Days" 
+              value={form.payment_terms}
+              onChange={e => setForm({...form, payment_terms: e.target.value})}
               disabled={isSubmitting}
             />
           </div>

@@ -21,39 +21,57 @@ import { useRouter } from 'next/navigation'
 
 export default function PurchaseDashboard() {
   const router = useRouter()
-  const { transactions, inventory, inwardItem } = useData()
+  const { transactions, inventory, inwardItem, getTicketProfit } = useData()
+  const [searchQuery, setSearchQuery] = useState('')
 
   const inventoryMap = useMemo(() => {
     return new Map(inventory.map(i => [i.id, i]))
   }, [inventory])
 
   const purchaseHistory = useMemo(() => {
-    return transactions
-      .reduce((acc: any[], t) => {
-        if (t.type === 'INWARD') {
-          const item = inventoryMap.get(t.item_id)
-          acc.push({
-            id: `PO-${t.id}`,
-            vendor: t.reference || 'Auto-Procured',
+    // Phase 1: Group transactions by reference to reconstruct "Vouchers"
+    const grouped = transactions.reduce((acc: Record<string, any>, t) => {
+      if ((t.type === 'INWARD' || t.type === 'PO') && t.reference) {
+        const item = inventoryMap.get(t.item_id)
+        if (!acc[t.reference]) {
+          acc[t.reference] = {
+            id: t.reference,
+            vendor: t.supplier || t.notes?.replace('PO Approval: ', '') || 'Auto-Procured',
             date: t.date,
-            amount: t.quantity * (item?.price || 0),
-            status: 'Completed',
-            items: t.quantity,
-            itemName: item?.name || 'Unknown'
-          })
+            amount: 0,
+            status: t.type === 'PO' ? 'Approved' : 'Completed',
+            items: 0,
+            itemNames: []
+          }
         }
-        return acc
-      }, [])
-  }, [transactions, inventoryMap])
+        
+        // Ensure status reflects completion if any part of the reference is INWARD
+        if (t.type === 'INWARD') {
+          acc[t.reference].status = 'Completed';
+        }
+
+        acc[t.reference].amount += t.quantity * (t.price || item?.purchase_price || 0)
+        acc[t.reference].items += t.quantity
+        const itemName = item?.name || t.item_id.replace('TEMP_', '').replace(/_/g, ' ');
+        if (!acc[t.reference].itemNames.includes(itemName)) {
+          acc[t.reference].itemNames.push(itemName);
+        }
+      }
+      return acc
+    }, {})
+
+    return Object.values(grouped)
+      .filter((po: any) => 
+        po.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        po.vendor.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        po.itemNames.some((n: string) => n.toLowerCase().includes(searchQuery.toLowerCase()))
+      )
+      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  }, [transactions, inventoryMap, searchQuery])
 
   const stats = useMemo(() => {
     const totalSpent = purchaseHistory.reduce((acc, p) => acc + p.amount, 0)
-    let pending = 0
-
-    // Single pass for pending status count
-    for (let i = 0; i < transactions.length; i++) {
-      if (transactions[i].status === 'PENDING') pending++
-    }
+    const pending = transactions.filter(t => t.status === 'PENDING').length
 
     return {
       totalSpent,
@@ -78,7 +96,9 @@ export default function PurchaseDashboard() {
       header: 'ITEM / VENDOR',
       cell: (order) => (
         <div>
-          <p className="font-black text-text-main text-sm italic uppercase leading-none">{order.itemName}</p>
+          <p className="font-black text-text-main text-sm italic uppercase leading-none truncate max-w-[200px]">
+            {order.itemNames.length > 1 ? `${order.itemNames[0]} (+${order.itemNames.length - 1} more)` : order.itemNames[0]}
+          </p>
           <p className="text-[10px] font-bold text-text-secondary uppercase tracking-widest mt-1">{order.vendor}</p>
         </div>
       )
@@ -101,11 +121,26 @@ export default function PurchaseDashboard() {
       cell: (order) => `₹${order.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
     },
     {
+      header: 'CALCULATED PROFIT',
+      align: 'right',
+      className: 'font-black italic text-emerald-600',
+      cell: (order: any) => {
+        const profitData = getTicketProfit(order.id);
+        return `₹${profitData.profit.toLocaleString()}`;
+      }
+    },
+    {
       header: 'STATUS',
       align: 'right',
       cell: (order) => (
-        <span className={cn("inline-flex items-center gap-2 font-black italic text-sm tracking-tight uppercase text-green-600")}>
-          <div className="w-1.5 h-1.5 rounded-full bg-green-600" />
+        <span className={cn(
+          "inline-flex items-center gap-2 font-black italic text-sm tracking-tight uppercase",
+          order.status === 'Completed' ? "text-green-600" : "text-blue-600"
+        )}>
+          <div className={cn(
+            "w-1.5 h-1.5 rounded-full",
+            order.status === 'Completed' ? "bg-green-600" : "bg-blue-600"
+          )} />
           {order.status}
         </span>
       )
@@ -182,6 +217,8 @@ export default function PurchaseDashboard() {
           <Input
             placeholder="Search vendor, order id or sku..."
             icon={<Search className="w-4 h-4" />}
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
             className="bg-gray-50/50 border-gray-100 rounded-2xl h-12 italic font-bold placeholder:text-sm placeholder:tracking-widest"
           />
         </div>

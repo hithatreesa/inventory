@@ -10,10 +10,14 @@ import { useGlobalKeyboardShortcuts } from '@/modules/ledger/keyboard-handler';
 import { toast } from 'sonner';
 import { EntityLookup } from '@/components/shared/EntityLookup';
 import { cn } from '@/lib/utils';
+import { X, QrCode, Calculator, Save, LogOut, AlertCircle } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
 
 export default function PurchaseLedgerEntry() {
   const router = useRouter();
-  const { inventory, processPO } = useData();
+  const { inventory, contacts, processInward, addItem, gstConfigs } = useData();
+  const [isTaxApplied, setIsTaxApplied] = useState(true);
+  const [pendingTempItems, setPendingTempItems] = useState<any[]>([]);
 
   const [header, setHeader] = useState<LedgerHeader>({
     series: 'Main',
@@ -29,7 +33,7 @@ export default function PurchaseLedgerEntry() {
   });
 
   const [lines, setLines] = useState<LedgerLine[]>([
-    { id: '1', sno: 1, description: '', qty: 0, unit: '', price: 0, amount: 0, gstRate: 18, isLocked: false, serials: [] }
+    { id: '1', sno: 1, description: '', qty: 0, unit: '', price: 0, amount: 0, gstRate: 18, isLocked: false, serials: [], ticketId: '' }
   ]);
 
   const [sundries, setSundries] = useState<BillSundry[]>([
@@ -37,7 +41,8 @@ export default function PurchaseLedgerEntry() {
     { id: 'S2', name: 'Rounding Off (+/-)', percentage: 0, amount: 0 }
   ]);
 
-  const [isTaxApplied, setIsTaxApplied] = useState(false);
+  const [activeRowIndex, setActiveRowIndex] = useState<number | null>(null);
+  const [showSerialModal, setShowSerialModal] = useState(false);
 
   const {
     totalQty,
@@ -45,7 +50,7 @@ export default function PurchaseLedgerEntry() {
     taxSummaries,
     sundryTotal,
     grandTotal
-  } = useMemo(() => calculateLedgerTotals(lines, sundries, isTaxApplied), [lines, sundries, isTaxApplied]);
+  } = useMemo(() => calculateLedgerTotals(lines, sundries, isTaxApplied, header.gstType), [lines, sundries, isTaxApplied, header.gstType]);
 
   const ensureMinimumRows = useCallback((currentLines: LedgerLine[]) => {
     const minRows = 12;
@@ -59,7 +64,8 @@ export default function PurchaseLedgerEntry() {
         price: 0,
         amount: 0,
         gstRate: 0,
-        isLocked: false
+        isLocked: false,
+        ticketId: ''
       }));
       return [...currentLines, ...pad];
     }
@@ -75,7 +81,7 @@ export default function PurchaseLedgerEntry() {
       const newLines = [...prev];
       const line = { ...newLines[index], [field]: value };
 
-      if (field === 'qty' || field === 'price') {
+      if (field === 'qty' || field === 'price' || field === 'gstRate') {
         line.amount = calculateLineAmount(Number(line.qty) || 0, Number(line.price) || 0);
       } else if (field === 'description' && typeof value === 'object') {
         // SSOT Entity Selection
@@ -87,18 +93,28 @@ export default function PurchaseLedgerEntry() {
         line.gstRate = item.gst_rate || 0;
         line.isLocked = true; // Mark as master-derived
         line.amount = calculateLineAmount(Number(line.qty) || 0, Number(line.price) || 0);
+        
+        // Auto-open serial modal if item is serialized and qty > 0
+        if (item.is_serialized && line.qty > 0) {
+          setActiveRowIndex(index);
+          setShowSerialModal(true);
+        }
       } else if (field === 'description' && typeof value === 'string') {
         line.description = value;
-        if (!value) {
-            line.productId = undefined;
-            line.isLocked = false;
+        // If user manually types, clear the derived ID to allow free-entry
+        if (line.productId) {
+          line.productId = undefined;
+          line.isLocked = false;
         }
+      } else if (field === 'ticketId' && typeof value === 'object') {
+        line.ticketId = value.id;
       }
 
       newLines[index] = line;
       return newLines;
     });
   };
+
 
   const addRow = useCallback(() => {
     setLines(prev => {
@@ -113,10 +129,51 @@ export default function PurchaseLedgerEntry() {
         amount: 0,
         gstRate: 18,
         isLocked: false,
-        serials: []
+        serials: [],
+        ticketId: ''
       }];
     });
   }, []);
+
+  const executeCommit = useCallback(async (commitLines: any[]) => {
+    try {
+      const payload = {
+        vendor: header.partyAccount,
+        date: header.date,
+        reference: header.supplierReference || header.voucherNumber,
+        warehouse: header.materialCentre,
+        invoiceNumber: header.supplierReference || header.voucherNumber
+      };
+
+      const mappedLines = commitLines.map(l => {
+        const masterItem = inventory.find(i => i.id === l.productId);
+        return {
+          id: `entry_line_${Date.now()}_${l.sno}`,
+          productId: l.productId,
+          name: l.description,
+          brand: masterItem?.brand || 'N/A',
+          model: masterItem?.model || 'N/A',
+          qty: Number(l.qty),
+          price: Number(l.price),
+          gstRate: l.gstRate || 0,
+          isSerialized: masterItem?.is_serialized || (l.serials && l.serials.length > 0),
+          serials: (l.serials || []).map((s: any) => typeof s === 'string' ? s : s.serial),
+          isLocked: false,
+          ticket_id: l.ticketId
+        };
+      });
+
+      await toast.promise(processInward(payload, mappedLines), {
+        loading: 'COMMITTING_VOUCHER_TO_LEDGER...',
+        success: 'LEDGER_ENTRY_RECORDED_SUCCESSFULLY',
+        error: (err) => `HARD_FAIL: ${err.message || 'SAVE_FAILED'}`
+      });
+
+      router.push('/purchase');
+    } catch (e: any) {
+      console.error(e);
+    }
+  }, [header, processInward, inventory, router]);
 
   const handleSave = useCallback(async () => {
     const validLines = lines.filter(l => l.description.trim() !== '' && l.qty > 0);
@@ -129,41 +186,35 @@ export default function PurchaseLedgerEntry() {
       return;
     }
 
-    try {
-      await processPO({
-        vendor: header.partyAccount,
-        date: header.date,
-        reference: header.supplierReference || header.voucherNumber,
-        warehouse: header.materialCentre,
-        invoiceNumber: header.supplierReference || header.voucherNumber
-      }, validLines.map(l => {
-        const masterItem = inventory.find(i => i.id === l.productId);
-        return {
-          id: `po_line_${Date.now()}_${l.sno}`,
-          productId: l.productId!,
-          name: l.description,
-          brand: masterItem?.brand || 'N/A',
-          model: masterItem?.model || 'N/A',
-          qty: Number(l.qty),
-          price: Number(l.price),
-          gstRate: l.gstRate || 0,
-          isSerialized: masterItem?.is_serialized || false,
-          serials: (l.serials || []).map(s => ({
-            serial: s,
-            timestamp: Date.now()
-          })),
-          isLocked: false
+    // Strict Validation
+    const sessionSerials = new Set<string>();
+    for (const l of validLines) {
+      if (l.qty <= 0) return toast.error(`Invalid quantity for line ${l.sno}`);
+      if (l.price < 0) return toast.error(`Invalid price for line ${l.sno}`);
+      if (!l.ticketId) return toast.error(`Ticket ID missing for line ${l.sno} (Ledger Integrity Rule)`);
+      
+      const masterItem = inventory.find(i => i.id === l.productId);
+      const isSerialized = masterItem?.is_serialized || (l.serials && l.serials.length > 0);
+
+      if (isSerialized) {
+        if (!l.serials || l.serials.length !== l.qty) {
+          return toast.error(`Serial mismatch for ${l.description}. Need ${l.qty}, got ${l.serials?.length || 0}`);
         }
-      }));
-      toast.success('Purchase Voucher Saved Successfully!');
-      router.push('/purchase');
-    } catch (e: any) {
-      toast.error(`Save Failed: ${e.message}`);
+        for (const s of l.serials) {
+          if (sessionSerials.has(s as string)) return toast.error(`Duplicate serial in session: ${s}`);
+          sessionSerials.add(s as string);
+        }
+      }
     }
-  }, [lines, header, processPO, router]);
+
+    await executeCommit(validLines);
+  }, [lines, header, inventory, executeCommit]);
+
+
+
 
   const toggleTax = useCallback(() => {
-    setIsTaxApplied(prev => !prev);
+    setIsTaxApplied((prev: boolean) => !prev);
     toast.info(isTaxApplied ? "Tax Applied Removed" : "Tax Applied Successfully");
   }, [isTaxApplied]);
 
@@ -183,15 +234,15 @@ export default function PurchaseLedgerEntry() {
       {/* TOP HEADER */}
       <div className="flex justify-between items-end border-b-2 border-[var(--color-ledger-border)] p-4 shrink-0 bg-white/50">
         <div className="flex items-center gap-6">
-          <h1 className="text-3xl font-black tracking-tighter">THE DIGITAL LEDGER</h1>
+          <h1 className="text-3xl font-black tracking-tighter italic">THE DIGITAL LEDGER</h1>
           <div className="flex items-center">
-            <span className="text-xl font-black bg-white px-4 py-1 border border-gray-300 shadow-sm">PURCHASE VOUCHER</span>
-            <span className="text-xs bg-blue-100 text-blue-800 font-bold px-3 py-1.5 border border-blue-200 ml-2 tracking-widest">TRANSACTION TYPE: GST INVOICE</span>
+            <span className="text-xl font-black bg-white px-4 py-1 border border-gray-300 shadow-sm italic uppercase tracking-tighter">PURCHASE VOUCHER</span>
+            <span className="text-[10px] bg-blue-100 text-blue-800 font-black px-3 py-1.5 border border-blue-200 ml-2 tracking-widest italic">TRANSACTION: GST_INWARD</span>
           </div>
         </div>
         <div className="text-right">
-          <div className="text-[10px] font-black tracking-widest text-gray-500 uppercase">VOUCHER NUMBER</div>
-          <div className="text-2xl font-black tracking-tight">{header.voucherNumber}</div>
+          <div className="text-[10px] font-black tracking-widest text-gray-500 uppercase italic">VOUCHER_ID</div>
+          <div className="text-2xl font-black tracking-tight italic">{header.voucherNumber}</div>
         </div>
       </div>
 
@@ -199,7 +250,7 @@ export default function PurchaseLedgerEntry() {
       <div className="shrink-0 bg-white/30 border-b-2 border-[var(--color-ledger-border)]">
         <div className="grid grid-cols-1 md:grid-cols-12 border-b border-[var(--color-ledger-border)]">
           <div className="col-span-12 md:col-span-2 border-r border-[var(--color-ledger-border)] p-2">
-            <label className="block text-[9px] font-bold text-gray-500">SERIES</label>
+            <label className="block text-[9px] font-black text-gray-500 italic tracking-widest">SERIES</label>
             <input
               value={header.series}
               onChange={e => setHeader({ ...header, series: e.target.value })}
@@ -207,7 +258,7 @@ export default function PurchaseLedgerEntry() {
             />
           </div>
           <div className="col-span-12 md:col-span-2 border-r border-[var(--color-ledger-border)] p-2">
-            <label className="block text-[9px] font-bold text-gray-500">DATE (DAY)</label>
+            <label className="block text-[9px] font-black text-gray-500 italic tracking-widest">DATE (DAY)</label>
             <div className="flex items-center gap-2 border-b border-gray-300 focus-within:border-blue-500 py-1">
               <input
                 type="date"
@@ -218,20 +269,20 @@ export default function PurchaseLedgerEntry() {
             </div>
           </div>
           <div className="col-span-12 md:col-span-3 border-r border-[var(--color-ledger-border)] p-2">
-            <label className="block text-[9px] font-bold text-gray-500">SUPPLIER REF. / INV NO.</label>
+            <label className="block text-[9px] font-black text-gray-500 italic tracking-widest">SUPPLIER REF. / INV NO.</label>
             <input
               value={header.supplierReference}
               onChange={e => setHeader({ ...header, supplierReference: e.target.value })}
               placeholder="e.g. INV-2023-100"
-              className="w-full bg-transparent outline-none font-black text-blue-700 text-sm border-b border-gray-300 focus:border-blue-500 py-1"
+              className="w-full bg-transparent outline-none font-black text-blue-700 text-sm border-b border-gray-300 focus:border-blue-500 py-1 italic"
             />
           </div>
           <div className="col-span-12 md:col-span-3 border-r border-[var(--color-ledger-border)] p-2">
-            <label className="block text-[9px] font-bold text-gray-500">PURCHASE TYPE</label>
+            <label className="block text-[9px] font-black text-gray-500 italic tracking-widest">PURCHASE TYPE</label>
             <select
               value={header.gstType}
               onChange={e => setHeader({ ...header, gstType: e.target.value })}
-              className="w-full bg-transparent outline-none font-black text-sm border-b border-gray-300 focus:border-blue-500 py-1"
+              className="w-full bg-transparent outline-none font-black text-sm border-b border-gray-300 focus:border-blue-500 py-1 italic"
             >
               <option>LGST 18% (Registered)</option>
               <option>IGST 18% (Interstate)</option>
@@ -239,15 +290,23 @@ export default function PurchaseLedgerEntry() {
             </select>
           </div>
           <div className="col-span-12 md:col-span-2 p-2 flex items-end justify-end gap-2">
-            <button className="text-[9px] font-black tracking-widest border border-gray-300 bg-white px-4 py-1.5 hover:bg-gray-50 shadow-sm">VCH IMG</button>
+            <button className="text-[9px] font-black tracking-widest border border-gray-300 bg-white px-4 py-1.5 hover:bg-gray-50 shadow-sm italic uppercase">VCH_IMAGE</button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-12 border-b border-[var(--color-ledger-border)]">
           <div className="col-span-12 md:col-span-8 border-r border-[var(--color-ledger-border)] p-2">
-            <label className="block text-[9px] font-bold text-gray-500">CUSTOMER NAME (PARTY ACCOUNT)</label>
+            <div className="flex justify-between items-end mb-1">
+              <label className="text-[9px] font-black text-gray-500 uppercase tracking-[0.2em] italic">VENDOR_ACCOUNT (PARTY_LEDGER)</label>
+              {header.partyAccount && (
+                <div className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 italic">
+                  BALANCE: ₹{contacts.find((v: any) => v.name === header.partyAccount) ? "24,500.00 CR" : "0.00"}
+                </div>
+              )}
+            </div>
             <EntityLookup
-              type="vendor"
+              type="contact"
+              contactFilter="VENDOR"
               value={header.partyAccount}
               onChange={val => setHeader({ ...header, partyAccount: val })}
               onSelect={vendor => {
@@ -260,8 +319,9 @@ export default function PurchaseLedgerEntry() {
               className="w-full bg-transparent outline-none font-black text-blue-700 text-base border-b border-gray-300 focus:border-blue-500 py-1 placeholder:text-gray-300 placeholder:italic"
             />
           </div>
+
           <div className="col-span-12 md:col-span-4 p-2">
-            <label className="block text-[9px] font-bold text-gray-500">MATERIAL CENTRE</label>
+            <label className="block text-[9px] font-black text-gray-500 italic tracking-widest">MATERIAL CENTRE / HUB</label>
             <input
               value={header.materialCentre}
               onChange={e => setHeader({ ...header, materialCentre: e.target.value })}
@@ -272,11 +332,11 @@ export default function PurchaseLedgerEntry() {
 
         <div className="grid grid-cols-1 md:grid-cols-12">
           <div className="col-span-12 md:col-span-4 border-r border-[var(--color-ledger-border)] p-2">
-            <label className="block text-[9px] font-bold text-gray-500">ITC ELIGIBILITY</label>
+            <label className="block text-[9px] font-black text-gray-500 italic tracking-widest">ITC ELIGIBILITY</label>
             <select
               value={header.itcEligibility}
               onChange={e => setHeader({ ...header, itcEligibility: e.target.value })}
-              className="w-full bg-transparent outline-none font-black text-sm border-b border-gray-300 focus:border-blue-500 py-1"
+              className="w-full bg-transparent outline-none font-black text-sm border-b border-gray-300 focus:border-blue-500 py-1 italic"
             >
               <option>Input Goods/Services</option>
               <option>Capital Goods</option>
@@ -284,12 +344,12 @@ export default function PurchaseLedgerEntry() {
             </select>
           </div>
           <div className="col-span-12 md:col-span-8 p-2">
-            <label className="block text-[9px] font-bold text-gray-500">NARRATION / REMARK</label>
+            <label className="block text-[9px] font-black text-gray-500 italic tracking-widest">NARRATION / AUDIT_NOTES</label>
             <input
               value={header.narration}
               onChange={e => setHeader({ ...header, narration: e.target.value })}
               placeholder="Being goods purchased vide Bill No..."
-              className="w-full bg-transparent outline-none font-bold text-sm border-b border-gray-300 focus:border-blue-500 py-1 italic text-gray-600 placeholder:text-gray-300"
+              className="w-full bg-transparent outline-none font-black text-sm border-b border-gray-300 focus:border-blue-500 py-1 italic text-gray-600 placeholder:text-gray-300"
             />
           </div>
         </div>
@@ -298,49 +358,47 @@ export default function PurchaseLedgerEntry() {
       {/* MAIN GRID */}
       <div className="flex-1 overflow-auto bg-white border-b-2 border-[var(--color-ledger-border)] relative input-grid-container">
         <table className="w-full text-sm border-collapse" style={{ tableLayout: 'fixed' }}>
-          <thead className="bg-[#64748B] text-white sticky top-0 z-10 font-bold text-[10px] tracking-widest shadow-sm">
+          <thead className="bg-[#1E293B] text-white sticky top-0 z-10 font-black text-[9px] tracking-widest shadow-sm uppercase italic">
             <tr>
-              <th className="border-r border-[#475569] px-2 py-2 text-center w-12">S.N.</th>
-              <th className="border-r border-[#475569] px-4 py-2 text-left">ITEM DESCRIPTION & SPECIFICATION</th>
-              <th className="border-r border-[#475569] px-4 py-2 text-left w-48">CUSTOMER</th>
-              <th className="border-r border-[#475569] px-2 py-2 text-right w-24">QTY.</th>
-              <th className="border-r border-[#475569] px-2 py-2 text-left w-64">SERIALS (CSV)</th>
-              <th className="border-r border-[#475569] px-2 py-2 text-center w-20">UNIT</th>
-              <th className="border-r border-[#475569] px-2 py-2 text-right w-32">PRICE (₹)</th>
+              <th className="border-r border-[#334155] px-2 py-2 text-center w-12">S.N.</th>
+              <th className="border-r border-[#334155] px-4 py-2 text-left">ITEM_DESCRIPTION</th>
+              <th className="border-r border-[#334155] px-2 py-2 text-right w-20">QTY.</th>
+              <th className="border-r border-[#334155] px-2 py-2 text-left w-48">SERIALS</th>
+              <th className="border-r border-[#334155] px-2 py-2 text-center w-16">UNIT</th>
+              <th className="border-r border-[#334155] px-2 py-2 text-right w-28">PRICE (₹)</th>
+              <th className="border-r border-[#334155] px-2 py-2 text-right w-20">GST%</th>
               <th className="px-4 py-2 text-right w-36">AMOUNT (₹)</th>
             </tr>
           </thead>
           <tbody>
             {lines.map((line, rowIndex) => (
-              <tr key={line.id} className="border-b border-gray-100 hover:bg-yellow-50/50 group">
-                <td className="border-r border-gray-100 px-2 py-1 text-center font-bold text-gray-400 text-xs">
+              <tr key={line.id} className="border-b border-gray-100 hover:bg-blue-50/30 group transition-colors">
+                <td className="border-r border-gray-100 px-2 py-1 text-center font-black text-gray-300 text-[10px] italic">
                   {line.description || line.qty > 0 ? (
-                    <span className={line.qty > 0 ? "text-blue-600" : ""}>{line.sno}.</span>
+                    <span className={line.qty > 0 ? "text-primary" : ""}>{line.sno}.</span>
                   ) : rowIndex + 1}
                 </td>
                 <td className="border-r border-gray-100 px-2 py-1 relative">
-                  <EntityLookup
-                    type="item"
-                    value={line.description}
-                    onChange={(val) => updateLine(rowIndex, 'description', val)}
-                    onSelect={(item) => updateLine(rowIndex, 'description', item)}
-                    placeholder={rowIndex === 0 && !line.description ? "Start typing item name..." : ""}
-                    className="w-full bg-transparent outline-none font-black text-sm focus:bg-blue-50 px-1"
-                  />
-                  {/* Keep the grid keyboard handler passive listener mapping by rendering a hidden input to capture generic data-row, data-col if required or simply rely on EntityLookup */}
+                  <div className="flex justify-between items-center">
+                    <EntityLookup
+                      type="item"
+                      value={line.description}
+                      onChange={(val) => updateLine(rowIndex, 'description', val)}
+                      onSelect={(item) => updateLine(rowIndex, 'description', item)}
+                      onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 1, lines.length, 6, addRow)}
+                      data-row={rowIndex}
+                      data-col={1}
+                      placeholder={rowIndex === 0 && !line.description ? "SEARCH PRODUCT..." : ""}
+                      className="w-full bg-transparent outline-none font-black text-sm focus:bg-blue-50 px-1"
+                    />
+                    {line.productId && (
+                      <span className="absolute -top-1 right-1 text-[7px] font-black bg-gray-800 text-white px-1.5 py-0.5 rounded italic tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
+                        STOCK: {inventory.find(i => i.id === line.productId)?.total_qty || 0}
+                      </span>
+                    )}
+                  </div>
                 </td>
-                <td className="border-r border-gray-100 px-2 py-1">
-                  <input
-                    type="text"
-                    value={line.customerName || ''}
-                    onChange={(e) => updateLine(rowIndex, 'customerName', e.target.value)}
-                    onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 5, lines.length, 6, addRow)}
-                    data-row={rowIndex}
-                    data-col={5}
-                    placeholder="Ref. Customer"
-                    className="w-full bg-transparent outline-none font-bold text-[10px] uppercase focus:bg-blue-50 px-1 placeholder:text-gray-200"
-                  />
-                </td>
+
                 <td className="border-r border-gray-100 px-2 py-1">
                   <input
                     type="number"
@@ -349,7 +407,7 @@ export default function PurchaseLedgerEntry() {
                     onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 2, lines.length, 6, addRow)}
                     data-row={rowIndex}
                     data-col={2}
-                    className="w-full bg-transparent outline-none font-mono text-sm text-right focus:bg-blue-50 px-1"
+                    className="w-full bg-transparent outline-none font-black text-sm text-right focus:bg-blue-50 px-1 italic"
                   />
                 </td>
                 <td className="border-r border-gray-100 px-2 py-1">
@@ -357,11 +415,11 @@ export default function PurchaseLedgerEntry() {
                     type="text"
                     value={line.serials?.join(',') || ''}
                     onChange={(e) => updateLine(rowIndex, 'serials', e.target.value.split(',').map(s => s.trim()).filter(s => s !== ''))}
-                    onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 7, lines.length, 6, addRow)}
+                    onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 3, lines.length, 6, addRow)}
                     data-row={rowIndex}
-                    data-col={7}
+                    data-col={3}
                     placeholder="S1, S2..."
-                    className="w-full bg-transparent outline-none font-bold text-[10px] uppercase focus:bg-blue-50 px-1 placeholder:text-gray-200"
+                    className="w-full bg-transparent outline-none font-black text-[10px] uppercase focus:bg-blue-50 px-1 placeholder:text-gray-200 italic"
                   />
                 </td>
                 <td className="border-r border-gray-100 px-2 py-1">
@@ -369,10 +427,10 @@ export default function PurchaseLedgerEntry() {
                     type="text"
                     value={line.unit}
                     onChange={(e) => updateLine(rowIndex, 'unit', e.target.value)}
-                    onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 3, lines.length, 5, addRow)}
+                    onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 4, lines.length, 6, addRow)}
                     data-row={rowIndex}
-                    data-col={3}
-                    className="w-full bg-transparent outline-none font-bold text-xs text-center focus:bg-blue-50 px-1"
+                    data-col={4}
+                    className="w-full bg-transparent outline-none font-black text-xs text-center focus:bg-blue-50 px-1 italic"
                   />
                 </td>
                 <td className="border-r border-gray-100 px-2 py-1">
@@ -380,17 +438,24 @@ export default function PurchaseLedgerEntry() {
                     type="number"
                     value={line.price || ''}
                     onChange={(e) => updateLine(rowIndex, 'price', e.target.value)}
-                    onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 4, lines.length, 5, addRow)}
+                    onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 5, lines.length, 6, addRow)}
                     data-row={rowIndex}
-                    data-col={4}
-                    disabled={line.isLocked}
-                    className={cn(
-                      "w-full bg-transparent outline-none font-mono text-sm text-right px-1",
-                      line.isLocked ? "text-blue-700 opacity-60" : "focus:bg-blue-50"
-                    )}
+                    data-col={5}
+                    className="w-full bg-transparent outline-none font-black text-sm text-right px-1 focus:bg-blue-50 italic"
                   />
                 </td>
-                <td className="px-4 py-1 text-right font-mono text-sm font-black text-black">
+                <td className="border-r border-gray-100 px-2 py-1">
+                  <input
+                    type="number"
+                    value={line.gstRate || ''}
+                    onChange={(e) => updateLine(rowIndex, 'gstRate', e.target.value)}
+                    onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 6, lines.length, 6, addRow)}
+                    data-row={rowIndex}
+                    data-col={6}
+                    className="w-full bg-transparent outline-none font-black text-sm text-right px-1 focus:bg-blue-50 italic"
+                  />
+                </td>
+                <td className="px-4 py-1 text-right font-black text-sm text-black italic">
                   {line.amount > 0 ? line.amount.toFixed(2) : ''}
                 </td>
               </tr>
@@ -407,28 +472,34 @@ export default function PurchaseLedgerEntry() {
           <div className="text-[9px] font-black bg-gray-100 px-2 py-1 border border-gray-200 mb-2">TAX SUMMARY</div>
           <div className="flex-1 overflow-y-auto">
             {taxSummaries.length > 0 ? taxSummaries.map((tax: TaxSummaryRow, i: number) => (
-              <div key={i} className="mb-2">
+              <div key={i} className="mb-2 bg-white/30 p-2 rounded border border-gray-200">
                 <div className="flex justify-between text-xs mb-1">
-                  <span className="text-gray-500 font-bold">Tax Rate</span>
-                  <span className="font-mono">{tax.taxRate.toFixed(2)}%</span>
-                </div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-gray-500 font-bold">Taxable Amt.</span>
+                  <span className="text-gray-500 font-bold">GST @ {tax.taxRate.toFixed(1)}%</span>
                   <span className="font-mono font-black">{tax.taxableAmount.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-xs text-blue-600">
-                  <span className="font-bold">CGST ({(tax.taxRate / 2).toFixed(1)}%)</span>
-                  <span className="font-mono">{tax.cgst.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-xs text-blue-600">
-                  <span className="font-bold">SGST ({(tax.taxRate / 2).toFixed(1)}%)</span>
-                  <span className="font-mono">{tax.sgst.toFixed(2)}</span>
-                </div>
+                {tax.igst > 0 ? (
+                  <div className="flex justify-between text-xs text-purple-700">
+                    <span className="font-bold">IGST</span>
+                    <span className="font-mono">{tax.igst.toFixed(2)}</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between text-xs text-blue-600">
+                      <span className="font-bold">CGST ({(tax.taxRate / 2).toFixed(1)}%)</span>
+                      <span className="font-mono">{tax.cgst.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-blue-600">
+                      <span className="font-bold">SGST ({(tax.taxRate / 2).toFixed(1)}%)</span>
+                      <span className="font-mono">{tax.sgst.toFixed(2)}</span>
+                    </div>
+                  </>
+                )}
               </div>
             )) : (
-              <div className="text-xs text-gray-400 italic">No tax applied</div>
+              <div className="text-xs text-gray-400 italic text-center py-4">No tax applied</div>
             )}
           </div>
+
         </div>
 
         {/* Center Totals */}
@@ -515,6 +586,121 @@ export default function PurchaseLedgerEntry() {
           QUIT (ESC)
         </button>
       </div>
+
+      {/* SERIAL MODAL (Individual Filing Logic) */}
+      {showSerialModal && activeRowIndex !== null && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 uppercase">
+          <div className="bg-white rounded-lg w-full max-w-lg shadow-2xl overflow-hidden border-2 border-[var(--color-ledger-border)] animate-in zoom-in-95 duration-200">
+            <div className="bg-[#1E3A8A] text-white p-4 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <QrCode className="w-5 h-5" />
+                <h3 className="font-black text-sm tracking-widest">INDIVIDUAL SERIAL FILING</h3>
+              </div>
+              <button onClick={() => setShowSerialModal(false)} className="hover:rotate-90 transition-transform">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              <div className="bg-gray-50 p-4 border border-gray-200 rounded">
+                <div className="text-[10px] font-bold text-gray-500 mb-1">PRODUCT</div>
+                <div className="text-sm font-black text-blue-900">{lines[activeRowIndex]?.description}</div>
+                <div className="mt-2 flex justify-between text-[10px] font-bold">
+                  <span>UNITS REQUIRED: {lines[activeRowIndex]?.qty}</span>
+                  <span className={cn(
+                    "px-2 py-0.5 rounded",
+                    (lines[activeRowIndex]?.serials?.length || 0) === lines[activeRowIndex]?.qty ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                  )}>
+                    SCANNED: {lines[activeRowIndex]?.serials?.length || 0}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <label className="block text-[10px] font-black text-gray-500">SCAN SERIAL NUMBER</label>
+                <div className="flex gap-2">
+                  <input
+                    autoFocus
+                    placeholder="ENTER SERIAL & PRESS ENTER..."
+                    className="flex-1 h-12 bg-gray-100 border-2 border-gray-200 rounded px-4 font-mono font-black text-lg outline-none focus:border-blue-500 transition-colors"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const val = (e.target as HTMLInputElement).value.trim();
+                        if (!val) return;
+                        
+                        const currentSerials = lines[activeRowIndex].serials || [];
+                        if (currentSerials.includes(val)) {
+                          toast.error("DUPLICATE SERIAL IN THIS VOUCHER");
+                          return;
+                        }
+                        
+                        if (currentSerials.length >= lines[activeRowIndex].qty) {
+                          toast.error("ALL UNITS ALREADY SCANNED");
+                          return;
+                        }
+
+                        const newSerials = [...currentSerials, val];
+                        updateLine(activeRowIndex, 'serials', newSerials);
+                        (e.target as HTMLInputElement).value = "";
+                        
+                        if (newSerials.length === lines[activeRowIndex].qty) {
+                          toast.success("ALL SERIALS CAPTURED");
+                          setTimeout(() => setShowSerialModal(false), 300);
+                        }
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="max-h-48 overflow-y-auto border border-gray-100 rounded bg-gray-50/50 p-2">
+                {lines[activeRowIndex]?.serials?.length === 0 ? (
+                  <div className="text-center py-8 text-[10px] font-bold text-gray-300 italic tracking-widest">
+                    AWAITING SCANNER INPUT...
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    {lines[activeRowIndex]?.serials?.map((s, idx) => (
+                      <div key={idx} className="flex justify-between items-center bg-white p-2 rounded border border-gray-200 text-[10px] font-black">
+                        <span>{s}</span>
+                        <button 
+                          onClick={() => {
+                            const newSerials = (lines[activeRowIndex].serials || []).filter((_, i) => i !== idx);
+                            updateLine(activeRowIndex, 'serials', newSerials);
+                          }}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-4 border-t border-gray-200 flex justify-end gap-3">
+              <Button 
+                variant="secondary" 
+                onClick={() => setShowSerialModal(false)}
+                className="h-10 px-6 font-black text-[10px] tracking-widest"
+              >
+                CANCEL
+              </Button>
+              <Button 
+                onClick={() => setShowSerialModal(false)}
+                disabled={(lines[activeRowIndex]?.serials?.length || 0) < lines[activeRowIndex]?.qty}
+                className="h-10 px-8 bg-[#1E3A8A] text-white font-black text-[10px] tracking-widest"
+              >
+                DONE (F10)
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
     </div>
   );
 }
+

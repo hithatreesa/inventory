@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
    Package,
    FileText,
@@ -166,12 +166,31 @@ function ReportQuickViewModal({ type, onClose, inventory, transactions }: Report
    ========================================================================== */
 
 function StockSummaryView({ inventory }: { inventory: ReportItem[] }) {
+  const { transactions } = useData();
+  
+  const summary = useMemo(() => {
+    return inventory.map((item: any) => {
+      const itemTxns = (transactions || []).filter((t: any) => t.item_id === item.id);
+      const inward = itemTxns.filter(t => ['INWARD', 'RETURN', 'ADJUST_IN'].includes(t.type)).reduce((sum, t) => sum + (t.quantity || 0), 0);
+      const outward = itemTxns.filter(t => ['SALE', 'OUTWARD', 'CONSUMED', 'ADJUST_OUT'].includes(t.type)).reduce((sum, t) => sum + (t.quantity || 0), 0);
+      const closing = inward - outward;
+      
+      return {
+        ...item,
+        opening: 0, // Placeholder for actual opening balance logic
+        inward,
+        outward,
+        closing
+      };
+    });
+  }, [inventory, transactions]);
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left">
         <thead>
-          <tr className="bg-gray-50/50 border-b border-gray-100 italic">
-            <th className="px-4 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Item / Category</th>
+          <tr className="bg-gray-100/80 border-b-2 border-gray-300 italic">
+            <th className="px-4 py-4 text-[10px] font-black text-gray-700 uppercase tracking-widest">Item / Category</th>
             <th className="px-4 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Opening</th>
             <th className="px-4 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center text-green-600">Inward</th>
             <th className="px-4 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center text-red-600">Outward</th>
@@ -179,16 +198,16 @@ function StockSummaryView({ inventory }: { inventory: ReportItem[] }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50">
-          {inventory.map((item: { id: string, name: string, category: string, total_qty: number }) => (
-            <tr key={item.id} className="hover:bg-gray-50/30">
+          {summary.map((row) => (
+            <tr key={row.id} className="hover:bg-gray-50/30">
               <td className="px-4 py-4">
-                <p className="text-xs font-black text-[#003366] uppercase leading-none">{item.name}</p>
-                <p className="text-[9px] font-black text-gray-300 uppercase mt-1 tracking-widest">{item.category}</p>
+                <p className="text-xs font-black text-[#003366] uppercase leading-none">{row.name}</p>
+                <p className="text-[9px] font-black text-gray-400 uppercase mt-1 tracking-widest">{row.category}</p>
               </td>
-              <td className="px-4 py-4 text-center font-bold text-xs">{(item.total_qty || 0) + 5}</td>
-              <td className="px-4 py-4 text-center font-black text-xs text-green-600">+12</td>
-              <td className="px-4 py-4 text-center font-black text-xs text-red-600">-7</td>
-              <td className="px-4 py-4 text-right font-black italic text-sm text-[#003366] tabular-nums">{item.total_qty || 0}</td>
+              <td className="px-4 py-4 text-center font-bold text-xs text-gray-400">{row.opening}</td>
+              <td className="px-4 py-4 text-center font-black text-xs text-green-600">+{row.inward}</td>
+              <td className="px-4 py-4 text-center font-black text-xs text-red-600">-{row.outward}</td>
+              <td className="px-4 py-4 text-right font-black italic text-sm text-[#003366] tabular-nums">{row.closing}</td>
             </tr>
           ))}
         </tbody>
@@ -250,8 +269,8 @@ function ReorderIntelligenceView({ inventory, transactions }: { inventory: Repor
       </div>
       <table className="w-full text-left">
         <thead>
-          <tr className="bg-gray-50/50 border-b border-gray-100 italic">
-            <th className="px-4 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Asset</th>
+          <tr className="bg-gray-100/80 border-b-2 border-gray-300 italic">
+            <th className="px-4 py-4 text-[10px] font-black text-gray-700 uppercase tracking-widest">Asset</th>
             <th className="px-4 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Velocity (S/D)</th>
             <th className="px-4 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Lead Days</th>
             <th className="px-4 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Suggested Qty</th>
@@ -284,12 +303,90 @@ function ReorderIntelligenceView({ inventory, transactions }: { inventory: Repor
 }
 
 function ProfitMarginView() {
+  const { transactions, tickets, getTicketProfit } = useData();
+  
+  const ticketProfits = useMemo(() => {
+    return (tickets || []).map(t => ({
+      ...t,
+      stats: getTicketProfit(t.id)
+    })).filter(t => t.stats.revenue > 0 || t.stats.cost > 0);
+  }, [tickets, getTicketProfit]);
+
+  const totals = useMemo(() => {
+    return ticketProfits.reduce((acc: any, curr: any) => ({
+      revenue: acc.revenue + curr.stats.revenue,
+      profit: acc.profit + curr.stats.profit,
+      cost: acc.cost + curr.stats.cost
+    }), { revenue: 0, profit: 0, cost: 0 });
+  }, [ticketProfits]);
+
+  if (ticketProfits.length === 0) {
+    return (
+      <div className="p-12 text-center opacity-40">
+        <TrendingUp className="w-12 h-12 mx-auto mb-4" />
+        <p className="text-xs font-black uppercase tracking-widest italic">No financial data available for tickets yet.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="p-12 text-center opacity-40">
-      <TrendingUp className="w-12 h-12 mx-auto mb-4" />
-      <p className="text-xs font-black uppercase tracking-widest italic">Profitability Map & Graph View Coming Soon</p>
+    <div className="space-y-6">
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-blue-50 p-6 rounded-3xl border border-blue-100">
+          <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Total Revenue</p>
+          <h3 className="text-2xl font-black text-blue-900 italic uppercase tabular-nums">₹{totals.revenue.toLocaleString()}</h3>
+        </div>
+        <div className="bg-green-50 p-6 rounded-3xl border border-green-100">
+          <p className="text-[10px] font-black text-green-400 uppercase tracking-widest">Net Profit</p>
+          <h3 className="text-2xl font-black text-green-900 italic uppercase tabular-nums">₹{totals.profit.toLocaleString()}</h3>
+        </div>
+        <div className="bg-purple-50 p-6 rounded-3xl border border-purple-100">
+          <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest">Avg Margin</p>
+          <h3 className="text-2xl font-black text-purple-900 italic uppercase tabular-nums">{totals.revenue > 0 ? ((totals.profit / totals.revenue) * 100).toFixed(1) : 0}%</h3>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="bg-gray-50/50 border-b border-gray-100 italic">
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Ticket / Client</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Revenue</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Cost</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Profit</th>
+              <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Margin</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {ticketProfits.map((tp: any) => (
+              <tr key={tp.id} className="hover:bg-gray-50/30">
+                <td className="px-6 py-5">
+                  <p className="text-xs font-black text-[#003366] uppercase leading-none">{tp.id}</p>
+                  <p className="text-[9px] font-black text-gray-400 uppercase mt-1 tracking-widest italic">{tp.customer_name || 'Generic Client'}</p>
+                </td>
+                <td className="px-6 py-5 text-right font-bold text-xs">₹{tp.stats.revenue.toLocaleString()}</td>
+                <td className="px-6 py-5 text-right font-bold text-xs text-red-400">₹{tp.stats.cost.toLocaleString()}</td>
+                <td className={cn(
+                  "px-6 py-5 text-right font-black text-xs italic",
+                  tp.stats.profit >= 0 ? "text-green-600" : "text-red-600"
+                )}>
+                  ₹{tp.stats.profit.toLocaleString()}
+                </td>
+                <td className="px-6 py-5 text-right">
+                  <span className={cn(
+                    "px-3 py-1 rounded-full text-[9px] font-black italic uppercase",
+                    tp.stats.margin >= 20 ? "bg-green-100 text-green-700" : (tp.stats.margin >= 0 ? "bg-blue-100 text-blue-700" : "bg-red-100 text-red-700")
+                  )}>
+                    {tp.stats.margin.toFixed(1)}%
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
-  )
+  );
 }
 
 function DeadStockView({ inventory }: { inventory: ReportItem[] }) {

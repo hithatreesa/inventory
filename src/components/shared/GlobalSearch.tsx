@@ -27,7 +27,7 @@ export function GlobalSearch() {
 
     const results = useMemo(() => {
         if (!query) return [];
-        return index.filter(item =>
+        return index.filter((item: any) =>
             item.name.toLowerCase().includes(query.toLowerCase()) ||
             item.id.toLowerCase().includes(query.toLowerCase())
         ).slice(0, 8);
@@ -35,7 +35,7 @@ export function GlobalSearch() {
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.ctrlKey && e.key === 'k') {
+            if ((e.ctrlKey && e.key === 'k') || (e.key === '/' && !isOpen && (e.target as HTMLElement).tagName !== 'INPUT')) {
                 e.preventDefault();
                 setIsOpen(true);
             }
@@ -101,7 +101,7 @@ export function GlobalSearch() {
                 <div className="max-h-[500px] overflow-y-auto custom-scrollbar italic">
                     {results.length > 0 ? (
                         <div className="p-4 space-y-2">
-                            {results.map((item, idx) => (
+                            {results.map((item: any, idx: number) => (
                                 <button
                                     key={idx}
                                     onClick={() => handleSelect(item)}

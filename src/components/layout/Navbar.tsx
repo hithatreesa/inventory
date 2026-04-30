@@ -4,7 +4,8 @@ import {
   Search,
   Bell,
   Menu,
-  ChevronRight
+  ChevronRight,
+  Zap
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -107,6 +108,17 @@ export function Navbar() {
         </div>
 
         <div className="hidden md:block h-8 w-[1px] bg-gray-100" />
+
+        <Button
+          className="hidden sm:flex h-11 px-6 rounded-2xl bg-primary text-white font-black text-[10px] tracking-[0.2em] uppercase italic shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all gap-2"
+          onClick={() => {
+            // Trigger quick action modal - this would typically be handled via a global state or event
+            const event = new CustomEvent('open-quick-entry');
+            window.dispatchEvent(event);
+          }}
+        >
+          <Zap className="w-4 h-4 fill-white" /> Quick Actions
+        </Button>
 
         <Button
           variant="secondary"

@@ -3,22 +3,26 @@
 import React, { useState, useEffect, useRef, KeyboardEvent, useMemo, useCallback } from 'react';
 import { useData } from '@/lib/context/DataContext';
 import { ItemModal } from '@/components/modals/ItemModal';
-import { VendorModal } from '@/components/modals/VendorModal';
+import { ContactModal } from '@/components/modals/ContactModal';
 import { cn } from '@/lib/utils';
-import { Search, Plus, User, Package, ChevronRight, Scan } from 'lucide-react';
+import { Search, Plus, User, Package, ChevronRight, Scan, FileText } from 'lucide-react';
 
 interface EntityLookupProps {
-  type: 'vendor' | 'item' | 'expense' | 'engineer';
+  type: 'contact' | 'item' | 'expense' | 'engineer' | 'ticket';
   value: string;
   onChange: (val: string) => void;
   onSelect: (entity: any) => void;
   placeholder?: string;
   className?: string;
+  contactFilter?: 'VENDOR' | 'CLIENT' | 'ALL';
+  onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void;
+  "data-row"?: number;
+  "data-col"?: number;
 }
 
-// Hook for Vendor Logic
-function useVendorLookup(value: string) {
-  const { vendors } = useData();
+// Hook for Contact Logic
+function useContactLookup(value: string, filter?: 'VENDOR' | 'CLIENT' | 'ALL') {
+  const { contacts } = useData();
   const [debouncedValue, setDebouncedValue] = useState(value);
 
   useEffect(() => {
@@ -28,13 +32,14 @@ function useVendorLookup(value: string) {
 
   const results = useMemo(() => {
     const q = debouncedValue.toLowerCase();
-    return vendors.filter(v =>
-      !q ||
+    return contacts.filter(v =>
+      (!filter || filter === 'ALL' || v.type === filter) &&
+      (!q ||
       v.name.toLowerCase().includes(q) ||
       (v.gstin && v.gstin.toLowerCase().includes(q)) ||
-      (v.phone && v.phone.includes(q))
-    ).slice(0, 10).map(v => ({ ...v, type: 'vendor' }));
-  }, [debouncedValue, vendors]);
+      (v.phone && v.phone.includes(q)))
+    ).slice(0, 10).map(v => ({ ...v, type: 'contact' }));
+  }, [debouncedValue, contacts, filter]);
 
   return results;
 }
@@ -110,18 +115,42 @@ function useEngineerLookup(value: string) {
   return results;
 }
 
-export function EntityLookup({ type, value, onChange, onSelect, placeholder, className }: EntityLookupProps) {
+// Hook for Ticket Logic
+function useTicketLookup(value: string) {
+  const { tickets } = useData();
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), 150);
+    return () => clearTimeout(timer);
+  }, [value]);
+
+  const results = useMemo(() => {
+    const q = debouncedValue.toLowerCase();
+    return (tickets || []).filter((t: any) =>
+      !q ||
+      t.id.toLowerCase().includes(q) ||
+      (t.title && t.title.toLowerCase().includes(q)) ||
+      (t.customer_name && t.customer_name.toLowerCase().includes(q))
+    ).slice(0, 10).map((t: any) => ({ ...t, name: t.id, type: 'ticket' }));
+  }, [debouncedValue, tickets]);
+
+  return results;
+}
+
+export function EntityLookup({ type, value, onChange, onSelect, placeholder, className, contactFilter, onKeyDown: onKeyDownProp, ...rest }: EntityLookupProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
-  const [isVendorModalOpen, setIsVendorModalOpen] = useState(false);
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const vendorResults = useVendorLookup(value);
+  const contactResults = useContactLookup(value, contactFilter);
   const itemResults = useItemLookup(value);
   const expenseResults = useExpenseLookup(value);
   const engineerResults = useEngineerLookup(value);
-  const results = type === 'vendor' ? vendorResults : (type === 'item' ? itemResults : (type === 'expense' ? expenseResults : engineerResults));
+  const ticketResults = useTicketLookup(value);
+  const results = type === 'contact' ? contactResults : (type === 'item' ? itemResults : (type === 'expense' ? expenseResults : (type === 'engineer' ? engineerResults : ticketResults)));
 
   const handleSelect = useCallback((item: any) => {
     onSelect(item);
@@ -142,19 +171,19 @@ export function EntityLookup({ type, value, onChange, onSelect, placeholder, cla
         handleSelect(e.detail);
       }
     };
-    const handleVendorCreated = (e: any) => {
-      if (type === 'vendor' && e.detail) {
+    const handleContactCreated = (e: any) => {
+      if (type === 'contact' && e.detail) {
         handleSelect(e.detail);
       }
     };
 
     window.addEventListener("item-created", handleItemCreated);
-    window.addEventListener("vendor-created", handleVendorCreated);
+    window.addEventListener("contact-created", handleContactCreated);
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
       window.removeEventListener("item-created", handleItemCreated);
-      window.removeEventListener("vendor-created", handleVendorCreated);
+      window.removeEventListener("contact-created", handleContactCreated);
     };
   }, [type, handleSelect]);
 
@@ -162,8 +191,8 @@ export function EntityLookup({ type, value, onChange, onSelect, placeholder, cla
     if (type === 'item') {
       setIsItemModalOpen(true);
       setIsOpen(false);
-    } else if (type === 'vendor') {
-      setIsVendorModalOpen(true);
+    } else if (type === 'contact') {
+      setIsContactModalOpen(true);
       setIsOpen(false);
     }
   }, [type]);
@@ -187,8 +216,15 @@ export function EntityLookup({ type, value, onChange, onSelect, placeholder, cla
       } else if (results[selectedIndex - 1]) {
         handleSelect(results[selectedIndex - 1]);
       }
-    } else if (e.key === 'Escape') {
+    }
+
+    if (e.key === 'Escape') {
       setIsOpen(false);
+      return;
+    }
+
+    if (onKeyDownProp) {
+      onKeyDownProp(e);
     }
   };
 
@@ -204,18 +240,19 @@ export function EntityLookup({ type, value, onChange, onSelect, placeholder, cla
           }}
           onFocus={() => setIsOpen(true)}
           onKeyDown={handleKeyDown}
+          {...rest}
           placeholder={placeholder || `Search ${type}...`}
           className="w-full bg-transparent outline-none font-black text-text-main italic tracking-tight uppercase placeholder:opacity-30"
         />
         <div className="absolute right-0 flex items-center gap-2 opacity-20 group-hover:opacity-100 transition-opacity">
-          {type === 'item' ? <Package className="w-3 h-3" /> : (type === 'vendor' || type === 'engineer' ? <User className="w-3 h-3" /> : <Scan className="w-3 h-3" />)}
+          {type === 'item' ? <Package className="w-3 h-3" /> : (type === 'contact' || type === 'engineer' ? <User className="w-3 h-3" /> : (type === 'ticket' ? <FileText className="w-3 h-3" /> : <Scan className="w-3 h-3" />))}
         </div>
       </div>
 
       {isOpen && (
         <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-100 rounded-2xl shadow-2xl z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
-            {type !== 'expense' && type !== 'engineer' && (
+            {type !== 'expense' && type !== 'engineer' && type !== 'ticket' && (
               <div
                 onClick={handleCreateNew}
                 onMouseEnter={() => setSelectedIndex(0)}
@@ -268,12 +305,17 @@ export function EntityLookup({ type, value, onChange, onSelect, placeholder, cla
                                 {item.brand && <span>{item.brand}</span>}
                                 {item.is_serialized && <span className="text-amber-500 flex items-center gap-1"><Scan className="w-2.5 h-2.5" /> Serialized</span>}
                               </>
-                            ) : type === 'vendor' || type === 'engineer' ? (
+                            ) : type === 'contact' || type === 'engineer' ? (
                               <>
                                 {item.gstin && <span>GSTIN: {item.gstin}</span>}
                                 {item.phone && <span>PH: {item.phone}</span>}
                                 {item.type && <span>DEPT: {item.type}</span>}
                               </>
+                            ) : type === 'ticket' ? (
+                                <>
+                                    <span>{item.title}</span>
+                                    {item.customer_name && <span>{item.customer_name}</span>}
+                                </>
                             ) : (
                                 <>
                                     {item.category && <span>CAT: {item.category}</span>}
@@ -311,10 +353,11 @@ export function EntityLookup({ type, value, onChange, onSelect, placeholder, cla
         onClose={() => setIsItemModalOpen(false)}
       />
 
-      <VendorModal
-        isOpen={isVendorModalOpen}
-        onClose={() => setIsVendorModalOpen(false)}
-        initialName={value.trim()}
+      <ContactModal 
+        isOpen={isContactModalOpen}
+        onClose={() => setIsContactModalOpen(false)}
+        initialName={value}
+        defaultType={contactFilter !== 'ALL' ? contactFilter : 'VENDOR'}
       />
     </div>
   );

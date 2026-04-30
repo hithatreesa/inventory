@@ -29,15 +29,15 @@ export default function EngineerAgingReportPage() {
     const report = useMemo(() => getAgingReport(), [getAgingReport])
 
     const stats = useMemo(() => {
-        const critical = report.filter(r => r.status === 'CRITICAL').length;
-        const warning = report.filter(r => r.status === 'WARNING').length;
-        const ok = report.filter(r => r.status === 'OK').length;
+        const critical = report.filter((r: any) => r.status === 'CRITICAL').length;
+        const warning = report.filter((r: any) => r.status === 'WARNING').length;
+        const ok = report.filter((r: any) => r.status === 'OK').length;
         return { critical, warning, ok, total: report.length };
     }, [report])
 
     const groupedByEngineer = useMemo(() => {
         const groups: Record<string, any[]> = {};
-        report.forEach(item => {
+        report.forEach((item: any) => {
             if (!groups[item.engineerId]) groups[item.engineerId] = [];
             groups[item.engineerId].push(item);
         });
@@ -128,7 +128,7 @@ export default function EngineerAgingReportPage() {
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {items.map((item, idx) => {
+                                    {items.map((item: any, idx: number) => {
                                         const product = inventory.find(p => p.id === item.productId);
                                         return (
                                             <div key={idx} className={cn(

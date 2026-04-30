@@ -12,6 +12,7 @@ import {
   LogOut,
   Zap,
   User,
+  Users,
   Settings,
   ChevronDown,
   Wallet,
@@ -24,26 +25,33 @@ import { toast } from 'sonner'
 const navItems = [
   { name: 'DASHBOARD', icon: LayoutDashboard, href: '/dashboard' },
   { name: 'ENGINEERS', icon: User, href: '/engineers' },
+  { name: 'USER & ROLES', icon: Users, href: '/users' },
   { name: 'INVENTORY', icon: Package, href: '/inventory' },
   { name: 'POS', icon: Zap, href: '/pos' },
   { name: 'PURCHASES', icon: ShoppingCart, href: '/purchase' },
   { name: 'SALES', icon: TrendingUp, href: '/sales' },
-  { name: 'RETURNS', icon: Wallet, href: '/returns' },
   { name: 'REPORTS', icon: FileText, href: '/reports' },
 ]
 
 const masterSubItems = [
   { name: 'ITEMS MASTER', icon: Package, href: '/master?v=items' },
-  { name: 'VENDOR MASTER', icon: User, href: '/master?v=vendors' },
+  { name: 'CONTACTS', icon: User, href: '/master?v=vendors' },
   { name: 'GST MASTER', icon: Zap, href: '/master?v=gst' },
+]
+
+const expenseSubItems = [
+  { name: 'OUTSIDE PURCHASE', icon: ShoppingCart, href: '/expenses?type=outside' },
+  { name: 'TRANSPORTATION', icon: Wallet, href: '/expenses?type=transport' },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const v = searchParams.get('v') || 'items'
+  const expenseType = searchParams.get('type') || 'outside'
   const { isCollapsed, isMobileOpen, closeMobileSidebar } = useLayout()
   const [isMasterExpanded, setIsMasterExpanded] = React.useState(pathname.startsWith('/master'))
+  const [isExpenseExpanded, setIsExpenseExpanded] = React.useState(pathname.startsWith('/expenses'))
 
   const handleLogout = () => {
     toast.info('Logging out...', {
@@ -120,8 +128,72 @@ export function Sidebar() {
             )
           })}
 
-          {/* MASTER DROPDOWN */}
+          {/* EXPENSE DROPDOWN */}
           <div className="space-y-1">
+            <button
+              onClick={() => setIsExpenseExpanded(!isExpenseExpanded)}
+              className={cn(
+                "w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 group relative overflow-hidden",
+                pathname.startsWith('/expenses')
+                  ? "bg-primary text-white shadow-xl shadow-primary/20 scale-[1.02]"
+                  : "text-text-secondary hover:bg-white hover:text-primary hover:shadow-lg hover:shadow-black/5",
+                isCollapsed && "justify-center px-0"
+              )}
+              title={isCollapsed ? "EXPENSE" : ""}
+            >
+              <Wallet className={cn(
+                "w-5 h-5 transition-transform group-hover:scale-110 shrink-0",
+                pathname.startsWith('/expenses') ? "text-white" : "text-text-secondary group-hover:text-primary"
+              )} />
+              {!isCollapsed && (
+                <>
+                  <span className="text-sm font-black tracking-[0.2em] whitespace-nowrap animate-in fade-in duration-300">EXPENSE</span>
+                  <ChevronDown className={cn(
+                    "w-4 h-4 ml-auto transition-transform duration-300",
+                    isExpenseExpanded && "rotate-180"
+                  )} />
+                </>
+              )}
+              {pathname.startsWith('/expenses') && !isCollapsed && (
+                <div className="absolute right-0 top-0 bottom-0 w-1 bg-white/20" />
+              )}
+            </button>
+
+            {isExpenseExpanded && !isCollapsed && (
+              <div className="pl-4 space-y-1 animate-in slide-in-from-top-2 duration-300">
+                {expenseSubItems.map((sub) => {
+                  const subSearchParams = new URL(sub.href, 'http://localhost').searchParams
+                  const subType = subSearchParams.get('type')
+                  const isActive = pathname === '/expenses' && expenseType === subType
+
+                  return (
+                    <Link
+                      key={sub.href}
+                      href={sub.href}
+                      className={cn(
+                        "flex items-center gap-4 px-4 py-2.5 rounded-xl transition-all duration-200 group relative",
+                        isActive
+                          ? "bg-primary/5 text-primary font-black"
+                          : "text-gray-400 hover:text-primary hover:bg-white"
+                      )}
+                    >
+                      <sub.icon className={cn(
+                        "w-4 h-4 transition-transform group-hover:scale-110 shrink-0",
+                        isActive ? "text-primary" : "text-gray-300 group-hover:text-primary"
+                      )} />
+                      <span className="text-[11px] font-black tracking-[0.2em] uppercase whitespace-nowrap">{sub.name}</span>
+                      {isActive && (
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-primary rounded-r-full" />
+                      )}
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* MASTER DROPDOWN */}
+          <div className="space-y-1 mt-2 border-t border-gray-100 pt-2">
             <button
               onClick={() => setIsMasterExpanded(!isMasterExpanded)}
               className={cn(

@@ -49,7 +49,7 @@ interface IssueLine {
 }
 
 function EngineerIssueContent() {
-    const { inventory, engineers, issueToEngineer, processBarcode } = useData()
+    const { inventory, engineers, issueToEngineer, processBarcode, verifySerialForIssue } = useData()
     const router = useRouter()
     const searchParams = useSearchParams()
     
@@ -199,11 +199,12 @@ function EngineerIssueContent() {
             return;
         }
 
-        // 3. Inventory Availability Check (CRITICAL)
-        const itemInInventory = processBarcode(barcode);
-        if (!itemInInventory) {
+        // 3. Ledger Availability Check (CRITICAL)
+        try {
+            verifySerialForIssue(barcode, scanSession.item.productId);
+        } catch (e: any) {
             playError();
-            setDuplicateError(`INVALID_SERIAL: Not found in inventory (${barcode})`);
+            setDuplicateError(e.message || "INVALID_SERIAL");
             return;
         }
 

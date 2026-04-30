@@ -29,6 +29,18 @@ export function QuickEntryModal({ isOpen, onClose }: { isOpen: boolean, onClose:
   })
   const [purchaseForm, setPurchaseForm] = useState({ itemId: '', qty: '', reference: '' })
 
+  React.useEffect(() => {
+    const handleOpen = (e: any) => {
+      if (e.detail) {
+        if (e.detail.tab) setActiveTab(e.detail.tab);
+        if (e.detail.purchase) setPurchaseForm(prev => ({ ...prev, ...e.detail.purchase }));
+        if (e.detail.item) setItemForm(prev => ({ ...prev, ...e.detail.item }));
+      }
+    };
+    window.addEventListener('open-quick-entry', handleOpen as any);
+    return () => window.removeEventListener('open-quick-entry', handleOpen as any);
+  }, []);
+
   const tabs = [
     { id: 'item', label: 'NEW ITEM', icon: Package },
     { id: 'customer', label: 'CUSTOMER', icon: User },

@@ -5,8 +5,6 @@ import { CheckCircle2, Banknote, QrCode, CreditCard, User } from 'lucide-react'
 import { EntityLookup } from '@/components/shared/EntityLookup'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
-import { Vendor } from '@/lib/context/DataContext'
-
 interface POSSummaryProps {
   customer: string
   setCustomer: (val: string) => void

@@ -3,16 +3,34 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useData } from '@/lib/context/DataContext';
-import { calculateLineAmount, calculateLedgerTotals } from '@/modules/ledger/ledger-engine';
+import { calculateLedgerTotals } from '@/modules/ledger/ledger-engine';
 import { useGlobalKeyboardShortcuts } from '@/modules/ledger/keyboard-handler';
 import { handleGridKeyDown } from '@/modules/ledger/grid-navigation';
-import { LedgerLine, LedgerHeader, BillSundry } from '@/modules/ledger/types';
+import { LedgerHeader, BillSundry } from '@/modules/ledger/types';
+import { useUnbilledTickets } from '@/modules/ledger/hooks/useUnbilledTickets';
 import { toast } from 'sonner';
 import { EntityLookup } from '@/components/shared/EntityLookup';
+import { Search, X, Plus } from 'lucide-react';
+
+export interface TicketLedgerLine {
+  id: string;
+  sno: number;
+  ticket_id: string;
+  description: string;
+  engineer_id: string;
+  amount: number;
+  qty: number; // For totals calculation compatibility
+  price: number; // For totals calculation compatibility
+  gstRate: number;
+}
+
+const createEmptyLine = (sno: number): TicketLedgerLine => ({
+  id: `row-${Date.now()}-${sno}`, sno, ticket_id: '', description: '', engineer_id: '', amount: 0, qty: 1, price: 0, gstRate: 18
+});
 
 export default function SalesLedgerEntry() {
   const router = useRouter();
-  const { inventory, sellFromPOS } = useData();
+  const { inventory, tickets, transactions, getTicketBillableSummary, processSalesInvoice } = useData();
 
   const [header, setHeader] = useState<LedgerHeader>({
     series: 'GST',
@@ -26,18 +44,7 @@ export default function SalesLedgerEntry() {
     supplierReference: ''
   });
 
-  const [lines, setLines] = useState<LedgerLine[]>(
-    Array.from({ length: 15 }).map((_, i) => ({
-      id: `row-${i}`,
-      sno: i + 1,
-      description: '',
-      qty: 0,
-      unit: '',
-      price: 0,
-      amount: 0,
-      gstRate: 0
-    }))
-  );
+  const [lines, setLines] = useState<TicketLedgerLine[]>([createEmptyLine(1)]);
 
   const [sundries, setSundries] = useState<BillSundry[]>(
     Array.from({ length: 6 }).map((_, i) => ({
@@ -50,36 +57,170 @@ export default function SalesLedgerEntry() {
 
   const [editingSundryIndex, setEditingSundryIndex] = useState<number | null>(null);
   const [isTaxApplied, setIsTaxApplied] = useState(false);
-  const totals = useMemo(() => calculateLedgerTotals(lines, sundries, isTaxApplied), [lines, sundries, isTaxApplied]);
+  const [isTicketPopupOpen, setIsTicketPopupOpen] = useState(false);
+  const [ticketSearch, setTicketSearch] = useState('');
+
+  // Map to LedgerLine for totals calculation
+  const mappedLinesForTotals = useMemo(() => {
+    return lines.map(l => ({
+      ...l,
+      unit: 'nos'
+    }));
+  }, [lines]);
+
+  const totals = useMemo(() => calculateLedgerTotals(mappedLinesForTotals, sundries, isTaxApplied), [mappedLinesForTotals, sundries, isTaxApplied]);
+
+  const unbilledTickets = useUnbilledTickets(tickets, transactions, header.partyAccount, ticketSearch);
+
+  const addTicketToInvoice = (ticketId: string) => {
+    if (lines.some(l => l.ticket_id === ticketId)) {
+      toast.error('Ticket already added to invoice');
+      return;
+    }
+
+    const summary = getTicketBillableSummary(ticketId);
+    const suggestedAmount = summary.total > 0 ? summary.total : 0;
+
+    const txns = transactions.filter(tx => tx.reference === ticketId);
+    const engId = txns.find(tx => tx.engineer_id && tx.engineer_id !== 'N/A')?.engineer_id || 'N/A';
+
+    setLines(prev => {
+      let next = [...prev];
+      const emptyIdx = next.findIndex(l => !l.ticket_id);
+      
+      const newLine = {
+        id: `line-${Date.now()}`,
+        sno: emptyIdx !== -1 ? next[emptyIdx].sno : next.length + 1,
+        ticket_id: ticketId,
+        description: `Service for ${ticketId}`,
+        engineer_id: engId,
+        amount: suggestedAmount,
+        qty: 1,
+        price: suggestedAmount,
+        gstRate: 18
+      };
+
+      if (emptyIdx !== -1) {
+        next[emptyIdx] = newLine;
+      } else {
+        next.push(newLine);
+      }
+      
+      if (next[next.length - 1].ticket_id !== '') {
+          next.push(createEmptyLine(next.length + 1));
+      }
+      return next;
+    });
+    setIsTicketPopupOpen(false);
+    setTicketSearch('');
+  };
+
+  const addAllPendingTickets = () => {
+    let added = 0;
+    setLines(prev => {
+      let next = [...prev];
+      unbilledTickets.forEach(t => {
+        if (!next.some(l => l.ticket_id === t.id)) {
+          const summary = getTicketBillableSummary(t.id);
+          const suggestedAmount = summary.total > 0 ? summary.total : 0;
+          const txns = transactions.filter(tx => tx.reference === t.id);
+          const engId = txns.find(tx => tx.engineer_id && tx.engineer_id !== 'N/A')?.engineer_id || 'N/A';
+
+          const emptyIdx = next.findIndex(l => !l.ticket_id);
+          const newLine = {
+            id: `line-${Date.now()}-${t.id}`,
+            sno: emptyIdx !== -1 ? next[emptyIdx].sno : next.length + 1,
+            ticket_id: t.id,
+            description: `Service for ${t.id}`,
+            engineer_id: engId,
+            amount: suggestedAmount,
+            qty: 1,
+            price: suggestedAmount,
+            gstRate: 18
+          };
+
+          if (emptyIdx !== -1) {
+            next[emptyIdx] = newLine;
+          } else {
+            next.push(newLine);
+          }
+          added++;
+        }
+      });
+      if (next.length === 0 || next[next.length - 1].ticket_id !== '') {
+          next.push(createEmptyLine(next.length + 1));
+      }
+      return next;
+    });
+    if (added > 0) toast.success(`Added ${added} tickets`);
+    else toast.error('No pending tickets to add');
+  };
 
   const handleSave = async () => {
-    const validLines = lines.filter(l => l.productId && l.qty > 0 && l.amount > 0);
+    const validLines = lines.filter(l => l.ticket_id);
     if (validLines.length === 0) {
-      toast.error('Add at least one valid item');
+      toast.error('HARD_FAIL: At least 1 ticket required');
       return;
     }
     if (!header.partyAccount) {
-      toast.error('Party Account is required');
+      toast.error('HARD_FAIL: Customer must be selected');
       return;
     }
-    try {
-      const formattedCart = validLines.map(l => ({
-        id: l.productId!,
-        qty: Number(l.qty),
-        price: Number(l.price),
-      }));
+    if (validLines.some(l => l.amount <= 0)) {
+      toast.error('HARD_FAIL: Amount > 0 required for all lines');
+      return;
+    }
 
-      await toast.promise(sellFromPOS(formattedCart, header.partyAccount), {
+    const allValid = validLines.every(l => {
+      const t = tickets.find(tkt => tkt.id === l.ticket_id);
+      return t?.customer_name?.toLowerCase() === header.partyAccount.toLowerCase();
+    });
+
+    if (!allValid) {
+      toast.error('HARD_FAIL: All tickets must belong to same customer');
+      return;
+    }
+
+    try {
+      const invoiceId = header.series ? `${header.series}-${header.voucherNumber}` : header.voucherNumber;
+      await toast.promise(processSalesInvoice({
+        id: invoiceId,
+        customer_id: header.partyAccount,
+        date: new Date(header.date).getTime(),
+        lines: validLines.map(l => {
+          const isInterstate = header.gstType.includes('IGST');
+          let igst = 0, cgst = 0, sgst = 0;
+          if (isTaxApplied && l.gstRate > 0) {
+            if (isInterstate) igst = Number(l.amount) * (l.gstRate / 100);
+            else {
+              cgst = Number(l.amount) * ((l.gstRate / 2) / 100);
+              sgst = Number(l.amount) * ((l.gstRate / 2) / 100);
+            }
+          }
+          return {
+            ticket_id: l.ticket_id,
+            description: l.description,
+            amount: Number(l.amount),
+            gst_rate: l.gstRate,
+            igst,
+            cgst,
+            sgst
+          };
+        }),
+        total_amount: validLines.reduce((sum, line) => sum + Number(line.amount), 0),
+        total_igst: totals.taxSummaries.reduce((sum, tax) => sum + tax.igst, 0),
+        total_cgst: totals.taxSummaries.reduce((sum, tax) => sum + tax.cgst, 0),
+        total_sgst: totals.taxSummaries.reduce((sum, tax) => sum + tax.sgst, 0)
+      }), {
         loading: 'Processing Sale Voucher...',
         success: 'Sale Saved Successfully',
         error: (err: any) => err.message || 'Failed to save sale'
       });
-      // Clear or navigate
-      setLines(Array.from({ length: 15 }).map((_, i) => ({
-        id: `new-row-${Date.now()}-${i}`, sno: i + 1, description: '', qty: 0, unit: '', price: 0, amount: 0, gstRate: 0
-      })));
+
+      // Clear
+      setLines([createEmptyLine(1)]);
       setSundries(sundries.map(s => ({ ...s, name: '', percentage: 0, amount: 0 })));
-      setHeader({ ...header, voucherNumber: String(Number(header.voucherNumber) + 1) });
+      setHeader({ ...header, voucherNumber: String(Number(header.voucherNumber) + 1), narration: '' });
     } catch (err) {
       console.error(err);
     }
@@ -104,43 +245,36 @@ export default function SalesLedgerEntry() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [editingSundryIndex]);
 
-  const addRow = useCallback(() => {
-    setLines(prev => [
-      ...prev,
-      {
-        id: `row-${prev.length}`,
-        sno: prev.length + 1,
-        description: '',
-        qty: 0,
-        unit: '',
-        price: 0,
-        amount: 0,
-        gstRate: 0
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && !isTicketPopupOpen && header.partyAccount && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        setIsTicketPopupOpen(true);
       }
-    ]);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isTicketPopupOpen, header.partyAccount]);
+
+  const addRow = useCallback(() => {
+    setLines(prev => {
+        if (prev.length > 0 && !prev[prev.length - 1].ticket_id) return prev;
+        return [...prev, createEmptyLine(prev.length + 1)];
+    });
   }, []);
 
-  const updateLine = (index: number, field: keyof LedgerLine, value: string | number) => {
+  const updateLine = (index: number, field: keyof TicketLedgerLine, value: string | number) => {
     setLines(prev => {
       const next = [...prev];
       const row = { ...next[index], [field]: value };
 
-      if (field === 'qty' || field === 'price') {
-        const qty = field === 'qty' ? Number(value) : Number(row.qty);
-        const price = field === 'price' ? Number(value) : Number(row.price);
-        row.amount = calculateLineAmount(qty, price);
-      }
-      if (field === 'description' && typeof value === 'string') {
-        const match = inventory.find(i => i.name.toLowerCase() === value.trim().toLowerCase());
-        if (match) {
-          row.productId = match.id;
-          row.unit = match.unit || 'nos';
-          row.price = match.price || 0;
-          row.gstRate = match.gst_rate || 0;
-          row.amount = calculateLineAmount(Number(row.qty), match.price || 0);
-        }
+      if (field === 'amount') {
+        row.price = Number(value);
       }
       next[index] = row;
+      
+      if (field === 'ticket_id' && value && index === next.length - 1) {
+          next.push(createEmptyLine(next.length + 1));
+      }
       return next;
     });
   };
@@ -217,14 +351,16 @@ export default function SalesLedgerEntry() {
           <div className="flex items-center gap-2 flex-1">
             <span className="w-12">Party</span>
             <EntityLookup
-              type="vendor"
+              type="contact"
+              contactFilter="CLIENT"
               value={header.partyAccount}
-              onChange={val => setHeader({ ...header, partyAccount: val })}
+              onChange={val => {
+                setHeader({ ...header, partyAccount: val });
+                // Reset lines if party changes to avoid mixed tickets
+                setLines([createEmptyLine(1)]);
+              }}
               onSelect={vendor => {
-                setHeader(prev => ({
-                  ...header,
-                  partyAccount: vendor.name,
-                }));
+                setHeader(prev => ({ ...prev, partyAccount: vendor.name }));
               }}
               placeholder="Select Party Account..."
               className="bg-transparent border-b border-gray-400 font-bold px-1 w-full outline-none focus:border-black relative z-20"
@@ -238,6 +374,14 @@ export default function SalesLedgerEntry() {
               className="bg-transparent border-b border-gray-400 font-bold px-1 w-32 outline-none focus:border-black"
             />
           </div>
+          {header.partyAccount && (
+            <button
+              onClick={() => setIsTicketPopupOpen(true)}
+              className="ml-4 bg-blue-600 text-white px-3 py-1 text-xs font-bold shadow-sm hover:bg-blue-700 active:translate-y-px"
+            >
+              + Add Ticket
+            </button>
+          )}
         </div>
 
         {/* ROW 3 */}
@@ -259,12 +403,11 @@ export default function SalesLedgerEntry() {
           <thead className="sticky top-0 bg-[#E8EDF5] border-b border-gray-300 z-10 shadow-sm">
             <tr>
               <th className="font-bold py-1 px-2 border-r border-gray-300 w-12 text-center">S.N.</th>
-              <th className="font-bold py-1 px-2 border-r border-gray-300">Item</th>
-              <th className="font-bold py-1 px-2 border-r border-gray-300 w-40">Customer</th>
-              <th className="font-bold py-1 px-2 border-r border-gray-300 w-24 text-right">Qty.</th>
-              <th className="font-bold py-1 px-2 border-r border-gray-300 w-20">Unit</th>
-              <th className="font-bold py-1 px-2 border-r border-gray-300 w-32 text-right">Price (Rs.)</th>
-              <th className="font-bold py-1 px-2 w-32 text-right">Amount (Rs.)</th>
+              <th className="font-bold py-1 px-2 border-r border-gray-300 w-48">Item</th>
+              <th className="font-bold py-1 px-2 border-r border-gray-300">Description</th>
+              <th className="font-bold py-1 px-2 border-r border-gray-300 w-40">Engineer</th>
+              <th className="font-bold py-1 px-2 border-r border-gray-300 w-32 text-right">Amount (Rs.)</th>
+              <th className="font-bold py-1 px-2 w-16 text-center">Act</th>
             </tr>
           </thead>
           <tbody>
@@ -272,71 +415,78 @@ export default function SalesLedgerEntry() {
               <tr key={line.id} className="group border-b border-gray-100 hover:bg-[#F5F8FA]">
                 <td className="py-0.5 px-2 border-r border-gray-200 text-center text-gray-500 font-medium bg-gray-50/50">{line.sno}</td>
                 <td className="py-0 border-r border-gray-200 relative">
-                  <EntityLookup
-                    type="item"
-                    value={line.description}
-                    onChange={(val) => updateLine(i, 'description', val)}
-                    onSelect={(item) => {
-                      updateLine(i, 'description', item.name || item.id);
-                    }}
-                    className="w-full bg-transparent outline-none px-2 font-bold focus:bg-blue-50 focus:ring-1 focus:ring-inset focus:ring-blue-400"
-                  />
+                  {line.ticket_id ? (
+                    <div className="w-full bg-transparent outline-none px-2 font-bold text-gray-700">
+                      {line.ticket_id}
+                    </div>
+                  ) : (
+                    <EntityLookup
+                      type="ticket"
+                      value={line.ticket_id}
+                      onChange={(val) => updateLine(i, 'ticket_id', val)}
+                      onSelect={(item) => addTicketToInvoice(item.id)}
+                      placeholder="Select Item..."
+                      className="w-full bg-transparent outline-none px-2 font-bold focus:bg-blue-50 focus:ring-1 focus:ring-inset focus:ring-blue-400"
+                    />
+                  )}
                 </td>
                 <td className="py-0 border-r border-gray-200">
                   <input
                     type="text"
-                    value={line.customerName || ''}
-                    onChange={(e) => updateLine(i, 'customerName', e.target.value)}
-                    onKeyDown={(e) => handleGridKeyDown(e, i, 5, lines.length, 6, addRow)}
-                    data-row={i} data-col={5}
-                    placeholder="Reference..."
-                    className="w-full bg-transparent outline-none px-2 font-bold text-xs focus:bg-blue-50 focus:ring-1 focus:ring-inset focus:ring-blue-400 placeholder:text-gray-300"
-                  />
-                </td>
-                <td className="py-0 border-r border-gray-200">
-                  <input
-                    type="number"
+                    value={line.description}
+                    onChange={(e) => updateLine(i, 'description', e.target.value)}
+                    onKeyDown={(e) => handleGridKeyDown(e, i, 2, lines.length, 5, addRow)}
                     data-row={i} data-col={2}
-                    value={line.qty || ''}
-                    onChange={(e) => updateLine(i, 'qty', e.target.value)}
-                    onKeyDown={(e) => handleGridKeyDown(e, i, 2, lines.length, 6, addRow)}
-                    className="w-full bg-transparent outline-none px-2 text-right font-bold focus:bg-blue-50 focus:ring-1 focus:ring-inset focus:ring-blue-400"
+                    disabled={!line.ticket_id}
+                    className="w-full bg-transparent outline-none px-2 font-bold focus:bg-blue-50 focus:ring-1 focus:ring-inset focus:ring-blue-400 disabled:opacity-50"
                   />
                 </td>
                 <td className="py-0 border-r border-gray-200">
-                  <input
-                    data-row={i} data-col={3}
-                    value={line.unit}
-                    onChange={(e) => updateLine(i, 'unit', e.target.value)}
-                    onKeyDown={(e) => handleGridKeyDown(e, i, 3, lines.length, 5, addRow)}
-                    className="w-full bg-transparent outline-none px-2 font-bold focus:bg-blue-50 focus:ring-1 focus:ring-inset focus:ring-blue-400"
-                  />
+                  <div className="w-full bg-transparent outline-none px-2 font-bold text-gray-500 text-xs">
+                    {line.engineer_id}
+                  </div>
                 </td>
                 <td className="py-0 border-r border-gray-200">
                   <input
                     type="number"
                     data-row={i} data-col={4}
-                    value={line.price || ''}
-                    onChange={(e) => updateLine(i, 'price', e.target.value)}
+                    value={line.amount || ''}
+                    onChange={(e) => updateLine(i, 'amount', e.target.value)}
                     onKeyDown={(e) => handleGridKeyDown(e, i, 4, lines.length, 5, addRow)}
-                    className="w-full bg-transparent outline-none px-2 text-right font-bold focus:bg-blue-50 focus:ring-1 focus:ring-inset focus:ring-blue-400"
+                    disabled={!line.ticket_id}
+                    className="w-full bg-transparent outline-none px-2 text-right font-bold focus:bg-blue-50 focus:ring-1 focus:ring-inset focus:ring-blue-400 disabled:opacity-50 tabular-nums"
                   />
                 </td>
-                <td className="py-0">
-                  <div className="w-full px-2 text-right font-bold text-gray-800 tabular-nums">
-                    {line.amount > 0 ? line.amount.toFixed(2) : ''}
-                  </div>
+                <td className="py-0 text-center">
+                  {line.ticket_id && (
+                    <button
+                      onClick={() => {
+                        const next = lines.filter((_, idx) => idx !== i);
+                        const reindexed = next.map((l, index) => ({ ...l, sno: index + 1 }));
+                        if (reindexed.length === 0) reindexed.push(createEmptyLine(1));
+                        else if (reindexed[reindexed.length - 1].ticket_id !== '') reindexed.push(createEmptyLine(reindexed.length + 1));
+                        setLines(reindexed);
+                      }}
+                      className="text-red-500 hover:bg-red-50 px-2 py-0.5 font-bold text-xs"
+                    >
+                      <X className="w-3 h-3 inline" />
+                    </button>
+                  )}
                 </td>
+              </tr>
+            ))}
+            {Array.from({ length: Math.max(0, 15 - lines.length) }).map((_, i) => (
+              <tr key={`empty-${i}`} className="border-b border-gray-100 bg-[#FAFAFA]">
+                <td className="py-0.5 px-2 border-r border-gray-200 text-center text-gray-400 font-medium">{lines.length + i + 1}</td>
+                <td className="py-0 border-r border-gray-200"></td>
+                <td className="py-0 border-r border-gray-200"></td>
+                <td className="py-0 border-r border-gray-200"></td>
+                <td className="py-0 border-r border-gray-200"></td>
+                <td className="py-0"></td>
               </tr>
             ))}
           </tbody>
         </table>
-
-        <datalist id="inventory-sales-items">
-          {inventory.map(item => (
-            <option key={item.id} value={item.name} />
-          ))}
-        </datalist>
       </div>
 
       {/* BOTTOM SECTION */}
@@ -498,6 +648,80 @@ export default function SalesLedgerEntry() {
           </button>
         </div>
       </div>
+
+      {/* TICKET LOOKUP MODAL */}
+      {isTicketPopupOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
+          <div className="bg-white border border-black shadow-[4px_4px_0_rgba(0,0,0,0.2)] w-full max-w-2xl flex flex-col max-h-[80vh]">
+            <div className="bg-[#1A365D] p-2 flex justify-between items-center text-white border-b border-black">
+              <h2 className="font-bold uppercase text-[12px]">Select Pending Ticket for {header.partyAccount}</h2>
+              <button onClick={() => setIsTicketPopupOpen(false)} className="hover:text-red-400">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-2 border-b border-gray-300 bg-[#E8EDF5] flex items-center gap-2">
+              <Search className="w-4 h-4 text-gray-500" />
+              <input
+                autoFocus
+                type="text"
+                placeholder="Search by Ticket No or Engineer..."
+                value={ticketSearch}
+                onChange={e => setTicketSearch(e.target.value)}
+                className="flex-1 bg-white border border-gray-400 px-2 py-1 text-xs font-bold outline-none focus:border-black"
+              />
+              {unbilledTickets.length > 0 && (
+                <button onClick={addAllPendingTickets} className="bg-green-600 text-white px-2 py-1 text-xs font-bold border border-black hover:bg-green-700">
+                  Add All Pending
+                </button>
+              )}
+            </div>
+
+            <div className="overflow-y-auto flex-1 p-2 bg-white">
+              {unbilledTickets.length === 0 ? (
+                <div className="text-center p-4 text-gray-500 font-bold text-xs">
+                  No unbilled tickets found for this customer.
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse border border-gray-300 text-xs">
+                  <thead className="bg-[#E8EDF5]">
+                    <tr>
+                      <th className="border border-gray-300 px-2 py-1">Ticket No</th>
+                      <th className="border border-gray-300 px-2 py-1">Title</th>
+                      <th className="border border-gray-300 px-2 py-1">Engineer</th>
+                      <th className="border border-gray-300 px-2 py-1 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {unbilledTickets.map(t => {
+                      const isAdded = lines.some(l => l.ticket_id === t.id);
+                      const txns = transactions.filter(tx => tx.reference === t.id);
+                      const engId = txns.find(tx => tx.engineer_id && tx.engineer_id !== 'N/A')?.engineer_id || 'N/A';
+
+                      return (
+                        <tr key={t.id} className="hover:bg-blue-50">
+                          <td className="border border-gray-300 px-2 py-1 font-bold">{t.id}</td>
+                          <td className="border border-gray-300 px-2 py-1">{t.title}</td>
+                          <td className="border border-gray-300 px-2 py-1">{engId}</td>
+                          <td className="border border-gray-300 px-2 py-1 text-center">
+                            {isAdded ? (
+                              <span className="text-gray-400 font-bold italic">Added</span>
+                            ) : (
+                              <button onClick={() => addTicketToInvoice(t.id)} className="bg-blue-600 text-white px-2 py-0.5 rounded-sm hover:bg-blue-700">
+                                Select
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

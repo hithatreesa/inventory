@@ -11,7 +11,9 @@ export type TransactionType =
   | "CONSUMED"
   | "ADJUSTMENT"
   | "EXPENSE"
-  | "REVENUE";
+  | "REVENUE"
+  | "JOURNAL"
+  | "PO";
 
 export interface Transaction {
   id: string
@@ -24,6 +26,9 @@ export interface Transaction {
 
   engineer_id?: string
   customer_id?: string
+  customer_name?: string
+  from_ticket?: string
+  to_ticket?: string
 
   // GST fields (stored in transaction, not inventory)
   gst_rate?: number
@@ -62,7 +67,9 @@ export interface SerialState {
   status: "IN_STOCK" | "ASSIGNED" | "SOLD" | "CONSUMED"
   item_id: string
   currentHolder?: string   // engineer_id when ASSIGNED
+  currentTicket?: string   // Target ticket for usage
   customer_id?: string     // customer_id when SOLD
+  customer_name?: string   // customer_name for tracking
   quantity: number
   lastUpdated: number
 }
@@ -168,6 +175,10 @@ function validateStateTransition(current: SerialState["status"] | undefined, act
       if (current !== "ASSIGNED")
         throw new Error(`HARD_FAIL: CANNOT_CONSUMED_FROM_${current || "NON_EXISTENT"}`);
       break;
+    case "JOURNAL":
+      if (current !== "ASSIGNED")
+        throw new Error(`HARD_FAIL: CANNOT_JOURNAL_FROM_${current || "NON_EXISTENT"}`);
+      break;
     case "EXPENSE":
     case "REVENUE":
       // Financial logs do not affect physical serial state
@@ -224,6 +235,7 @@ export function buildState(
           // Final sale (No possession tracking needed)
           current.status = "SOLD";
           current.customer_id = t.customer_id;
+          current.customer_name = t.customer_name;
           current.currentHolder = undefined;
         }
         current.lastUpdated = t.timestamp;
@@ -232,19 +244,27 @@ export function buildState(
       if (current) {
         current.status = "ASSIGNED";
         current.currentHolder = t.engineer_id;
+        current.currentTicket = t.reference; // ASSIGN can set initial ticket
         current.lastUpdated = t.timestamp;
+      }
+    } else if (t.type === "JOURNAL") {
+      if (current) {
+        current.currentTicket = t.to_ticket;
+        current.lastUpdated = t.timestamp;
+        // DOES NOT modify stock or currentHolder
       }
     } else if (t.type === "RETURN") {
       if (current) {
         current.status = "IN_STOCK";
         current.currentHolder = undefined;
+        current.currentTicket = undefined;
         current.customer_id = undefined;
         current.lastUpdated = t.timestamp;
       }
     } else if (t.type === "CONSUMED") {
       if (current) {
         current.status = "CONSUMED";
-        current.currentHolder = undefined;
+        // currentHolder stays for history, or we can clear it. User said "When item is used... Update status = CONSUMED"
         current.lastUpdated = t.timestamp;
       }
     }
@@ -295,7 +315,7 @@ export function validateTransaction(txn: any, ledger: Transaction[] = transactio
   const state = buildState(ledger);
   
   // Rule 7: Ticket Linking
-  if (!txn.reference && txn.type !== 'ADJUSTMENT' && txn.type !== 'INWARD') {
+  if (!txn.reference && txn.type !== 'ADJUSTMENT' && txn.type !== 'INWARD' && txn.type !== 'JOURNAL') {
     throw new Error("HARD_FAIL: MISSING_TICKET");
   }
 
@@ -576,6 +596,32 @@ export function adjustStock(item_id: string, qty: number, metadata?: Partial<Tra
   return serials;
 }
 
+export function executeJournal(serial: string, engineer_id: string, from_ticket: string, to_ticket: string, metadata?: Partial<Transaction>) {
+  const state = buildState(transactions);
+  const item = state.serialMap[serial];
+
+  if (!item) throw new Error(`HARD_FAIL: SERIAL_NOT_FOUND ${serial}`);
+  if (item.status === "CONSUMED") throw new Error("HARD_FAIL: ALREADY_USED");
+  if (item.status !== "ASSIGNED" || item.currentHolder !== engineer_id) {
+    throw new Error("HARD_FAIL: INVALID_SOURCE (Item not with engineer)");
+  }
+  if (!from_ticket) throw new Error("HARD_FAIL: INVALID_SOURCE_TICKET");
+
+  return commitTransaction({
+    id: `TXN-JRNL-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+    type: "JOURNAL",
+    serial,
+    item_id: item.item_id,
+    quantity: 1,
+    engineer_id,
+    from_ticket,
+    to_ticket,
+    reference: to_ticket, // Update reference for ticket tracking
+    ...metadata,
+    timestamp: Date.now(),
+  });
+}
+
 // --------------------------------------------------
 // SELECTORS
 // --------------------------------------------------
@@ -604,7 +650,7 @@ export function getSoldStock(item_id: string) {
 export function getEngineerItems(engineer_id: string) {
   const map = buildState(transactions).serialMap;
   return Object.entries(map)
-    .filter(([_, data]) => data.currentHolder === engineer_id && data.status === "ASSIGNED")
+    .filter(([_, data]) => data.currentHolder === engineer_id)
     .map(([serial, data]) => ({ serial, ...data }));
 }
 
@@ -697,6 +743,95 @@ export function getAgingReport(ledger: Transaction[] = transactions) {
   }
 
   return agingReport;
+}
+// --------------------------------------------------
+// ACCESS CONTROL ENGINE (UAC) — MODULAR PERMISSION ARCHITECTURE
+// --------------------------------------------------
+
+export const PERMISSION_CONFIG = {
+  modules: [
+    { id: 'dashboard', name: 'Dashboard Central' },
+    { id: 'inventory', name: 'Inventory Control' },
+    { id: 'pos', name: 'Point of Sale' },
+    { id: 'purchase', name: 'Purchase Entry' },
+    { id: 'sales', name: 'Sales Ledger' },
+    { id: 'expense', name: 'Expense Tracking' },
+    { id: 'engineers', name: 'Engineer Portal' },
+    { id: 'users', name: 'Access Control' },
+    { id: 'reports', name: 'Financial Intelligence' },
+    { id: 'master', name: 'Master Data Hub' }
+  ],
+  divisions: [
+    { id: 'view', name: 'View Access' },
+    { id: 'create', name: 'Create/Entry' },
+    { id: 'edit', name: 'Modify/Update' },
+    { id: 'delete', name: 'Purge/Delete' }
+  ]
+};
+
+export interface UserPermission {
+  userId: string;
+  moduleId: string;
+  divisionId: string;
+  allowed: boolean;
+}
+
+let userPermissions: UserPermission[] = [];
+const PERMISSIONS_STORAGE_KEY = 'uac_permissions_v1';
+
+function savePermissions() {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(PERMISSIONS_STORAGE_KEY, JSON.stringify(userPermissions));
+  }
+}
+
+function loadPermissions() {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem(PERMISSIONS_STORAGE_KEY);
+    if (saved) {
+      try {
+        userPermissions = JSON.parse(saved);
+      } catch (e) {
+        console.error("FAILED TO LOAD PERMISSIONS", e);
+      }
+    }
+  }
+}
+
+loadPermissions();
+
+export function getUserPermissions(userId: string): UserPermission[] {
+  return userPermissions.filter(p => p.userId === userId);
+}
+
+export function updateUserPermission(userId: string, moduleId: string, divisionId: string, allowed: boolean) {
+  const idx = userPermissions.findIndex(p => p.userId === userId && p.moduleId === moduleId && p.divisionId === divisionId);
+  if (idx !== -1) {
+    userPermissions[idx].allowed = allowed;
+  } else {
+    userPermissions.push({ userId, moduleId, divisionId, allowed });
+  }
+  savePermissions();
+  return userPermissions.filter(p => p.userId === userId);
+}
+
+export function bulkUpdateModulePermissions(userId: string, moduleId: string, allowed: boolean) {
+  PERMISSION_CONFIG.divisions.forEach(div => {
+    const idx = userPermissions.findIndex(p => p.userId === userId && p.moduleId === moduleId && p.divisionId === div.id);
+    if (idx !== -1) {
+      userPermissions[idx].allowed = allowed;
+    } else {
+      userPermissions.push({ userId, moduleId, divisionId: div.id, allowed });
+    }
+  });
+  savePermissions();
+  return userPermissions.filter(p => p.userId === userId);
+}
+
+export function checkPermission(userId: string, moduleId: string, divisionId: string): boolean {
+  // Super Admin override (assuming first user or role-based check)
+  const p = userPermissions.find(p => p.userId === userId && p.moduleId === moduleId && p.divisionId === divisionId);
+  return p ? p.allowed : false;
 }
 
 // --------------------------------------------------

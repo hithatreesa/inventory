@@ -330,31 +330,29 @@ function PurchaseEntryContent() {
       return;
     }
 
-    const item = pendingRow.item
+    const isOneOff = !pendingRow.item;
+    const effectiveItem = pendingRow.item || {
+      id: `TEMP_${pendingRow.name.replace(/\s+/g, '_').toUpperCase()}`,
+      name: pendingRow.name,
+      brand: pendingRow.brand || 'N/A',
+      model: pendingRow.model || 'N/A',
+      gst_rate: 18,
+      is_serialized: pendingRow.isSerialized
+    };
 
-    if (!item || !item.id) {
-      playError();
-      toast.error("HARD_FAIL: ITEM_MUST_BE_SELECTED_FROM_MASTER");
-      return;
-    }
-
-    // Point 5: GST Master Derivation & Hard Fail
-    if (typeof item.gst_rate === 'undefined' || item.gst_rate === null) {
-      playError();
-      toast.error("HARD_FAIL: GST_NOT_DEFINED_IN_ITEM_MASTER");
-      throw new Error(`GST_NOT_DEFINED_FOR_PRODUCT: ${item.name}`);
-    }
+    // Point 5: GST Master Derivation
+    const gstRate = typeof effectiveItem.gst_rate !== 'undefined' && effectiveItem.gst_rate !== null ? effectiveItem.gst_rate : 18;
 
     const newLine: PurchaseLine = {
       id: `po_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-      productId: item.id, // SSOT: MUST NOT BE NULL
-      name: item.name,
-      brand: item.brand || 'N/A',
-      model: item.model || 'N/A',
+      productId: effectiveItem.id,
+      name: effectiveItem.name,
+      brand: effectiveItem.brand || 'N/A',
+      model: effectiveItem.model || 'N/A',
       qty: pendingRow.qty,
       price: pendingRow.price,
-      gstRate: item.gst_rate,
-      isSerialized: item.is_serialized || false,
+      gstRate: effectiveItem.gst_rate,
+      isSerialized: effectiveItem.is_serialized || false,
       serials: [],
       isLocked: false
     }
@@ -490,7 +488,8 @@ function PurchaseEntryContent() {
             <div className="flex-1 space-y-1 relative">
               <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest italic">Supplier</label>
               <EntityLookup
-                type="vendor"
+                type="contact"
+                contactFilter="VENDOR"
                 value={header.supplier}
                 onChange={(val) => setHeader({ ...header, supplier: val })}
                 onSelect={(vendor) => {
@@ -716,15 +715,16 @@ function PurchaseEntryContent() {
 
                   <div className="col-span-1 lg:col-span-2 space-y-2">
                     <label className="text-[9px] font-black text-primary uppercase tracking-widest italic text-center block">Serial Track</label>
-                    <div
+                    <button
+                      onClick={() => setPendingRow({ ...pendingRow, isSerialized: !pendingRow.isSerialized })}
                       className={cn(
                         "w-full h-12 rounded-xl flex flex-col items-center justify-center transition-all border-2",
                         pendingRow.isSerialized ? "bg-amber-50 text-amber-600 border-amber-200" : "bg-gray-50 text-gray-300 border-gray-100"
                       )}
                     >
                       <span className="text-[9px] font-black uppercase tracking-widest leading-none">{pendingRow.isSerialized ? 'SERIAL' : 'BATCH'}</span>
-                      <span className="text-[7px] font-bold opacity-50 uppercase leading-none">MASTER_DEFINED</span>
-                    </div>
+                      <span className="text-[7px] font-bold opacity-50 uppercase leading-none">{pendingRow.item ? 'MASTER_LINKED' : 'ONE_OFF'}</span>
+                    </button>
                   </div>
 
                   <div className="col-span-1 lg:col-span-1 space-y-2">

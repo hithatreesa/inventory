@@ -43,9 +43,10 @@ export interface Engineer {
   type?: "IT" | "TECHNICAL"
 }
 
-export interface Vendor {
+export interface Contact {
   id: string
   name: string
+  type: 'VENDOR' | 'CLIENT'
   gstin: string
   phone: string
   email: string
@@ -55,17 +56,17 @@ export interface Vendor {
   payment_terms?: string
 }
 
-const MOCK_VENDORS: Vendor[] = [
-  { id: 'v1', name: 'Aether Logistics', gstin: '29ABCDE1234F1Z5', phone: '9876543210', email: 'contact@aether.com', address: 'Bangalore, KA' },
-  { id: 'v2', name: 'Nexus Tech Supplies', gstin: '27XYZDE1234F2Z1', phone: '9988776655', email: 'sales@nexustech.com', address: 'Mumbai, MH' },
-  { id: 'v3', name: 'Global Impex', gstin: '07ABXYZ1234F3Z2', phone: '9123456780', email: 'info@globalimpex.com', address: 'Delhi, DL' },
-  { id: 'v4', name: 'Apex Hardware Solutions', gstin: '22DEFGH5678G4Y6', phone: '9876511223', email: 'support@apexhardware.com', address: 'Pune, MH' },
-  { id: 'v5', name: 'Rapid Enterprises', gstin: '33HIJKL9012H5X7', phone: '9988711445', email: 'orders@rapident.com', address: 'Chennai, TN' },
-  { id: 'v6', name: 'Pioneer IT Distributors', gstin: '09MNOPQ3456I6W8', phone: '9123499887', email: 'sales@pioneerit.com', address: 'Hyderabad, TS' },
-  { id: 'v7', name: 'Stellar Networks', gstin: '19RSTUV7890J7V9', phone: '8877665544', email: 'noc@stellar.net', address: 'Kolkata, WB' },
-  { id: 'v8', name: 'Quantum Core', gstin: '24WXYZA1234K8U0', phone: '8123456789', email: 'core@quantum.com', address: 'Ahmedabad, GJ' },
-  { id: 'v9', name: 'Orion PC Parts', gstin: '11BCDEF5678L9T1', phone: '7766554433', email: 'info@orionpc.com', address: 'Jaipur, RJ' },
-  { id: 'v10', name: 'Matrix Systems', gstin: '06GHIJK9012M0S2', phone: '9988771122', email: 'matrix@systems.com', address: 'Bhopal, MP' },
+const MOCK_CONTACTS: Contact[] = [
+  { id: 'v1', name: 'Aether Logistics', type: 'VENDOR', gstin: '29ABCDE1234F1Z5', phone: '9876543210', email: 'contact@aether.com', address: 'Bangalore, KA' },
+  { id: 'v2', name: 'Nexus Tech Supplies', type: 'VENDOR', gstin: '27XYZDE1234F2Z1', phone: '9988776655', email: 'sales@nexustech.com', address: 'Mumbai, MH' },
+  { id: 'v3', name: 'Global Impex', type: 'VENDOR', gstin: '07ABXYZ1234F3Z2', phone: '9123456780', email: 'info@globalimpex.com', address: 'Delhi, DL' },
+  { id: 'v4', name: 'Apex Hardware Solutions', type: 'VENDOR', gstin: '22DEFGH5678G4Y6', phone: '9876511223', email: 'support@apexhardware.com', address: 'Pune, MH' },
+  { id: 'v5', name: 'Rapid Enterprises', type: 'VENDOR', gstin: '33HIJKL9012H5X7', phone: '9988711445', email: 'orders@rapident.com', address: 'Chennai, TN' },
+  { id: 'v6', name: 'Pioneer IT Distributors', type: 'VENDOR', gstin: '09MNOPQ3456I6W8', phone: '9123499887', email: 'sales@pioneerit.com', address: 'Hyderabad, TS' },
+  { id: 'v7', name: 'Stellar Networks', type: 'VENDOR', gstin: '19RSTUV7890J7V9', phone: '8877665544', email: 'noc@stellar.net', address: 'Kolkata, WB' },
+  { id: 'v8', name: 'Quantum Core', type: 'VENDOR', gstin: '24WXYZA1234K8U0', phone: '8123456789', email: 'core@quantum.com', address: 'Ahmedabad, GJ' },
+  { id: 'c1', name: 'Acme Corp', type: 'CLIENT', gstin: '27AAAAA1234A1Z5', phone: '8001234567', email: 'billing@acmecorp.com', address: 'Mumbai, MH' },
+  { id: 'c2', name: 'Globex Inc', type: 'CLIENT', gstin: '07BBBBB1234B2Z1', phone: '8009876543', email: 'accounts@globex.com', address: 'New Delhi, DL' },
 ];
 
 export interface ExpenseConfig {
@@ -86,6 +87,36 @@ const MOCK_EXPENSES: ExpenseConfig[] = [
   { id: 'exp5', name: 'Hardware Repair', type: 'DIRECT', account_head: '5005 - MAINT' },
 ];
 
+export interface SystemRole {
+  id: string
+  name: string
+  accessibleModules: string[] // e.g. ['dashboard', 'engineers', 'inventory', 'pos', 'purchase', 'sales', 'expense', 'reports', 'master']
+}
+
+export interface SystemUser {
+  id: string
+  name: string
+  email: string
+  roleId: string
+  status: 'ACTIVE' | 'INACTIVE'
+  lastLogin?: string
+}
+
+const ALL_MODULES = ['dashboard', 'engineers', 'users', 'inventory', 'pos', 'purchase', 'sales', 'expense', 'reports', 'master'];
+
+const MOCK_ROLES: SystemRole[] = [
+  { id: 'role-1', name: 'Super Admin', accessibleModules: [...ALL_MODULES] },
+  { id: 'role-2', name: 'Inventory Manager', accessibleModules: ['dashboard', 'inventory', 'master', 'reports'] },
+  { id: 'role-3', name: 'Sales Executive', accessibleModules: ['dashboard', 'pos', 'sales'] },
+  { id: 'role-4', name: 'Procurement Officer', accessibleModules: ['dashboard', 'purchase', 'inventory'] },
+];
+
+const MOCK_USERS: SystemUser[] = [
+  { id: 'user-1', name: 'Admin User', email: 'admin@terait.com', roleId: 'role-1', status: 'ACTIVE', lastLogin: '2024-04-26T10:30:00Z' },
+  { id: 'user-2', name: 'Sarah Stock', email: 'sarah@terait.com', roleId: 'role-2', status: 'ACTIVE', lastLogin: '2024-04-27T08:15:00Z' },
+  { id: 'user-3', name: 'John Sales', email: 'john@terait.com', roleId: 'role-3', status: 'ACTIVE', lastLogin: '2024-04-25T16:45:00Z' },
+];
+
 export interface Transaction {
   id: string
   item_id: string
@@ -102,6 +133,8 @@ export interface Transaction {
   expense_id?: string
   sub_type?: string
   notes?: string
+  customer_name?: string
+  supplier?: string
   timestamp: number
 }
 
@@ -238,6 +271,7 @@ export interface PurchaseLine {
   total?: number
   brand?: string
   model?: string
+  ticket_id?: string
 }
 
 export interface IssueLine {
@@ -256,6 +290,7 @@ export interface EngineerSerial {
   item_id: string;
   serial: string;
   status: string;
+  currentTicket: string;
 }
 
 export interface TicketRequirement {
@@ -278,7 +313,7 @@ interface DataContextType {
   inventory: InventoryItem[]
   transactions: Transaction[]
   logs: Log[]
-  vendors: Vendor[]
+  contacts: Contact[]
   gstConfigs: GstConfig[]
   expenseConfigs: ExpenseConfig[]
   tickets: Ticket[]
@@ -298,50 +333,88 @@ interface DataContextType {
   addLog: (msg: string) => void
   addItem: (item: Partial<InventoryItem>) => InventoryItem
   editItem: (id: string, updates: Partial<InventoryItem>) => Promise<void>
-  addVendor: (data: Partial<Vendor>) => Promise<void>
-  editVendor: (id: string, updates: Partial<Vendor>) => Promise<void>
-  deleteVendors: (ids: string[]) => Promise<void>
+  addContact: (data: Partial<Contact>) => Promise<void>
+  editContact: (id: string, updates: Partial<Contact>) => Promise<void>
+  deleteContacts: (ids: string[]) => Promise<void>
   recordExpense: (data: { expenseId: string, amount: number, date: string, reference?: string, notes?: string }) => Promise<void>
-  saveTicketData: (ticketNo: string, data: { 
-    customer?: string, 
-    engineerId?: string, 
-    items: any[], 
-    expenses: any[], 
-    outsideExpenses: any[], 
-    revenue: number 
+  saveTicketData: (ticketNo: string, data: {
+    customer?: string,
+    engineerId?: string,
+    items: { itemId: string, name: string, qty: number, cost: number, serial?: string }[],
+    expenses: { id: string, name: string, amount: number }[],
+    outsideExpenses: { id: string, name: string, amount: number }[],
+    revenue: number,
+    date?: string
   }) => Promise<void>
   deleteItems: (ids: string[]) => Promise<void>
   engineers: Engineer[]
   addEngineer: (data: { name: string, type: "IT" | "TECHNICAL" }) => void
   recordManualExpense: (data: { expenseId: string, amount: number, date: string, reference?: string, notes?: string }) => Promise<void>
   processPO: (header: { vendor: string, date: string, reference: string, warehouse: string, invoiceNumber: string }, lines: PurchaseLine[], sundry?: any[]) => Promise<void>
+  processInward: (header: { vendor: string, date: string, reference: string, warehouse: string, invoiceNumber: string }, lines: PurchaseLine[], sundry?: any[]) => Promise<void>
   issueToEngineer: (engineerId: string, lines: IssueLine[]) => Promise<void>
   processEngineerReturn: (engineerId: string, lines: any[]) => Promise<void>
+  processJournal: (engineerId: string, lines: { serial: string, from_ticket: string, to_ticket: string }[]) => Promise<void>
   processBarcode: (barcode: string) => InventoryItem | undefined
-
+  verifySerialForIssue: (serial: string, productId: string) => boolean
+  createTransaction: () => Promise<void>
   // POS SALE FLOW
   sellFromPOS: (
-    cartItems: Array<{ id: string; qty: number; price?: number }>,
+    cartItems: Array<{ id: string; qty: number; price?: number; serials?: string[] }>,
     customer_id: string
   ) => Promise<void>
 
 
 
   // Audit & Reporting
-  getAuditReport: (scanned: string[]) => {
-    totalSystem: number
-    totalScanned: number
-    missingSerials: string[]
-    extraSerials: string[]
-    matched: number
-  }
-  getAgingReport: () => any[]
-  getSearchIndex: () => any[]
+  getAuditReport: (scanned: string[]) => any
+  getAgingReport: () => any
+  getSearchIndex: () => any
+  getTicketProfit: (ticketNo: string) => any
+
+  // RBAC
+  users: SystemUser[]
+  roles: SystemRole[]
+  allModules: string[]
+  currentUser: SystemUser | null
+  addUser: (user: Omit<SystemUser, 'id'>) => void
+  editUser: (id: string, updates: Partial<SystemUser>) => void
+  deleteUser: (id: string) => void
+  addRole: (role: Omit<SystemRole, 'id'>) => void
+  editRole: (id: string, updates: Partial<SystemRole>) => void
+
+  // RBAC EXTENDED
+  permissionConfig: typeof engine.PERMISSION_CONFIG
+  userPermissions: engine.UserPermission[]
+  updateUserPermission: (userId: string, moduleId: string, divisionId: string, allowed: boolean) => void
+  bulkUpdateModulePermissions: (userId: string, moduleId: string, allowed: boolean) => void
+  getUserPermissions: (userId: string) => engine.UserPermission[]
+  checkUserPermission: (userId: string, moduleId: string, divisionId: string) => boolean
+
+  // Sales & Invoicing
+  processSalesInvoice: (invoice: {
+    id: string,
+    customer_id: string,
+    date: string | number,
+    lines: Array<{
+      ticket_id: string,
+      description: string,
+      amount: number,
+      gst_rate?: number,
+      igst?: number,
+      cgst?: number,
+      sgst?: number
+    }>,
+    total_amount: number,
+    total_igst?: number,
+    total_cgst?: number,
+    total_sgst?: number
+  }) => Promise<void>
+  getTicketBillableSummary: (ticketId: string) => { consumedAmount: number, expenseAmount: number, total: number }
 
   // LEGACY Compat
   issueAsset: (itemId: string, engineerId: string, quantity: number) => Promise<void>
   returnAsset: (txnId: string) => Promise<void>
-  getTicketProfit: (ticketNo: string) => engine.TicketSummary
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined)
@@ -350,7 +423,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [engineers, setEngineers] = useState<Engineer[]>(MOCK_ENGINEERS)
-  const [vendors, setVendors] = useState<Vendor[]>(MOCK_VENDORS)
+  const [contacts, setContacts] = useState<Contact[]>(MOCK_CONTACTS)
   const [logs, setLogs] = useState<Log[]>([])
   const [expenseConfigs, setExpenseConfigs] = useState<ExpenseConfig[]>(MOCK_EXPENSES)
   const [tickets, setTickets] = useState<Ticket[]>([
@@ -372,6 +445,55 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return [];
   })
 
+  const [users, setUsers] = useState<SystemUser[]>(MOCK_USERS)
+  const [roles, setRoles] = useState<SystemRole[]>(MOCK_ROLES)
+  const [userPermissions, setUserPermissions] = useState<engine.UserPermission[]>([])
+
+  useEffect(() => {
+    // Initial permissions load
+    if (users.length > 0) {
+      const allPerms: engine.UserPermission[] = []
+      users.forEach(u => {
+        allPerms.push(...engine.getUserPermissions(u.id))
+      })
+      setUserPermissions(allPerms)
+    }
+  }, [users])
+
+  const addLog = useCallback((msg: string) => {
+    setLogs(prev => [
+      { id: Date.now().toString(), title: msg, desc: `Action`, type: 'System', time: 'Just now', message: msg, created_at: Date.now() },
+      ...prev
+    ])
+  }, [])
+
+  const updateUserPermission = useCallback((userId: string, moduleId: string, divisionId: string, allowed: boolean) => {
+    const updated = engine.updateUserPermission(userId, moduleId, divisionId, allowed)
+    // Update local state by merging
+    setUserPermissions(prev => {
+      const filtered = prev.filter(p => !(p.userId === userId && p.moduleId === moduleId && p.divisionId === divisionId))
+      return [...filtered, { userId, moduleId, divisionId, allowed }]
+    })
+    addLog(`PERMISSION_UPDATED: ${userId} | ${moduleId}:${divisionId} -> ${allowed}`)
+  }, [addLog])
+
+  const bulkUpdateModulePermissions = useCallback((userId: string, moduleId: string, allowed: boolean) => {
+    const updated = engine.bulkUpdateModulePermissions(userId, moduleId, allowed)
+    setUserPermissions(prev => {
+      const filtered = prev.filter(p => !(p.userId === userId && p.moduleId === moduleId))
+      return [...filtered, ...updated]
+    })
+    addLog(`BULK_PERMISSION_UPDATED: ${userId} | ${moduleId} -> ${allowed}`)
+  }, [addLog])
+
+  const checkUserPermission = useCallback((userId: string, moduleId: string, divisionId: string) => {
+    return engine.checkPermission(userId, moduleId, divisionId)
+  }, [])
+
+  const getUserPermissions = useCallback((userId: string) => {
+    return userPermissions.filter(p => p.userId === userId)
+  }, [userPermissions])
+
 
   // Persistence for GST
   useEffect(() => {
@@ -380,12 +502,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }, [gstConfigs]);
 
-  const addLog = useCallback((msg: string) => {
-    setLogs(prev => [
-      { id: Date.now().toString(), title: msg, desc: `Action`, type: 'System', time: 'Just now', message: msg, created_at: Date.now() },
-      ...prev
-    ])
-  }, [])
 
   const addGstConfig = useCallback((config: Omit<GstConfig, 'id'>) => {
     const newConfig = { ...config, id: `gst-${Date.now()}` };
@@ -402,6 +518,33 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     // Hard Rule: Check if items use this GST? For now just delete.
     setGstConfigs(prev => prev.filter(c => c.id !== id));
     addLog(`GST Deleted: ${id}`);
+  }, []);
+
+  const addUser = useCallback((user: Omit<SystemUser, 'id'>) => {
+    const newUser = { ...user, id: `user-${Date.now()}` };
+    setUsers(prev => [...prev, newUser]);
+    addLog(`User Created: ${user.name}`);
+  }, []);
+
+  const editUser = useCallback((id: string, updates: Partial<SystemUser>) => {
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, ...updates } : u));
+    addLog(`User Updated: ${id}`);
+  }, []);
+
+  const deleteUser = useCallback((id: string) => {
+    setUsers(prev => prev.filter(u => u.id !== id));
+    addLog(`User Deleted: ${id}`);
+  }, []);
+
+  const addRole = useCallback((role: Omit<SystemRole, 'id'>) => {
+    const newRole = { ...role, id: `role-${Date.now()}` };
+    setRoles(prev => [...prev, newRole]);
+    addLog(`Role Created: ${role.name}`);
+  }, []);
+
+  const editRole = useCallback((id: string, updates: Partial<SystemRole>) => {
+    setRoles(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
+    addLog(`Role Permissions Updated: ${id}`);
   }, []);
 
 
@@ -450,7 +593,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         item_id: tx.item_id,
         serial: tx.serial,
         type: tx.type,
-        quantity: tx.quantity || 1, 
+        quantity: tx.quantity || 1,
         engineer_id: tx.engineer_id || 'N/A',
         status: 'COMPLETED',
         date: new Date(tx.timestamp).toISOString(),
@@ -459,7 +602,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         price: tx.price || tx.purchase_price || tx.sale_price,
         sub_type: tx.sub_type,
         notes: tx.notes,
-        expense_id: tx.expense_id
+        expense_id: tx.expense_id,
+        supplier: tx.supplier
       }));
 
       parsedTxns.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -581,7 +725,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // POS SALE FLOW
   // -------------------------------------------------------------
   const sellFromPOS = async (
-    cartItems: Array<{ id: string; qty: number; price?: number }>,
+    cartItems: Array<{ id: string; qty: number; price?: number; serials?: string[] }>,
     customer_id: string
   ) => {
     if (!cartItems || cartItems.length === 0)
@@ -616,7 +760,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const cgst = gstAmount / 2;
       const sgst = gstAmount / 2;
 
-      const targetSerials = available.slice(0, item.qty).map(s => s.serial);
+      // Perfection: Enforce Serial Traceability
+      let targetSerials: string[] = [];
+      if (catalogItem.is_serialized) {
+        if (!item.serials || item.serials.length !== item.qty) {
+          throw new Error(`HARD_FAIL: SERIAL_MISMATCH for "${catalogItem.name}". Needed: ${item.qty}, Provided: ${item.serials?.length || 0}`);
+        }
+        targetSerials = item.serials;
+        // Verify each serial is actually in stock
+        for (const s of targetSerials) {
+          const sInfo = available.find(a => a.serial === s);
+          if (!sInfo) throw new Error(`HARD_FAIL: SERIAL_NOT_AVAILABLE: ${s}`);
+        }
+      } else {
+        targetSerials = available.slice(0, item.qty).map(s => s.serial);
+      }
+
       for (const serial of targetSerials) {
         engine.executeOutward({
           productId: item.id,
@@ -702,19 +861,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return newItem;
   }, [catalog, gstConfigs, fetchData, addLog]);
 
-  const addVendor = async (data: Partial<Vendor>) => {
-    setVendors(prev => [...prev, { ...data, id: `VEND-${Date.now()}` } as Vendor]);
-    addLog(`VENDOR CREATED: ${data.name}`);
+  const addContact = async (data: Partial<Contact>) => {
+    setContacts(prev => [...prev, { ...data, id: `CONT-${Date.now()}` } as Contact]);
+    addLog(`CONTACT CREATED: ${data.name}`);
   }
 
-  const editVendor = async (id: string, updates: Partial<Vendor>) => {
-    setVendors(prev => prev.map(v => v.id === id ? { ...v, ...updates } : v));
-    addLog(`VENDOR UPDATED: ${id}`);
+  const editContact = async (id: string, updates: Partial<Contact>) => {
+    setContacts(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+    addLog(`CONTACT UPDATED: ${id}`);
   }
 
-  const deleteVendors = async (ids: string[]) => {
-    setVendors(prev => prev.filter(v => !ids.includes(v.id)));
-    addLog(`VENDORS PURGED: ${ids.length} records`);
+  const deleteContacts = async (ids: string[]) => {
+    setContacts(prev => prev.filter(c => !ids.includes(c.id)));
+    addLog(`CONTACTS PURGED: ${ids.length} records`);
   }
 
   const editItem = async (id: string, updates: Partial<InventoryItem>) => {
@@ -724,11 +883,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       return next;
     });
   }
- 
+
   const recordExpense = async (data: { expenseId: string, amount: number, date: string, reference?: string, notes?: string }) => {
     const expense = expenseConfigs.find(e => e.id === data.expenseId);
     if (!expense) throw new Error("HARD_FAIL: INVALID_EXPENSE_TYPE");
- 
+
     const newTxn: Transaction = {
       id: `TXN-EXP-${Date.now()}`,
       item_id: 'N/A',
@@ -742,11 +901,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       timestamp: Date.now(),
       reference: data.reference
     };
- 
+
     setTransactions(prev => [newTxn, ...prev]);
     addLog(`EXPENSE RECORDED: ${expense.name} | Amount: ₹${data.amount}`);
   }
- 
+
   const saveTicketData = async (ticketNo: string, data: any) => {
     if (!ticketNo) throw new Error("HARD_FAIL: MISSING_TICKET");
 
@@ -755,12 +914,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const newTicketTxns: Transaction[] = [];
 
     // Phase 2: Map UI state to Ledger Transactions
-    
+
     // Items (OUTWARD)
     data.items.forEach((item: any) => {
       // Rule: Serialized items must have a serial. Non-serialized use item_id as serial.
-      const serial = item.serial || item.itemId; 
-      
+      const serial = item.serial || item.itemId;
+
       newTicketTxns.push({
         id: `TXN-TKT-ITM-${Date.now()}-${Math.random()}`,
         item_id: item.itemId,
@@ -770,10 +929,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         amount: item.cost * item.qty,
         price: item.cost,
         engineer_id: data.engineerId || 'N/A',
+        customer_name: data.customer,
         status: 'COMPLETED',
-        date: new Date().toISOString().split('T')[0],
+        date: data.date || new Date().toISOString().split('T')[0],
         reference: ticketNo,
-        notes: `Ticket Usage: ${item.name}${data.customer ? ` | ${data.customer}` : ''}`,
+        notes: `Ticket Usage: ${item.name}`,
         timestamp: Date.now()
       });
     });
@@ -826,7 +986,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     addLog(`TICKET_COMMITTED: ${ticketNo} | Total Entries: ${newTicketTxns.length}`);
     await fetchData();
   }
- 
+
   const deleteItems = async (ids: string[]) => {
     setCatalog(prev => {
       const next = prev.filter(item => !ids.includes(item.id));
@@ -842,19 +1002,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (!header.warehouse) throw new Error("HARD_FAIL: MISSING_WAREHOUSE");
     if (!header.invoiceNumber) throw new Error("HARD_FAIL: MISSING_INVOICE_NUMBER");
 
-    // Phase 2: Master Verification & Serialization Rule Check
+    // Phase 2: Verification & Serialization Rule Check
     for (const line of lines) {
       const masterItem = catalog.find(i => i.id === line.productId);
-      if (!masterItem) {
-        throw new Error(`HARD_FAIL: ITEM_NOT_IN_MASTER: ${line.name}. All items must be selected from Master Data.`);
-      }
+      const isSerialized = masterItem?.is_serialized || line.isSerialized || false;
 
-      if (masterItem.is_serialized) {
+      if (isSerialized) {
         if (!line.serials || line.serials.length !== line.qty) {
           throw new Error(`HARD_FAIL: SERIAL_MISMATCH for ${line.name}. Scanned: ${line.serials?.length || 0}/${line.qty}`);
         }
 
-        // Check for duplicates in current session or system
+        // Check for duplicates in current system
         for (const s of line.serials) {
           const serial = typeof s === 'string' ? s : s.serial;
           const history = engine.getSerialHistory(serial);
@@ -865,34 +1023,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // Phase 3: Execute Inward via Engine
-    for (const line of lines) {
-      const masterItem = catalog.find(i => i.id === line.productId)!;
-      if (masterItem.is_serialized) {
-        line.serials.forEach((s: any) => {
-          const serial = typeof s === 'string' ? s : s.serial;
-          engine.executeInward({
-            productId: line.productId,
-            serial,
-            qty: 1,
-            gst: masterItem.gst_rate,
-            price: line.price, // PO price snapshot
-            source: "PO",
-            metadata: { reference: header.reference, invoice: header.invoiceNumber, supplier: header.vendor }
-          });
-        });
-      } else {
-        engine.executeInwardBulk({
-          productId: line.productId,
-          qty: line.qty,
-          gst: masterItem.gst_rate,
-          price: line.price,
-          source: "PO",
-          metadata: { reference: header.reference, invoice: header.invoiceNumber, supplier: header.vendor }
-        });
-      }
-    }
-
+    // Phase 3: PO DOES NOT AFFECT STOCK
+    // As per Core Rule: PO -> Planning / Approval.
+    // Stock is only changed during ENTRY (INWARD).
     // Phase 4: Handle Bill Sundry (Expenses)
     const sundryTxns: Transaction[] = sundry.map(s => {
       const amount = Number(s.amount) || 0;
@@ -918,7 +1051,97 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setTransactions(prev => [...sundryTxns, ...prev]);
     }
 
-    addLog(`PO_PROCESSED: ${header.invoiceNumber} | Items: ${lines.length} | Expenses: ${sundry.length}`);
+    // Phase 5: Commit PO Transactions (Soft record - No stock change)
+    for (const line of lines) {
+      const isTemp = !line.productId || line.productId.startsWith('TEMP_');
+      const productId = isTemp ? `TEMP_${line.name.replace(/\s+/g, '_').toUpperCase()}` : line.productId;
+      
+      engine.commitTransaction({
+        type: "PO",
+        item_id: productId,
+        serial: `PO-ITEM-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        quantity: line.qty,
+        price: line.price,
+        gst_rate: line.gstRate || 0,
+        reference: header.invoiceNumber,
+        status: 'APPROVED',
+        date: header.date,
+        supplier: header.vendor,
+        notes: `PO Approval: ${header.invoiceNumber}`,
+        timestamp: Date.now()
+      });
+    }
+
+    addLog(`PO_APPROVED: ${header.invoiceNumber} | Items: ${lines.length} | No Stock Movement.`);
+    await fetchData();
+  }
+
+  const processInward = async (header: { vendor: string, date: string, reference: string, warehouse: string, invoiceNumber: string }, lines: PurchaseLine[], sundry: any[] = []) => {
+    // Phase 1: Pre-Validation
+    if (!lines || lines.length === 0) throw new Error("HARD_FAIL: NO_ITEMS_IN_ENTRY");
+
+    // Phase 2: Verification & Serialization Rule Check
+    for (const line of lines) {
+      if (line.isSerialized) {
+        if (!line.serials || line.serials.length !== line.qty) {
+          throw new Error(`HARD_FAIL: SERIAL_MISMATCH for ${line.name}. Scanned: ${line.serials?.length || 0}/${line.qty}`);
+        }
+
+        // Check for duplicates in current system
+        for (const s of line.serials) {
+          const serial = typeof s === 'string' ? s : s.serial;
+          const history = engine.getSerialHistory(serial);
+          if (history.length > 0) {
+            throw new Error(`HARD_FAIL: DUPLICATE_SERIAL_DETECTED: ${serial}`);
+          }
+        }
+      }
+    }
+
+    // Phase 3: Execute Inward via Engine
+    for (const line of lines) {
+      const isTemp = !line.productId || line.productId.startsWith('TEMP_');
+      const effectiveProductId = isTemp ? `TEMP_${line.name.replace(/\s+/g, '_').toUpperCase()}` : line.productId;
+      const gstRate = line.gstRate || 0;
+
+      if (line.isSerialized) {
+        line.serials.forEach((s: any) => {
+          const serial = typeof s === 'string' ? s : s.serial;
+          engine.executeInward({
+            productId: effectiveProductId,
+            serial,
+            qty: 1,
+            gst: gstRate,
+            price: line.price,
+            source: "INWARD",
+            metadata: { 
+              reference: line.ticket_id, 
+              reference_id: header.reference,
+              invoice: header.invoiceNumber, 
+              supplier: header.vendor, 
+              sub_type: isTemp ? 'TEMP_ITEM' : 'MASTER_ITEM'
+            }
+          });
+        });
+      } else {
+        engine.executeInwardBulk({
+          productId: effectiveProductId,
+          qty: line.qty,
+          gst: gstRate,
+          price: line.price,
+          source: "INWARD",
+          metadata: { 
+            reference: line.ticket_id, 
+            reference_id: header.reference,
+            invoice: header.invoiceNumber, 
+            supplier: header.vendor, 
+            sub_type: isTemp ? 'TEMP_ITEM' : 'MASTER_ITEM'
+          }
+        });
+      }
+    }
+
+    addLog(`INWARD_ENTRY_PROCESSED: ${header.invoiceNumber} | Items: ${lines.length}`);
     await fetchData();
   }
 
@@ -989,26 +1212,109 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return inventory.find(item => item.barcode === barcode || item.sku === barcode);
   }
 
+  const verifySerialForIssue = (serial: string, productId: string) => {
+    const state = engine.buildState(transactions);
+    const item = state.serialMap[serial];
+
+    if (!item) throw new Error(`INVALID_SERIAL: Not found in system (${serial})`);
+    if (item.status !== "IN_STOCK") throw new Error(`INVALID_STATUS: Serial is currently ${item.status}`);
+    if (item.item_id !== productId) throw new Error(`PRODUCT_MISMATCH: Serial belongs to ${item.item_id}, not ${productId}`);
+
+    return true;
+  }
+
   const getEngineerSerials = useCallback((engineerId: string) => {
-    return engine.getEngineerItems(engineerId).map(item => ({
-      item_id: item.item_id,
-      serial: item.serial,
-      status: item.status
-    }));
+    const state = engine.buildState(transactions);
+    return Object.entries(state.serialMap)
+      .filter(([_, data]) => data.currentHolder === engineerId)
+      .map(([serial, data]) => ({
+        item_id: data.item_id,
+        serial: serial,
+        status: data.status,
+        currentTicket: data.currentTicket || 'UNASSIGNED'
+      }));
   }, [transactions]);
 
   const getEngineerTickets = useCallback((engineerId: string) => {
-    return tickets.filter(t => 
+    return tickets.filter(t =>
       transactions.some(tx => (tx.reference === t.id || tx.reference_id === t.id) && tx.engineer_id === engineerId)
     );
   }, [transactions, tickets]);
+
+  const processJournal = async (engineerId: string, lines: { serial: string, from_ticket: string, to_ticket: string }[]) => {
+    if (!lines || lines.length === 0) throw new Error("HARD_FAIL: NO_ITEMS_TO_JOURNAL");
+
+    for (const line of lines) {
+      engine.executeJournal(line.serial, engineerId, line.from_ticket, line.to_ticket);
+    }
+
+    addLog(`ENGINEER_JOURNAL: ${engineerId} | Reassigned ${lines.length} items`);
+    await fetchData();
+  }
+
+  const processSalesInvoice = async (invoice: {
+    id: string,
+    customer_id: string,
+    date: string | number,
+    lines: Array<{
+      ticket_id: string,
+      description: string,
+      amount: number,
+      gst_rate?: number,
+      igst?: number,
+      cgst?: number,
+      sgst?: number
+    }>,
+    total_amount: number,
+    total_igst?: number,
+    total_cgst?: number,
+    total_sgst?: number
+  }) => {
+    if (!invoice.lines || invoice.lines.length === 0) throw new Error("HARD_FAIL: NO_LINES_IN_INVOICE");
+
+    for (const line of invoice.lines) {
+      if (!line.ticket_id) throw new Error("HARD_FAIL: TICKET_REQUIRED");
+      if (line.amount <= 0) throw new Error("HARD_FAIL: AMOUNT_MUST_BE_POSITIVE");
+
+      const tickets = line.ticket_id.split(',').map(t => t.trim()).filter(Boolean);
+      if (tickets.length === 0) throw new Error("HARD_FAIL: TICKET_REQUIRED");
+
+      const splitAmount = line.amount / tickets.length;
+
+      for (const ticket of tickets) {
+        engine.commitTransaction({
+          type: "REVENUE",
+          reference: ticket,
+          amount: splitAmount,
+          reference_type: "SALE",
+          reference_id: invoice.id,
+          customer_id: invoice.customer_id,
+          notes: line.description + (tickets.length > 1 ? ` (Split ${tickets.indexOf(ticket) + 1}/${tickets.length})` : ''),
+          timestamp: new Date(invoice.date).getTime() || Date.now()
+        });
+      }
+    }
+
+    addLog(`SALES_INVOICE: ${invoice.id} | Customer: ${invoice.customer_id} | Tickets: ${invoice.lines.length} | Total: ₹${invoice.total_amount} | Tax: IGST=${invoice.total_igst || 0} CGST=${invoice.total_cgst || 0} SGST=${invoice.total_sgst || 0}`);
+    await fetchData();
+  }
+
+  const getTicketBillableSummary = (ticketId: string) => {
+    const profitData = engine.getTicketProfit(ticketId, transactions);
+    return {
+      consumedAmount: profitData.cost,
+      expenseAmount: profitData.expense,
+      revenueAmount: profitData.revenue,
+      total: profitData.revenue > 0 ? profitData.revenue : (profitData.cost + profitData.expense)
+    };
+  }
 
   const value = useMemo(() => ({
     inventory,
     transactions,
     logs,
     engineers,
-    vendors,
+    contacts,
     tickets,
     getEngineerSerials,
     getEngineerTickets,
@@ -1023,13 +1329,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     editItem,
     deleteItems,
     processPO,
+    processInward,
     issueToEngineer,
     processEngineerReturn,
+    processJournal,
     processBarcode,
+    verifySerialForIssue,
     createTransaction,
-    addVendor,
-    editVendor,
-    deleteVendors,
+    addContact,
+    editContact,
+    deleteContacts,
     recordExpense,
     recordManualExpense: recordExpense,
     saveTicketData,
@@ -1038,10 +1347,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setEngineers(prev => [...prev, { id: "eng_" + Date.now(), name: data.name, type: data.type }]);
       addLog(`ENGINEER CREATED: ${data.name}`);
     },
- 
+    processSalesInvoice,
+    getTicketBillableSummary,
+
     // POS Sale Flow
     sellFromPOS,
- 
+
     gstConfigs,
     addGstConfig,
     updateGstConfig,
@@ -1054,9 +1365,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setExpenseConfigs(prev => prev.map(e => e.id === id ? { ...e, ...data } : e));
       addLog(`EXPENSE TYPE UPDATED: ${id}`);
     },
- 
+
     expenseConfigs,
- 
+
+    // RBAC
+    users,
+    roles,
+    addUser,
+    editUser,
+    deleteUser,
+    addRole,
+    editRole,
+    currentUser: users[0], // Hardcoded for demo
+    allModules: ALL_MODULES,
+
+    // RBAC EXTENDED
+    permissionConfig: engine.PERMISSION_CONFIG,
+    userPermissions,
+    updateUserPermission,
+    bulkUpdateModulePermissions,
+    getUserPermissions,
+    checkUserPermission,
+
     // Control Layer Selectors
     getAuditReport: (scanned: string[]) => engine.buildAuditReport(scanned),
     getAgingReport: () => engine.getAgingReport(transactions),
@@ -1073,7 +1403,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const engs = engineers.map(e => ({ id: e.id, name: e.name, type: 'PERSONNEL' }));
       return [...catalogItems, ...serials, ...engs];
     },
- 
+
     // Legacy
     issueAsset: (itemId: string, engineerId: string, quantity: number) => outwardItem(itemId, engineerId, quantity),
     returnAsset: async (txnId: string) => {
@@ -1082,7 +1412,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         await legacyReturnItem(t.item_id, t.engineer_id, 1)
       }
     }
-  }), [inventory, transactions, logs, engineers, vendors, tickets, gstConfigs, expenseConfigs, fetchData, getEngineerSerials, getEngineerTickets, addLog, addVendor, editVendor, deleteVendors, addItem, editItem, deleteItems, addGstConfig, updateGstConfig, deleteGstConfig, sellFromPOS])
+  }), [inventory, transactions, logs, engineers, contacts, tickets, gstConfigs, expenseConfigs, users, roles, fetchData, getEngineerSerials, getEngineerTickets, addLog, addContact, editContact, deleteContacts, addItem, editItem, deleteItems, addGstConfig, updateGstConfig, deleteGstConfig, sellFromPOS, addUser, editUser, deleteUser, addRole, userPermissions, updateUserPermission, bulkUpdateModulePermissions, checkUserPermission, getUserPermissions])
 
   return (
     <DataContext.Provider value={value}>

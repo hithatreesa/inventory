@@ -420,7 +420,7 @@ export default function InventoryPage() {
                               </td>
                               <td className="px-6 py-6 font-bold text-text-main">
                                  <p className="font-bold text-[#003366] italic tracking-tight uppercase leading-none">{item.name}</p>
-                                 <p className="text-sm font-mono font-black text-gray-300 uppercase tracking-widest mt-1.5">{item.sku}</p>
+                                 <p className="text-sm font-mono font-black text-gray-400 uppercase tracking-widest mt-1.5">{item.sku}</p>
                               </td>
                                <td className="px-6 py-6">
                                  <span className="text-sm font-black tracking-widest italic uppercase text-primary/60">{item.category}</span>
@@ -438,7 +438,7 @@ export default function InventoryPage() {
                                     </button>
                               </td>
                               <td className="px-6 py-6 text-center">
-                                 <p className="text-sm font-black text-gray-300 tabular-nums italic">{item.assigned_qty}</p>
+                                 <p className="text-sm font-black text-gray-400 tabular-nums italic">{item.assigned_qty}</p>
                               </td>
                               <td className="px-6 py-6 text-right font-black italic text-sm text-[#003366] tabular-nums tracking-tighter">
                                  ₹{(item.price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}

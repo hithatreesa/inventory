@@ -1,28 +1,3 @@
-import { NextResponse } from 'next/server'
-import { createTransaction } from '@/lib/db'
-
-export async function POST(req: Request) {
-  try {
-    const body = await req.json()
-    const { item_id, quantity, reference } = body
-
-    if (!item_id || quantity === undefined) {
-      return NextResponse.json({ error: 'Missing req fields' }, { status: 400 })
-    }
-
-    const txn = createTransaction({
-      item_id,
-      quantity,
-      type: 'ADJUSTMENT',
-      from_warehouse: null,
-      to_warehouse: null,
-      reference: reference || `ADJ-${Date.now()}`,
-      date: new Date().toISOString().split("T")[0]
-    })
-
-    return NextResponse.json({ success: true, txn })
-  } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: errorMessage }, { status: 400 })
-  }
+export async function GET() {
+  return Response.json({ ok: true });
 }

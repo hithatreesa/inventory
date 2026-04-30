@@ -9,6 +9,7 @@ export interface LedgerLine {
   amount: number;
   gstRate: number;
   customerName?: string;
+  ticketId?: string;
   isLocked?: boolean;
   serials?: string[];
 }

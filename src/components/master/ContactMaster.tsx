@@ -2,20 +2,21 @@
 
 import React, { useState } from 'react'
 import { Plus, Trash2, Edit2, Users, CheckCircle2, X, Search, Filter } from 'lucide-react'
-import { useData, Vendor } from '@/lib/context/DataContext'
+import { useData, Contact } from '@/lib/context/DataContext'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
-export function VendorMaster() {
-  const { vendors, addVendor, editVendor, deleteVendors } = useData()
+export function ContactMaster() {
+  const { contacts, addContact, editContact, deleteContacts } = useData()
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [formData, setFormData] = useState<Partial<Vendor>>({
-    name: '', gstin: '', phone: '', email: '', address: '', state: '', contact_person: '', payment_terms: ''
+  const [formData, setFormData] = useState<Partial<Contact>>({
+    name: '', type: 'VENDOR', gstin: '', phone: '', email: '', address: '', state: '', contact_person: '', payment_terms: ''
   })
   const [search, setSearch] = useState('')
+  const [typeFilter, setTypeFilter] = useState<'ALL' | 'VENDOR' | 'CLIENT'>('ALL')
 
   const handleSave = async () => {
     if (!formData.name || !formData.gstin) {
@@ -25,31 +26,32 @@ export function VendorMaster() {
 
     try {
       if (editingId) {
-        await editVendor(editingId, formData)
-        toast.success("Vendor Record Updated")
+        await editContact(editingId, formData)
+        toast.success("Contact Record Updated")
       } else {
-        await addVendor(formData)
-        toast.success("New Vendor Registered")
+        await addContact(formData)
+        toast.success("New Contact Registered")
       }
       setIsAdding(false)
       setEditingId(null)
-      setFormData({ name: '', gstin: '', phone: '', email: '', address: '', state: '', contact_person: '', payment_terms: '' })
+      setFormData({ name: '', type: 'VENDOR', gstin: '', phone: '', email: '', address: '', state: '', contact_person: '', payment_terms: '' })
     } catch (err: any) {
       toast.error(err.message)
     }
   }
 
-  const filteredVendors = vendors.filter(v => 
-    v.name.toLowerCase().includes(search.toLowerCase()) || 
-    v.gstin.toLowerCase().includes(search.toLowerCase())
+  const filteredContacts = contacts.filter(v => 
+    (typeFilter === 'ALL' || v.type === typeFilter) &&
+    (v.name.toLowerCase().includes(search.toLowerCase()) || 
+    v.gstin.toLowerCase().includes(search.toLowerCase()))
   )
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm gap-6">
         <div>
-          <h2 className="text-3xl font-black text-[#003366] italic uppercase tracking-tight">Vendor Database</h2>
-          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Global Supplier Registry</p>
+          <h2 className="text-3xl font-black text-[#003366] italic uppercase tracking-tight">Contact Database</h2>
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Global Contacts Registry</p>
         </div>
         <div className="flex gap-3 w-full lg:w-auto">
           <div className="relative flex-1 lg:w-64">
@@ -61,11 +63,23 @@ export function VendorMaster() {
               className="h-12 pl-12 bg-gray-50/50 border-gray-100 rounded-2xl italic font-bold"
             />
           </div>
+          <div className="relative">
+            <Filter className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as any)}
+              className="h-12 pl-11 pr-8 bg-gray-50/50 border-gray-100 rounded-2xl italic font-bold text-sm text-gray-600 appearance-none outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+            >
+              <option value="ALL">All Contacts</option>
+              <option value="VENDOR">Vendors Only</option>
+              <option value="CLIENT">Clients Only</option>
+            </select>
+          </div>
           <Button 
             onClick={() => { setIsAdding(true); setEditingId(null); }}
             className="rounded-2xl italic font-black uppercase text-[10px] tracking-widest px-8 h-12 bg-[#003366] text-white shadow-xl shadow-blue-900/20"
           >
-            <Plus className="w-4 h-4 mr-2" /> Register Vendor
+            <Plus className="w-4 h-4 mr-2" /> Register Contact
           </Button>
         </div>
       </div>
@@ -76,7 +90,7 @@ export function VendorMaster() {
             <div className="flex items-center gap-3">
               <Users className="w-6 h-6 text-primary" />
               <h3 className="text-xl font-black text-[#003366] italic uppercase tracking-tight">
-                {editingId ? 'Edit Vendor Record' : 'Onboard New Supplier'}
+                {editingId ? 'Edit Contact Record' : 'Onboard New Contact'}
               </h3>
             </div>
             <button onClick={() => { setIsAdding(false); setEditingId(null); }} className="w-10 h-10 rounded-xl hover:bg-red-50 text-gray-300 hover:text-red-500 transition-all">
@@ -86,7 +100,18 @@ export function VendorMaster() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Supplier Legal Name</label>
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Contact Type</label>
+              <select 
+                value={formData.type}
+                onChange={e => setFormData({ ...formData, type: e.target.value as 'VENDOR' | 'CLIENT' })}
+                className="h-14 w-full rounded-2xl bg-gray-50/50 border-gray-100 font-bold px-4"
+              >
+                <option value="VENDOR">Supplier / Vendor</option>
+                <option value="CLIENT">Customer / Client</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Legal Name</label>
               <Input 
                 value={formData.name}
                 onChange={e => setFormData({ ...formData, name: e.target.value })}
@@ -173,14 +198,14 @@ export function VendorMaster() {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-gray-50/50 border-b border-gray-100">
-                <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Supplier Identity</th>
+                <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Identity & Type</th>
                 <th className="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">GSTIN / State</th>
                 <th className="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Contact Details</th>
                 <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filteredVendors.map((v) => (
+              {filteredContacts.map((v) => (
                 <tr key={v.id} className="group hover:bg-gray-50/30 transition-all cursor-pointer">
                   <td className="px-10 py-8">
                     <div className="flex items-center gap-4">
@@ -189,7 +214,15 @@ export function VendorMaster() {
                       </div>
                       <div>
                         <p className="text-base font-black text-[#003366] italic uppercase leading-none">{v.name}</p>
-                        <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mt-2">{v.contact_person || 'No Contact Person'}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className={cn(
+                            "px-2 py-0.5 rounded text-[8px] font-black tracking-widest uppercase",
+                            v.type === 'CLIENT' ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
+                          )}>
+                            {v.type}
+                          </span>
+                          <span className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">{v.contact_person || 'No Contact Person'}</span>
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -211,9 +244,9 @@ export function VendorMaster() {
                       </button>
                       <button 
                         onClick={() => {
-                          if (confirm(`Purge vendor record for "${v.name}"? This will NOT delete past transactions.`)) {
-                            deleteVendors([v.id])
-                            toast.success("Vendor Record Purged")
+                          if (confirm(`Purge contact record for "${v.name}"? This will NOT delete past transactions.`)) {
+                            deleteContacts([v.id])
+                            toast.success("Contact Record Purged")
                           }
                         }}
                         className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all"

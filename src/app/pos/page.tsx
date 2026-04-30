@@ -15,7 +15,7 @@ import {
   ShoppingCart
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useData, Vendor } from '@/lib/context/DataContext'
+import { useData, InventoryItem, Contact } from '@/lib/context/DataContext'
 import { EntityLookup } from '@/components/shared/EntityLookup'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'

@@ -8,20 +8,23 @@ import { Button } from '@/components/ui/Button'
 import { useData } from '@/lib/context/DataContext'
 import { toast } from 'sonner'
 
-export function VendorModal({ 
+export function ContactModal({ 
   isOpen, 
   onClose,
-  initialName = ''
+  initialName = '',
+  defaultType = 'VENDOR'
 }: { 
   isOpen: boolean; 
   onClose: () => void; 
   initialName?: string;
+  defaultType?: 'VENDOR' | 'CLIENT';
 }) {
-  const { addVendor } = useData()
+  const { addContact } = useData()
   const [isSubmitting, setIsSubmitting] = useState(false)
   
   const [form, setForm] = useState({
     name: '',
+    type: defaultType,
     address: '',
     email: '',
     gstin: '',
@@ -36,6 +39,7 @@ export function VendorModal({
       setForm(prev => ({ 
         ...prev, 
         name: initialName,
+        type: defaultType,
         address: '',
         email: '',
         gstin: '',
@@ -51,8 +55,9 @@ export function VendorModal({
     e.preventDefault()
     setIsSubmitting(true)
     try {
-      const payload = {
+      const payload: any = {
         name: form.name.trim(),
+        type: form.type,
         address: form.address.trim(),
         email: form.email.trim(),
         gstin: form.gstin.trim(),
@@ -62,11 +67,11 @@ export function VendorModal({
         payment_terms: form.payment_terms.trim()
       }
 
-      const newVendor = addVendor(payload)
-      toast.success('Vendor registered successfully')
+      const newContact = addContact(payload)
+      toast.success('Contact registered successfully')
       
       // Dispatch a custom event so the EntityLookup can catch it and auto-select
-      const event = new CustomEvent('vendor-created', { detail: newVendor });
+      const event = new CustomEvent('contact-created', { detail: newContact });
       window.dispatchEvent(event);
 
       onClose()
@@ -81,12 +86,25 @@ export function VendorModal({
     <Modal 
       isOpen={isOpen} 
       onClose={onClose} 
-      title="Create New Vendor / Party"
+      title="Create New Contact"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 gap-4">
           <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Party / Vendor Name <span className="text-red-500">*</span></label>
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Contact Type <span className="text-red-500">*</span></label>
+            <select
+              required
+              value={form.type}
+              onChange={e => setForm({...form, type: e.target.value as 'VENDOR' | 'CLIENT'})}
+              disabled={isSubmitting}
+              className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="VENDOR">Supplier / Vendor</option>
+              <option value="CLIENT">Customer / Client</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Contact Name <span className="text-red-500">*</span></label>
             <Input 
               required
               autoFocus
@@ -177,7 +195,7 @@ export function VendorModal({
             className="flex-[2] rounded-2xl h-12 font-black italic tracking-widest text-[10px] uppercase shadow-xl shadow-primary/20"
             disabled={isSubmitting || !form.name.trim()}
           >
-            {isSubmitting ? 'Registering...' : <><Save className="w-4 h-4 mr-2" /> Register Vendor</>}
+            {isSubmitting ? 'Registering...' : <><Save className="w-4 h-4 mr-2" /> Register Contact</>}
           </Button>
         </div>
       </form>

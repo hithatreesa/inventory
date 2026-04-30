@@ -260,7 +260,7 @@ export default function StockAuditPage() {
                                     )}
 
                                     {/* Mismatch Items (Missing) */}
-                                    {(viewFilter === 'ALL' || viewFilter === 'MISSING') && report.missingSerials.map(s => (
+                                    {(viewFilter === 'ALL' || viewFilter === 'MISSING') && report.missingSerials.map((s: string) => (
                                         <tr key={s} className="hover:bg-red-50/30 transition-colors group">
                                             <td className="px-10 py-6">
                                                 <div className="flex items-center gap-4">
@@ -276,7 +276,7 @@ export default function StockAuditPage() {
                                     ))}
 
                                     {/* Extra Items (Extra) */}
-                                    {(viewFilter === 'ALL' || viewFilter === 'EXTRA') && report.extraSerials.map(s => (
+                                    {(viewFilter === 'ALL' || viewFilter === 'EXTRA') && report.extraSerials.map((s: string) => (
                                         <tr key={s} className="hover:bg-orange-50/30 transition-colors group">
                                             <td className="px-10 py-6">
                                                 <div className="flex items-center gap-4">

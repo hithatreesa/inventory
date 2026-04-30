@@ -43,3 +43,5 @@ next-env.d.ts
 # temporary files
 app_lint.json
 tsc_output
+scratch/
+knip-report.txt

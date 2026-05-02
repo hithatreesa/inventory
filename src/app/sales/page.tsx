@@ -116,7 +116,8 @@ export default function SalesLedgerEntry() {
   const updateLine = (index: number, field: keyof LedgerLine, value: any) => {
     setLines(prev => {
       const newLines = [...prev];
-      const line = { ...newLines[index], [field]: value };
+      const val = (field === 'qty' || field === 'price' || field === 'gstRate') ? Number(value) : value;
+      const line = { ...newLines[index], [field]: val };
 
       if (field === 'qty' || field === 'price' || field === 'gstRate') {
         line.amount = calculateLineAmount(Number(line.qty) || 0, Number(line.price) || 0);
@@ -218,7 +219,13 @@ export default function SalesLedgerEntry() {
       id: invoiceId,
       customer: header.partyAccount,
       date: header.date,
-      lines: validLines,
+      lines: validLines.map(l => ({
+        ...l,
+        qty: Number(l.qty) || 0,
+        price: Number(l.price) || 0,
+        amount: Number(l.amount) || 0,
+        gstRate: Number(l.gstRate) || 0
+      })),
       subtotal: taxableAmount,
       gst_total: grandTotal - taxableAmount,
       grand_total: grandTotal,

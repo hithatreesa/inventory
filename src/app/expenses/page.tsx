@@ -220,7 +220,7 @@ function ExpensesContent() {
                             <EntityLookup type="engineer" value={engineer?.name || ""} onChange={(val) => !val && setEngineer(null)} onSelect={(eng: Engineer) => setEngineer(eng)} placeholder="SELECT ENGINEER..." />
                         </div>
                         <div className="space-y-3">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic ml-2">Execution Date</label>
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic ml-2">Date</label>
                             <Input type="date" value={jobDate} onChange={e => setJobDate(e.target.value)} className="h-14 bg-gray-50 border-none rounded-2xl px-6 font-bold text-gray-700" />
                         </div>
                     </div>
@@ -249,24 +249,23 @@ function ExpensesContent() {
                 )}
 
                 {/* Ledger Body */}
-                <div className={cn("grid gap-10", pageType === 'outside' ? "grid-cols-1" : "grid-cols-1 xl:grid-cols-12")}>
+                <div className="grid gap-10 grid-cols-1">
                     {/* Main Ledger */}
-                    <div className={cn(pageType === 'outside' ? "w-full" : "xl:col-span-8", "space-y-8")}>
+                    <div className="w-full space-y-8">
                         <div className="bg-white rounded-[48px] border border-gray-100 shadow-sm overflow-hidden">
                             <div className="px-8 py-6 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
                                 <div className="flex items-center gap-3 font-black text-[10px] uppercase tracking-[0.2em] italic text-blue-900">
-                                    <Package className="w-4 h-4" /> Item Consumption Ledger
+                                    <Package className="w-4 h-4" /> Product Consumption Ledger
                                 </div>
-                                <Button onClick={addItem} variant="ghost" size="sm" className="text-[9px] font-black uppercase text-blue-600 italic">+ Add Item</Button>
+                                <Button onClick={addItem} variant="ghost" size="sm" className="text-[9px] font-black uppercase text-blue-600 italic">+ Add Product</Button>
                             </div>
                             <div className="p-0">
                                 <table className="w-full text-left border-collapse">
                                     <thead className="sticky top-0 bg-gray-50/50 z-10">
                                         <tr className="border-b border-gray-200 text-[9px] font-black text-gray-700 uppercase tracking-[0.2em] italic">
-                                            <th className="px-8 py-4">Item Specification</th>
-                                            <th className="px-4 py-4">Serial Number</th>
-                                            <th className="px-4 py-4 text-center">Qty</th>
-                                            <th className="px-4 py-4 text-right">Cost</th>
+                                            <th className="px-8 py-4">Product Specification</th>
+                                            <th className="px-4 py-4 text-center">Quantity</th>
+                                            <th className="px-4 py-4 text-right">Rate</th>
                                             <th className="px-8 py-4 text-right">Total</th>
                                             <th className="w-12"></th>
                                         </tr>
@@ -296,13 +295,6 @@ function ExpensesContent() {
                                                         }}
                                                         placeholder="SEARCH MASTER..."
                                                     />
-                                                </td>
-                                                <td className="px-4 py-4">
-                                                    <Input value={item.serial || ""} onChange={e => {
-                                                        const copy = [...items];
-                                                        copy[idx].serial = e.target.value;
-                                                        setItems(copy);
-                                                    }} className="h-10 bg-white/50 border-gray-100 text-[10px] font-black uppercase tracking-widest" />
                                                 </td>
                                                 <td className="px-4 py-4">
                                                     <input type="number" value={item.qty} onChange={e => {
@@ -335,132 +327,7 @@ function ExpensesContent() {
                                 </table>
                             </div>
                         </div>
-
-                        {/* Outside Purchase Financial Summary Table */}
-                        {pageType === 'outside' && (
-                            <div className="bg-white rounded-[40px] border border-gray-100 shadow-sm overflow-hidden">
-                                <div className="px-8 py-6 border-b border-gray-50 bg-gray-50/30">
-                                    <div className="flex items-center gap-3 font-black text-[10px] uppercase tracking-[0.2em] italic text-emerald-600">
-                                        <TrendingUp className="w-4 h-4" /> Financial Summary
-                                    </div>
-                                </div>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left border-collapse min-w-[800px]">
-                                        <thead>
-                                            <tr className="bg-gray-50/50 border-b border-gray-100 italic">
-                                                <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest border-r border-gray-50">Item Cost</th>
-                                                <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest border-r border-gray-50">Opex Cost</th>
-                                                <th className="px-8 py-4 text-[10px] font-black text-emerald-600 uppercase tracking-widest border-r border-gray-50 underline decoration-emerald-500/30 underline-offset-4">Billing Amount (Net)</th>
-                                                <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Calculated Profit</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr className="hover:bg-emerald-50/10 transition-colors">
-                                                <td className="px-8 py-6 font-black text-xl italic text-gray-950 border-r border-gray-50">₹{totals.itemCost.toLocaleString()}</td>
-                                                <td className="px-8 py-6 font-black text-xl italic text-gray-500 border-r border-gray-50">₹{totals.opexCost.toLocaleString()}</td>
-                                                <td className="px-8 py-6 relative border-r border-gray-50 min-w-[250px]">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-xl font-black text-emerald-600/40 italic">₹</span>
-                                                        <input 
-                                                            type="number" 
-                                                            value={revenue} 
-                                                            onChange={e => setRevenue(e.target.value)} 
-                                                            placeholder="0.00" 
-                                                            className="w-full bg-transparent border-none text-3xl font-black text-emerald-950 placeholder:text-gray-200 outline-none italic tracking-tighter" 
-                                                        />
-                                                    </div>
-                                                </td>
-                                                <td className={cn(
-                                                    "px-8 py-6 text-right font-black text-3xl italic tracking-tighter transition-all",
-                                                    totals.profit >= 0 ? "bg-emerald-900 text-emerald-400" : "bg-red-900 text-red-400"
-                                                )}>
-                                                    ₹{totals.profit.toLocaleString()}
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        )}
                     </div>
-
-                    {/* Right Col (Hidden if Outside, or shown as sidebar for Job) */}
-                    {pageType !== 'outside' && (
-                        <div className="xl:col-span-4 space-y-8">
-                            {/* Operational Expenses (Hiding check was here before) */}
-                            <div className="bg-white rounded-[40px] border border-gray-100 shadow-sm overflow-hidden">
-                                <div className="px-8 py-6 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
-                                    <div className="flex items-center gap-3 font-black text-[10px] uppercase tracking-widest italic text-amber-600">
-                                        <Wallet className="w-4 h-4" /> Operational Expenses
-                                    </div>
-                                    <Button onClick={addExpense} variant="ghost" size="sm" className="text-[9px] font-black uppercase text-amber-600 italic">+ Add</Button>
-                                </div>
-                                <div className="p-6 space-y-4">
-                                    {expenses.map((exp, idx) => (
-                                        <div key={exp.id} className="space-y-4 p-4 rounded-3xl hover:bg-gray-50/50 transition-colors group border border-transparent hover:border-gray-100">
-                                            <div className="flex gap-4 items-center">
-                                                <div className="flex-1">
-                                                    <EntityLookup
-                                                        type="expense"
-                                                        value={exp.name}
-                                                        onChange={(val: string) => {
-                                                            const copy = [...expenses];
-                                                            copy[idx].name = val;
-                                                            setExpenses(copy);
-                                                        }}
-                                                        onSelect={(e: any) => {
-                                                            const copy = [...expenses];
-                                                            copy[idx].name = e.name;
-                                                            copy[idx].amount = e.default_amount || 0;
-                                                            if (idx === expenses.length - 1) {
-                                                                copy.push({ id: `exp-${Date.now()}`, name: "", amount: 0 });
-                                                            }
-                                                            setExpenses(copy);
-                                                        }}
-                                                        placeholder="SELECT CATEGORY..."
-                                                    />
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <Input type="number" value={exp.amount} onChange={e => {
-                                                        const copy = [...expenses];
-                                                        copy[idx].amount = Number(e.target.value);
-                                                        setExpenses(copy);
-                                                    }} className="w-24 h-10 rounded-xl bg-gray-50 border-none font-black italic text-right text-xs" />
-                                                    <button onClick={() => removeExpense(exp.id)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 p-2"><Trash2 className="w-4 h-4" /></button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="bg-gradient-to-br from-blue-900 to-blue-950 p-10 rounded-[40px] text-white shadow-2xl shadow-blue-900/30 space-y-6">
-                                <div className="flex items-center gap-3">
-                                    <TrendingUp className="w-5 h-5 text-emerald-400" />
-                                    <h3 className="text-[10px] font-black uppercase tracking-[0.3em] italic text-blue-200/50">Ticket Revenue</h3>
-                                </div>
-                                <div className="relative">
-                                    <span className="absolute left-0 top-1/2 -translate-y-1/2 text-4xl font-black text-blue-200/20 italic">₹</span>
-                                    <input type="number" value={revenue} onChange={e => setRevenue(e.target.value)} placeholder="0.00" className="w-full bg-transparent border-none text-5xl font-black text-white placeholder:text-white/10 outline-none pl-8 italic tracking-tighter" />
-                                </div>
-                                <div className="pt-6 border-t border-white/5 flex justify-between items-center text-[10px] font-black uppercase tracking-widest italic text-blue-200/30">
-                                    <span>Calculated Profit</span>
-                                    <span className={totals.profit >= 0 ? "text-emerald-400" : "text-red-400"}>₹{totals.profit.toLocaleString()}</span>
-                                </div>
-                            </div>
-
-                            <div className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm space-y-4">
-                                <div className="flex items-center gap-3 text-blue-600">
-                                    <Clock className="w-4 h-4" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest italic">Time Intelligence</span>
-                                </div>
-                                <div className="space-y-1">
-                                    <p className="text-3xl font-black italic text-blue-950">{totals.jobDuration}<span className="text-sm ml-1 text-gray-400 uppercase">hrs</span></p>
-                                    <p className="text-[9px] font-black uppercase text-gray-400 italic">Total Execution Time</p>
-                                </div>
-                            </div>
-                        </div>
-                    )}
                 </div>
             </div>
         </div>

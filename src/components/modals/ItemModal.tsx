@@ -10,18 +10,18 @@ import { useData } from '@/lib/context/DataContext'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
-export function ItemModal({ 
-  isOpen, 
-  onClose, 
-  item 
-}: { 
-  isOpen: boolean; 
-  onClose: () => void; 
-  item?: any 
+export function ItemModal({
+  isOpen,
+  onClose,
+  item
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  item?: any
 }) {
   const { addItem, editItem } = useData()
   const [isSubmitting, setIsSubmitting] = useState(false)
-  
+
   const [form, setForm] = useState<{
     name: string;
     category: string;
@@ -136,55 +136,55 @@ export function ItemModal({
 
   useEffect(() => {
     if (!isScanning) return;
-    
+
     const onScan = (e: any) => {
-        const { barcode } = e.detail;
-        if (barcode) {
-            setForm(f => ({ ...f, barcode }));
-            setIsScanning(false);
-            toast.success("Barcode captured");
-        }
+      const { barcode } = e.detail;
+      if (barcode) {
+        setForm(f => ({ ...f, barcode }));
+        setIsScanning(false);
+        toast.success("Barcode captured");
+      }
     };
-    
+
     window.addEventListener('barcode-scanned', onScan);
     return () => window.removeEventListener('barcode-scanned', onScan);
   }, [isScanning]);
 
   return (
-    <Modal 
-      isOpen={isOpen} 
-      onClose={onClose} 
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
       title={item ? "Edit Inventory Item" : "Add New Item"}
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2 space-y-1.5">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Item Name</label>
-            <Input 
+            <Input
               required
-              placeholder="e.g. Cisco Nexus Switch" 
+              placeholder="e.g. Cisco Nexus Switch"
               value={form.name}
-              onChange={e => setForm({...form, name: e.target.value})}
+              onChange={e => setForm({ ...form, name: e.target.value })}
               disabled={isSubmitting}
             />
           </div>
-          
+
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">SKU / Part Number</label>
-            <Input 
+            <Input
               required
-              placeholder="SKU-001" 
+              placeholder="SKU-001"
               value={form.sku}
-              onChange={e => setForm({...form, sku: e.target.value})}
+              onChange={e => setForm({ ...form, sku: e.target.value })}
               disabled={isSubmitting}
             />
           </div>
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Category</label>
-            <select 
+            <select
               className="w-full h-10 bg-gray-50 border border-gray-100 rounded-xl px-4 text-sm font-bold appearance-none italic focus:outline-none focus:ring-2 focus:ring-primary/5"
               value={form.category}
-              onChange={e => setForm({...form, category: e.target.value})}
+              onChange={e => setForm({ ...form, category: e.target.value })}
               disabled={isSubmitting}
             >
               <option>Hardware</option>
@@ -200,148 +200,148 @@ export function ItemModal({
 
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Unit (SI)</label>
-            <Select 
+            <Select
               options={['nos', 'm', 'kg', 'pcs', 'box']}
               value={form.unit}
-              onChange={e => setForm({...form, unit: e.target.value})}
+              onChange={e => setForm({ ...form, unit: e.target.value })}
               disabled={isSubmitting}
             />
           </div>
 
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">HSN / SAC Code</label>
-            <Input 
+            <Input
               required
-              placeholder="8471" 
+              placeholder="8471"
               value={form.hsn_code}
-              onChange={e => setForm({...form, hsn_code: e.target.value})}
+              onChange={e => setForm({ ...form, hsn_code: e.target.value })}
               disabled={isSubmitting}
             />
           </div>
 
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">GST (%)</label>
-            <Input 
+            <Input
               type="number"
-              placeholder="18" 
+              placeholder="18"
               value={form.gst_rate}
-              onChange={e => setForm({...form, gst_rate: e.target.value})}
+              onChange={e => setForm({ ...form, gst_rate: e.target.value })}
               disabled={isSubmitting}
             />
           </div>
 
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Model</label>
-            <Input 
-              placeholder="e.g. Nexus 9000" 
+            <Input
+              placeholder="e.g. Nexus 9000"
               value={form.model}
-              onChange={e => setForm({...form, model: e.target.value})}
+              onChange={e => setForm({ ...form, model: e.target.value })}
               disabled={isSubmitting}
             />
           </div>
 
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Serial Tracking</label>
-            <Select 
+            <Select
               options={['YES', 'NO']}
               value={form.is_serialized}
-              onChange={e => setForm({...form, is_serialized: e.target.value as 'YES' | 'NO'})}
+              onChange={e => setForm({ ...form, is_serialized: e.target.value as 'YES' | 'NO' })}
               disabled={isSubmitting}
             />
           </div>
 
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Brand</label>
-            <Input 
-              placeholder="e.g. Dell, Cisco" 
+            <Input
+              placeholder="e.g. Dell, Cisco"
               value={form.brand}
-              onChange={e => setForm({...form, brand: e.target.value})}
+              onChange={e => setForm({ ...form, brand: e.target.value })}
               disabled={isSubmitting}
             />
           </div>
 
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Purchase Price (₹)</label>
-            <Input 
+            <Input
               type="number"
-              placeholder="0.00" 
+              placeholder="0.00"
               value={form.purchase_price}
-              onChange={e => setForm({...form, purchase_price: e.target.value})}
+              onChange={e => setForm({ ...form, purchase_price: e.target.value })}
               disabled={isSubmitting}
             />
           </div>
 
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Sale Price (₹)</label>
-            <Input 
+            <Input
               type="number"
-              placeholder="0.00" 
+              placeholder="0.00"
               value={form.sale_price}
-              onChange={e => setForm({...form, sale_price: e.target.value})}
+              onChange={e => setForm({ ...form, sale_price: e.target.value })}
               disabled={isSubmitting}
             />
           </div>
 
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Warehouse Location</label>
-            <Input 
-              placeholder="Main Store" 
+            <Input
+              placeholder="Main Store"
               value={form.location}
-              onChange={e => setForm({...form, location: e.target.value})}
+              onChange={e => setForm({ ...form, location: e.target.value })}
               disabled={isSubmitting}
             />
           </div>
 
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Low Stock Threshold</label>
-            <Input 
+            <Input
               type="number"
-              placeholder="5" 
+              placeholder="5"
               value={form.threshold}
-              onChange={e => setForm({...form, threshold: e.target.value})}
+              onChange={e => setForm({ ...form, threshold: e.target.value })}
               disabled={isSubmitting}
             />
           </div>
 
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Status</label>
-            <Select 
+            <Select
               options={['ACTIVE', 'INACTIVE']}
               value={form.status}
-              onChange={e => setForm({...form, status: e.target.value as 'ACTIVE' | 'INACTIVE'})}
+              onChange={e => setForm({ ...form, status: e.target.value as 'ACTIVE' | 'INACTIVE' })}
               disabled={isSubmitting}
             />
           </div>
           <div className="space-y-1.5 col-span-2">
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Barcode Identification</label>
             <div className="flex gap-2">
-                <Input 
-                    placeholder="Scan or type barcode..." 
-                    value={form.barcode}
-                    onChange={e => setForm({...form, barcode: e.target.value})}
-                    disabled={isSubmitting}
-                    className="flex-1 font-mono tracking-widest"
-                />
-                <Button 
-                    type="button" 
-                    onClick={() => setIsScanning(!isScanning)}
-                    className={cn(
-                        "px-6 h-10 rounded-xl transition-all",
-                        isScanning ? "bg-primary text-white animate-pulse" : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-                    )}
-                >
-                    {isScanning ? "SCANNING..." : "SCAN"}
-                </Button>
+              <Input
+                placeholder="Scan or type barcode..."
+                value={form.barcode}
+                onChange={e => setForm({ ...form, barcode: e.target.value })}
+                disabled={isSubmitting}
+                className="flex-1 font-mono tracking-widest"
+              />
+              <Button
+                type="button"
+                onClick={() => setIsScanning(!isScanning)}
+                className={cn(
+                  "px-6 h-10 rounded-xl transition-all",
+                  isScanning ? "bg-primary text-white animate-pulse" : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                )}
+              >
+                {isScanning ? "SCANNING..." : "SCAN"}
+              </Button>
             </div>
           </div>
         </div>
 
         <div className="flex gap-4 pt-4 border-t border-gray-100">
-          <Button 
+          <Button
             type="button"
-            variant="secondary" 
-            className="flex-1 rounded-2xl h-12 font-black italic tracking-widest text-[10px] uppercase" 
-            onClick={onClose} 
+            variant="secondary"
+            className="flex-1 rounded-2xl h-12 font-black italic tracking-widest text-[10px] uppercase"
+            onClick={onClose}
             disabled={isSubmitting}
           >
             Cancel

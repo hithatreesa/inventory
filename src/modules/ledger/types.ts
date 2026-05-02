@@ -1,3 +1,8 @@
+export interface LedgerTracking {
+  barcode: string;
+  serial: string;
+}
+
 export interface LedgerLine {
   id: string;
   sno: number;
@@ -12,6 +17,7 @@ export interface LedgerLine {
   ticketId?: string;
   isLocked?: boolean;
   serials?: string[];
+  tracking?: LedgerTracking[];
 }
 
 export interface LedgerHeader {
@@ -25,6 +31,7 @@ export interface LedgerHeader {
   narration: string;
   itcEligibility?: string;
   supplierReference?: string;
+  ticketId?: string;
 }
 
 export interface TaxSummaryRow {

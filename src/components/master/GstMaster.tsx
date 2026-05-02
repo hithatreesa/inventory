@@ -43,7 +43,7 @@ export function GstMaster() {
           <h2 className="text-2xl font-black text-[#003366] italic uppercase tracking-tight">Taxation Registry</h2>
           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Compliance & HSN Standards</p>
         </div>
-        <Button 
+        <Button
           onClick={() => { setIsAdding(true); setEditingId(null); setFormData({ name: '', rate: 0, hsn: '' }); }}
           className="rounded-xl italic font-black uppercase text-[10px] tracking-widest px-8 h-12 bg-[#003366] hover:bg-[#002244]"
         >
@@ -67,29 +67,29 @@ export function GstMaster() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Item Name / Category</label>
-              <Input 
+              <Input
                 value={formData.name}
                 onChange={e => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g. Computer Parts" 
+                placeholder="e.g. Computer Parts"
                 className="h-14 rounded-2xl bg-gray-50 border-gray-100 font-bold focus:ring-2 focus:ring-[#003366]/20 transition-all"
               />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">GST %</label>
-              <Input 
+              <Input
                 type="number"
                 value={formData.rate}
                 onChange={e => setFormData({ ...formData, rate: parseFloat(e.target.value) || 0 })}
-                placeholder="18" 
+                placeholder="18"
                 className="h-14 rounded-2xl bg-gray-50 border-gray-100 font-black italic focus:ring-2 focus:ring-[#003366]/20 transition-all"
               />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">HSN Code</label>
-              <Input 
+              <Input
                 value={formData.hsn}
                 onChange={e => setFormData({ ...formData, hsn: e.target.value })}
-                placeholder="e.g. 8471" 
+                placeholder="e.g. 8471"
                 className="h-14 rounded-2xl bg-gray-50 border-gray-100 font-bold focus:ring-2 focus:ring-[#003366]/20 transition-all"
               />
             </div>
@@ -107,10 +107,10 @@ export function GstMaster() {
         <table className="w-full text-left">
           <thead>
             <tr className="bg-gray-50/50 border-b border-gray-100">
-               <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Compliance Identity</th>
-               <th className="px-6 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-center">HSN Mapping</th>
-               <th className="px-6 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-center">Tax Rate</th>
-               <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-right">Operations</th>
+              <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Compliance Identity</th>
+              <th className="px-6 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-center">HSN Mapping</th>
+              <th className="px-6 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-center">Tax Rate</th>
+              <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-right">Operations</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -122,14 +122,14 @@ export function GstMaster() {
                       <Percent className="w-5 h-5" />
                     </div>
                     <div>
-                       <span className="text-sm font-black text-[#003366] italic uppercase block leading-none">{gst.name}</span>
-                       <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-1 block">Active Regulation</span>
+                      <span className="text-sm font-black text-[#003366] italic uppercase block leading-none">{gst.name}</span>
+                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-1 block">Active Regulation</span>
                     </div>
                   </div>
                 </td>
                 <td className="px-6 py-6 text-center">
                   <span className="inline-flex px-3 py-1 bg-gray-100 rounded-lg text-[10px] font-black text-gray-500 uppercase tracking-widest italic">
-                     {gst.hsn || '---'}
+                    {gst.hsn || '---'}
                   </span>
                 </td>
                 <td className="px-6 py-6 text-center">
@@ -138,17 +138,17 @@ export function GstMaster() {
                 </td>
                 <td className="px-10 py-6 text-right">
                   <div className="flex justify-end gap-2 opacity-40 group-hover:opacity-100 transition-opacity duration-300">
-                    <button 
+                    <button
                       onClick={() => { setEditingId(gst.id); setFormData({ name: gst.name, rate: gst.rate, hsn: gst.hsn || '' }); }}
                       className="w-10 h-10 rounded-xl bg-gray-50 text-gray-400 hover:text-[#003366] hover:bg-white hover:shadow-md border border-transparent hover:border-gray-100 transition-all flex items-center justify-center"
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
-                    <button 
+                    <button
                       onClick={() => {
-                         if(confirm("Confirm deletion of this tax regulation?")) {
-                            deleteGstConfig(gst.id)
-                         }
+                        if (confirm("Confirm deletion of this tax regulation?")) {
+                          deleteGstConfig(gst.id)
+                        }
                       }}
                       className="w-10 h-10 rounded-xl bg-gray-50 text-gray-400 hover:text-red-500 hover:bg-red-50 hover:shadow-md border border-transparent hover:border-red-100 transition-all flex items-center justify-center"
                     >

@@ -35,9 +35,9 @@ function useContactLookup(value: string, filter?: 'VENDOR' | 'CLIENT' | 'ALL') {
     return contacts.filter(v =>
       (!filter || filter === 'ALL' || v.type === filter) &&
       (!q ||
-      v.name.toLowerCase().includes(q) ||
-      (v.gstin && v.gstin.toLowerCase().includes(q)) ||
-      (v.phone && v.phone.includes(q)))
+        v.name.toLowerCase().includes(q) ||
+        (v.gstin && v.gstin.toLowerCase().includes(q)) ||
+        (v.phone && v.phone.includes(q)))
     ).slice(0, 10).map(v => ({ ...v, type: 'contact' }));
   }, [debouncedValue, contacts, filter]);
 
@@ -60,6 +60,7 @@ function useItemLookup(value: string) {
       !q ||
       i.name.toLowerCase().includes(q) ||
       (i.sku && i.sku.toLowerCase().includes(q)) ||
+      (i.barcode && i.barcode.toLowerCase().includes(q)) ||
       (i.brand && i.brand.toLowerCase().includes(q)) ||
       (i.model && i.model.toLowerCase().includes(q))
     ).slice(0, 10).map(i => ({
@@ -138,7 +139,8 @@ function useTicketLookup(value: string) {
   return results;
 }
 
-export function EntityLookup({ type, value, onChange, onSelect, placeholder, className, contactFilter, onKeyDown: onKeyDownProp, ...rest }: EntityLookupProps) {
+export const EntityLookup = React.forwardRef<HTMLInputElement, EntityLookupProps>(({ type, value, onChange, onSelect, placeholder, className, contactFilter, onKeyDown: onKeyDownProp, ...rest }: EntityLookupProps, ref) => {
+  const { inventory } = useData();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isItemModalOpen, setIsItemModalOpen] = useState(false);
@@ -153,10 +155,11 @@ export function EntityLookup({ type, value, onChange, onSelect, placeholder, cla
   const results = type === 'contact' ? contactResults : (type === 'item' ? itemResults : (type === 'expense' ? expenseResults : (type === 'engineer' ? engineerResults : ticketResults)));
 
   const handleSelect = useCallback((item: any) => {
+    console.log("[SCANNER] Selecting Entity:", item.name || item.id);
     onSelect(item);
-    onChange(item.name);
+    // Removed redundant onChange(string) call to prevent state collision with onSelect(object)
     setIsOpen(false);
-  }, [onSelect, onChange]);
+  }, [onSelect]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -198,8 +201,14 @@ export function EntityLookup({ type, value, onChange, onSelect, placeholder, cla
   }, [type]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    console.log("[SCANNER] Key Pressed (Lookup):", e.key);
+
     if (!isOpen) {
-      if (e.key === 'ArrowDown' || e.key === 'Enter') setIsOpen(true);
+      if (e.key === 'ArrowDown' || e.key === 'Enter') {
+        if (e.key === 'Enter' && value === "") return; // Don't open on empty enter if grid navigation is needed
+        setIsOpen(true);
+      }
+      if (onKeyDownProp) onKeyDownProp(e);
       return;
     }
 
@@ -211,10 +220,27 @@ export function EntityLookup({ type, value, onChange, onSelect, placeholder, cla
       setSelectedIndex(prev => (prev - 1 + (results.length + 1)) % (results.length + 1));
     } else if (e.key === 'Enter') {
       e.preventDefault();
+
+      // Hardware Scanner Optimization: Instant Exact Match Check
+      if (type === 'item' && value) {
+        const exactMatch = inventory.find(i =>
+          i.sku?.toLowerCase() === value.toLowerCase() ||
+          i.barcode?.toLowerCase() === value.toLowerCase()
+        );
+        if (exactMatch) {
+          console.log("[SCANNER] Instant Match Found:", exactMatch.name);
+          handleSelect({ ...exactMatch, type: 'item' });
+          return;
+        }
+      }
+
       if (selectedIndex === 0) {
         handleCreateNew();
       } else if (results[selectedIndex - 1]) {
         handleSelect(results[selectedIndex - 1]);
+      } else if (results.length === 1) {
+        // Auto-select if only one result and Enter is pressed (Scanner flow)
+        handleSelect(results[0]);
       }
     }
 
@@ -232,9 +258,11 @@ export function EntityLookup({ type, value, onChange, onSelect, placeholder, cla
     <div className={cn("relative w-full", className)} ref={containerRef}>
       <div className="relative flex items-center group">
         <input
+          ref={ref}
           type="text"
           value={value}
           onChange={(e) => {
+            console.log("[SCANNER] Input Typing (Lookup):", e.target.value);
             onChange(e.target.value);
             setIsOpen(true);
           }}
@@ -302,6 +330,7 @@ export function EntityLookup({ type, value, onChange, onSelect, placeholder, cla
                             {type === 'item' ? (
                               <>
                                 {item.sku && <span>SKU: {item.sku}</span>}
+                                {item.barcode && <span>B: {item.barcode}</span>}
                                 {item.brand && <span>{item.brand}</span>}
                                 {item.is_serialized && <span className="text-amber-500 flex items-center gap-1"><Scan className="w-2.5 h-2.5" /> Serialized</span>}
                               </>
@@ -312,14 +341,14 @@ export function EntityLookup({ type, value, onChange, onSelect, placeholder, cla
                                 {item.type && <span>DEPT: {item.type}</span>}
                               </>
                             ) : type === 'ticket' ? (
-                                <>
-                                    <span>{item.title}</span>
-                                    {item.customer_name && <span>{item.customer_name}</span>}
-                                </>
+                              <>
+                                <span>{item.title}</span>
+                                {item.customer_name && <span>{item.customer_name}</span>}
+                              </>
                             ) : (
-                                <>
-                                    {item.category && <span>CAT: {item.category}</span>}
-                                </>
+                              <>
+                                {item.category && <span>CAT: {item.category}</span>}
+                              </>
                             )}
                           </div>
                         </div>
@@ -353,7 +382,7 @@ export function EntityLookup({ type, value, onChange, onSelect, placeholder, cla
         onClose={() => setIsItemModalOpen(false)}
       />
 
-      <ContactModal 
+      <ContactModal
         isOpen={isContactModalOpen}
         onClose={() => setIsContactModalOpen(false)}
         initialName={value}
@@ -361,4 +390,6 @@ export function EntityLookup({ type, value, onChange, onSelect, placeholder, cla
       />
     </div>
   );
-}
+});
+
+EntityLookup.displayName = 'EntityLookup';

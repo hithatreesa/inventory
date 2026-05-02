@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from 'react'
 import * as engine from '../inventoryEngine'
+import { LedgerTracking } from '../../modules/ledger/types'
 
 // -------------------------------------------------------------
 // UI-FACING DATA MODELS (PRESERVING LEGACY TYPES for UI to render)
@@ -93,6 +94,18 @@ export interface SystemRole {
   accessibleModules: string[] // e.g. ['dashboard', 'engineers', 'inventory', 'pos', 'purchase', 'sales', 'expense', 'reports', 'master']
 }
 
+export interface InvoiceRecord {
+  id: string;
+  customer: string;
+  date: string;
+  lines: any[];
+  subtotal: number;
+  gst_total: number;
+  grand_total: number;
+  status: 'FINAL';
+  timestamp: number;
+}
+
 export interface SystemUser {
   id: string
   name: string
@@ -128,6 +141,10 @@ export interface Transaction {
   date: string
   reference?: string
   reference_id?: string
+  ticket_id?: string
+  source?: 'PURCHASE' | 'OUTSIDE_PURCHASE'
+  affects_stock?: boolean
+  cost?: number
   price?: number
   amount?: number
   expense_id?: string
@@ -135,6 +152,9 @@ export interface Transaction {
   notes?: string
   customer_name?: string
   supplier?: string
+  gst_rate?: number
+  purchase_price?: number
+  warehouse_id?: string
   timestamp: number
 }
 
@@ -254,6 +274,7 @@ const MOCK_ENGINEERS: Engineer[] = [
 
 export interface ScanEntry {
   serial: string;
+  barcode?: string;
   metadata?: Record<string, any>;
   timestamp: number;
 }
@@ -267,6 +288,7 @@ export interface PurchaseLine {
   gstRate: number
   isSerialized: boolean
   serials: ScanEntry[]
+  tracking?: LedgerTracking[]
   isLocked: boolean
   total?: number
   brand?: string
@@ -317,6 +339,9 @@ interface DataContextType {
   gstConfigs: GstConfig[]
   expenseConfigs: ExpenseConfig[]
   tickets: Ticket[]
+  setTickets: React.Dispatch<React.SetStateAction<Ticket[]>>
+  invoices: InvoiceRecord[]
+  finalizeBill: (invoice: InvoiceRecord) => Promise<void>
   fetchData: () => Promise<void>
   getEngineerSerials: (engineerId: string) => EngineerSerial[]
   getEngineerTickets: (engineerId: string) => Ticket[]
@@ -331,7 +356,10 @@ interface DataContextType {
   consumeItem: (itemId: string, engineerId: string, qty: number, reference?: string) => Promise<void>
   adjustItem: (itemId: string, qty: number, reference?: string) => Promise<void>
   addLog: (msg: string) => void
-  addItem: (item: Partial<InventoryItem>) => InventoryItem
+  // Stock Lookups
+  getAvailableStock: (productId: string) => any[]
+
+  addItem: (item: Partial<InventoryItem>) => Promise<void>
   editItem: (id: string, updates: Partial<InventoryItem>) => Promise<void>
   addContact: (data: Partial<Contact>) => Promise<void>
   editContact: (id: string, updates: Partial<Contact>) => Promise<void>
@@ -350,6 +378,13 @@ interface DataContextType {
   engineers: Engineer[]
   addEngineer: (data: { name: string, type: "IT" | "TECHNICAL" }) => void
   recordManualExpense: (data: { expenseId: string, amount: number, date: string, reference?: string, notes?: string }) => Promise<void>
+  recordOutsidePurchase: (data: { 
+    item_name: string, 
+    qty: number, 
+    cost: number, 
+    ticket_id: string,
+    notes?: string
+  }) => Promise<void>
   processPO: (header: { vendor: string, date: string, reference: string, warehouse: string, invoiceNumber: string }, lines: PurchaseLine[], sundry?: any[]) => Promise<void>
   processInward: (header: { vendor: string, date: string, reference: string, warehouse: string, invoiceNumber: string }, lines: PurchaseLine[], sundry?: any[]) => Promise<void>
   issueToEngineer: (engineerId: string, lines: IssueLine[]) => Promise<void>
@@ -429,7 +464,31 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [tickets, setTickets] = useState<Ticket[]>([
     { id: 'TICKET-101', title: 'Network Outage @ HQ', customer_name: 'Main Office', requirements: [{ item_id: 'ITM001', qty: 1 }] },
     { id: 'TICKET-102', title: 'Server Upgrade', customer_name: 'Data Center', requirements: [{ item_id: 'ITM002', qty: 2 }] },
+    { id: 'TICKET-103', title: 'Network Expansion - Phase 1', customer_name: 'Main Office', requirements: [
+      { item_id: 'Configuration Charges', qty: 1 },
+      { item_id: 'Installation Charges', qty: 1 }
+    ] },
+    { id: 'TICKET-104', title: 'Camera Installation (12 units)', customer_name: 'Main Office', requirements: [
+      { item_id: 'ITM003', qty: 12 },
+      { item_id: 'Camera Termination', qty: 12 },
+      { item_id: 'DVR Configuration', qty: 1 }
+    ] },
+    { id: 'TICKET-105', title: 'Annual Maintenance Contract', customer_name: 'Main Office', requirements: [
+      { item_id: 'Service Charges', qty: 1 }
+    ] },
   ])
+  const [invoices, setInvoices] = useState<InvoiceRecord[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('erp_invoices');
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('erp_invoices', JSON.stringify(invoices));
+  }, [invoices]);
+
   const [gstConfigs, setGstConfigs] = useState<GstConfig[]>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('inventory_gst_configs');
@@ -603,7 +662,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         sub_type: tx.sub_type,
         notes: tx.notes,
         expense_id: tx.expense_id,
-        supplier: tx.supplier
+        supplier: tx.supplier,
+        warehouse_id: tx.warehouse_id || (tx as any).metadata?.warehouse_id
       }));
 
       parsedTxns.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -658,6 +718,34 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     addLog(`INWARD: ${qty}x ${itemId}`);
     await fetchData();
   }
+
+  const finalizeBill = async (invoice: InvoiceRecord) => {
+    // Atomically commit transactions for each line
+    for (const line of invoice.lines) {
+      const gstAmount = (line.price * line.gstRate) / 100;
+      engine.commitTransaction({
+        type: "REVENUE",
+        item_id: line.productId || line.description,
+        serial: `REV-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        quantity: line.qty,
+        amount: line.amount + (gstAmount * line.qty), // Total per line including GST
+        price: line.price,
+        gst_rate: line.gstRate,
+        cgst: (gstAmount * line.qty) / 2,
+        sgst: (gstAmount * line.qty) / 2,
+        reference: line.ticketId || invoice.id,
+        reference_type: 'SALE',
+        reference_id: invoice.id,
+        customer_id: invoice.customer,
+        notes: line.description,
+        timestamp: Date.now()
+      });
+    }
+
+    setInvoices(prev => [...prev, invoice]);
+    addLog(`BILLED: ${invoice.id} for ${invoice.customer}`);
+    await fetchData();
+  };
 
   const outwardItem = async (itemId: string, engineerId: string, qty: number, reference?: string) => {
     // Phase 11: Engineer Existence Check
@@ -725,87 +813,112 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // POS SALE FLOW
   // -------------------------------------------------------------
   const sellFromPOS = async (
-    cartItems: Array<{ id: string; qty: number; price?: number; serials?: string[] }>,
+    cartItems: Array<{ 
+      id: string; 
+      qty: number; 
+      price?: number; 
+      gstRate?: number; 
+      name?: string; 
+      serials?: string[];
+      ticketId?: string;
+    }>,
     customer_id: string
   ) => {
     if (!cartItems || cartItems.length === 0)
       throw new Error('HARD_FAIL: EMPTY_CART');
 
-    // Phase 1: Pre-validate ALL stock before any mutation
-    for (const item of cartItems) {
-      const available = engine.getAvailableStock(item.id);
-      if (available.length < item.qty) {
-        const catalogItem = catalog.find(c => c.id === item.id);
-        throw new Error(
-          `HARD_FAIL: OUT_OF_STOCK for "${catalogItem?.name || item.id}". Needed: ${item.qty}, Available: ${available.length}`
-        );
-      }
-    }
-
-    // Phase 2: Atomic execution — sell each serial through engine
     const saleRef = `SALE-${Date.now()}`;
     let totalUnits = 0;
     let saleTotal = 0;
 
     for (const item of cartItems) {
-      const available = engine.getAvailableStock(item.id);
       const catalogItem = catalog.find(c => c.id === item.id);
-      if (!catalogItem) throw new Error(`HARD_FAIL: ITEM_NOT_IN_MASTER: ${item.id}`);
+      const isService = !catalogItem || item.id.startsWith('SERVICE_') || item.id.includes('line-');
+      
+      // If it's a physical item, pre-validate stock
+      if (!isService) {
+        const available = engine.getAvailableStock(item.id);
+        if (available.length < item.qty) {
+          throw new Error(`HARD_FAIL: OUT_OF_STOCK for "${catalogItem?.name || item.id}". Needed: ${item.qty}, Available: ${available.length}`);
+        }
+      }
 
-      // SSOT: Pull price and GST strictly from Master catalog
-      const masterPrice = catalogItem.sale_price || catalogItem.price || 0;
-      const masterGst = catalogItem.gst_rate || 0;
+      // SSOT: Pull price and GST strictly from Master catalog for items, or use provided for services
+      const masterPrice = catalogItem ? (catalogItem.sale_price || catalogItem.price || 0) : (Number(item.price) || 0);
+      const masterGst = catalogItem ? (catalogItem.gst_rate || 0) : (Number(item.gstRate) || 0);
 
       const gstAmount = (masterPrice * masterGst) / 100;
       const cgst = gstAmount / 2;
       const sgst = gstAmount / 2;
 
-      // Perfection: Enforce Serial Traceability
-      let targetSerials: string[] = [];
-      if (catalogItem.is_serialized) {
-        if (!item.serials || item.serials.length !== item.qty) {
-          throw new Error(`HARD_FAIL: SERIAL_MISMATCH for "${catalogItem.name}". Needed: ${item.qty}, Provided: ${item.serials?.length || 0}`);
+      if (!isService && catalogItem) {
+        // Physical Item Flow (Stock impact)
+        const available = engine.getAvailableStock(item.id);
+        let targetSerials: string[] = [];
+        if (catalogItem.is_serialized) {
+          if (!item.serials || item.serials.length !== item.qty) {
+            throw new Error(`HARD_FAIL: SERIAL_MISMATCH for "${catalogItem.name}". Needed: ${item.qty}, Provided: ${item.serials?.length || 0}`);
+          }
+          targetSerials = item.serials;
+          for (const s of targetSerials) {
+            const sInfo = available.find(a => a.serial === s);
+            if (!sInfo) throw new Error(`HARD_FAIL: SERIAL_NOT_AVAILABLE: ${s}`);
+          }
+        } else {
+          targetSerials = available.slice(0, item.qty).map(s => s.serial);
         }
-        targetSerials = item.serials;
-        // Verify each serial is actually in stock
-        for (const s of targetSerials) {
-          const sInfo = available.find(a => a.serial === s);
-          if (!sInfo) throw new Error(`HARD_FAIL: SERIAL_NOT_AVAILABLE: ${s}`);
+
+        for (const serial of targetSerials) {
+          engine.executeOutward({
+            productId: item.id,
+            serial,
+            qty: 1,
+            customer_id,
+            metadata: {
+              sale_price: masterPrice,
+              gst_rate: masterGst,
+              cgst,
+              sgst,
+              igst: 0,
+              reference_type: 'SALE',
+              reference_id: saleRef,
+            }
+          });
         }
       } else {
-        targetSerials = available.slice(0, item.qty).map(s => s.serial);
-      }
-
-      for (const serial of targetSerials) {
-        engine.executeOutward({
-          productId: item.id,
-          serial,
-          qty: 1,
-          customer_id,
-          metadata: {
-            sale_price: masterPrice,
-            gst_rate: masterGst,
-            cgst,
-            sgst,
-            igst: 0,
-            reference_type: 'SALE',
-            reference_id: saleRef,
-          }
+        // Service/Ad-hoc Flow (Revenue only)
+        engine.commitTransaction({
+          type: "REVENUE",
+          item_id: item.id,
+          serial: `SRV-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          quantity: item.qty,
+          amount: (masterPrice + gstAmount) * item.qty,
+          price: masterPrice,
+          gst_rate: masterGst,
+          cgst: cgst * item.qty,
+          sgst: sgst * item.qty,
+          reference: item.ticketId || saleRef,
+          reference_type: 'SALE',
+          reference_id: saleRef,
+          customer_id: customer_id,
+          notes: item.name || `Service: ${item.id}`,
+          timestamp: Date.now()
         });
       }
+
       totalUnits += item.qty;
       saleTotal += (masterPrice + gstAmount) * item.qty;
     }
 
     addLog(
-      `POS_SALE: ${totalUnits} units | Customer: ${customer_id} | Ref: ${saleRef}`
+      `POS_SALE: ${totalUnits} units | Customer: ${customer_id} | Ref: ${saleRef} | Total: ₹${saleTotal.toFixed(2)}`
     );
     await fetchData();
   }
 
 
   // Legacy/Mock methods to keep UI uncrashing
-  const addItem = useCallback((item: Partial<InventoryItem>) => {
+  const addItem = useCallback(async (item: Partial<InventoryItem>) => {
     // 1. GST Master Validation (MANDATORY)
     const gstMatch = gstConfigs.find(g => g.rate === item.gst_rate || g.id === item.gst_id);
     if (!gstMatch) {
@@ -858,7 +971,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       return next;
     });
     addLog(`ITEM CREATED: ${newItem.name} | SKU: ${newItem.sku} | GST: ${newItem.gst_rate}%`);
-    return newItem;
   }, [catalog, gstConfigs, fetchData, addLog]);
 
   const addContact = async (data: Partial<Contact>) => {
@@ -904,6 +1016,39 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     setTransactions(prev => [newTxn, ...prev]);
     addLog(`EXPENSE RECORDED: ${expense.name} | Amount: ₹${data.amount}`);
+  }
+
+  const recordOutsidePurchase = async (data: { 
+    item_name: string, 
+    qty: number, 
+    cost: number, 
+    ticket_id: string,
+    notes?: string
+  }) => {
+    if (!data.ticket_id) throw new Error("HARD_FAIL: TICKET_ID_REQUIRED");
+    if (data.qty <= 0) throw new Error("HARD_FAIL: INVALID_QTY");
+    if (data.cost <= 0) throw new Error("HARD_FAIL: INVALID_COST");
+
+    const newTxn: Transaction = {
+      id: `TXN-OP-${Date.now()}`,
+      item_id: data.item_name,
+      serial: `OP-${Date.now()}`,
+      type: 'CONSUMED',
+      quantity: data.qty,
+      cost: data.cost,
+      amount: data.cost * data.qty,
+      source: 'OUTSIDE_PURCHASE',
+      affects_stock: false,
+      status: 'COMPLETED',
+      date: new Date().toISOString().split('T')[0],
+      timestamp: Date.now(),
+      reference: data.ticket_id,
+      ticket_id: data.ticket_id,
+      notes: data.notes
+    };
+
+    setTransactions(prev => [newTxn, ...prev]);
+    addLog(`OUTSIDE PURCHASE RECORDED: ${data.item_name} for ${data.ticket_id}`);
   }
 
   const saveTicketData = async (ticketNo: string, data: any) => {
@@ -1008,16 +1153,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const isSerialized = masterItem?.is_serialized || line.isSerialized || false;
 
       if (isSerialized) {
-        if (!line.serials || line.serials.length !== line.qty) {
-          throw new Error(`HARD_FAIL: SERIAL_MISMATCH for ${line.name}. Scanned: ${line.serials?.length || 0}/${line.qty}`);
+        // If dual tracking is provided, use it. Otherwise fall back to serials.
+        const trackingCount = line.tracking?.length || line.serials?.length || 0;
+        if (trackingCount !== line.qty) {
+          throw new Error(`HARD_FAIL: TRACKING_MISMATCH for ${line.name}. Scanned: ${trackingCount}/${line.qty}`);
         }
 
-        // Check for duplicates in current system
-        for (const s of line.serials) {
-          const serial = typeof s === 'string' ? s : s.serial;
-          const history = engine.getSerialHistory(serial);
-          if (history.length > 0) {
-            throw new Error(`HARD_FAIL: DUPLICATE_SERIAL_DETECTED: ${serial}`);
+        // Check for duplicates
+        if (line.tracking) {
+          for (const t of line.tracking) {
+            if (engine.getSerialHistory(t.serial).length > 0) throw new Error(`HARD_FAIL: DUPLICATE_SERIAL: ${t.serial}`);
+            // Note: we could also check barcode history if we had a getBarcodeHistory
+          }
+        } else if (line.serials) {
+          for (const s of line.serials) {
+            const serial = typeof s === 'string' ? s : (s as any).serial;
+            if (engine.getSerialHistory(serial).length > 0) throw new Error(`HARD_FAIL: DUPLICATE_SERIAL: ${serial}`);
           }
         }
       }
@@ -1055,21 +1206,43 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     for (const line of lines) {
       const isTemp = !line.productId || line.productId.startsWith('TEMP_');
       const productId = isTemp ? `TEMP_${line.name.replace(/\s+/g, '_').toUpperCase()}` : line.productId;
-      
-      engine.commitTransaction({
-        type: "PO",
-        item_id: productId,
-        serial: `PO-ITEM-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-        quantity: line.qty,
-        price: line.price,
-        gst_rate: line.gstRate || 0,
-        reference: header.invoiceNumber,
-        status: 'APPROVED',
-        date: header.date,
-        supplier: header.vendor,
-        notes: `PO Approval: ${header.invoiceNumber}`,
-        timestamp: Date.now()
-      });
+
+      if (line.tracking && line.tracking.length > 0) {
+        for (const t of line.tracking) {
+          engine.commitTransaction({
+            type: "PO",
+            item_id: productId,
+            serial: t.serial,
+            barcode: t.barcode,
+            quantity: 1,
+            price: line.price,
+            gst_rate: line.gstRate || 0,
+            reference: header.invoiceNumber,
+            status: 'APPROVED',
+            date: header.date,
+            supplier: header.vendor,
+            warehouse_id: header.warehouse,
+            notes: `PO Approval: ${header.invoiceNumber}`,
+            timestamp: Date.now()
+          });
+        }
+      } else {
+        engine.commitTransaction({
+          type: "PO",
+          item_id: productId,
+          serial: `PO-ITEM-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          quantity: line.qty,
+          price: line.price,
+          gst_rate: line.gstRate || 0,
+          reference: header.invoiceNumber,
+          status: 'APPROVED',
+          date: header.date,
+          supplier: header.vendor,
+          warehouse_id: header.warehouse,
+          notes: `PO Approval: ${header.invoiceNumber}`,
+          timestamp: Date.now()
+        });
+      }
     }
 
     addLog(`PO_APPROVED: ${header.invoiceNumber} | Items: ${lines.length} | No Stock Movement.`);
@@ -1080,20 +1253,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     // Phase 1: Pre-Validation
     if (!lines || lines.length === 0) throw new Error("HARD_FAIL: NO_ITEMS_IN_ENTRY");
 
-    // Phase 2: Verification & Serialization Rule Check
     for (const line of lines) {
       if (line.isSerialized) {
-        if (!line.serials || line.serials.length !== line.qty) {
-          throw new Error(`HARD_FAIL: SERIAL_MISMATCH for ${line.name}. Scanned: ${line.serials?.length || 0}/${line.qty}`);
-        }
-
-        // Check for duplicates in current system
-        for (const s of line.serials) {
-          const serial = typeof s === 'string' ? s : s.serial;
-          const history = engine.getSerialHistory(serial);
-          if (history.length > 0) {
-            throw new Error(`HARD_FAIL: DUPLICATE_SERIAL_DETECTED: ${serial}`);
-          }
+        const trackingCount = line.tracking?.length || line.serials?.length || 0;
+        if (trackingCount !== line.qty) {
+          throw new Error(`HARD_FAIL: TRACKING_MISMATCH for ${line.name}. Scanned: ${trackingCount}/${line.qty}`);
         }
       }
     }
@@ -1105,24 +1269,48 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const gstRate = line.gstRate || 0;
 
       if (line.isSerialized) {
-        line.serials.forEach((s: any) => {
-          const serial = typeof s === 'string' ? s : s.serial;
-          engine.executeInward({
-            productId: effectiveProductId,
-            serial,
-            qty: 1,
-            gst: gstRate,
-            price: line.price,
-            source: "INWARD",
-            metadata: { 
-              reference: line.ticket_id, 
-              reference_id: header.reference,
-              invoice: header.invoiceNumber, 
-              supplier: header.vendor, 
-              sub_type: isTemp ? 'TEMP_ITEM' : 'MASTER_ITEM'
-            }
+        if (line.tracking && line.tracking.length > 0) {
+          line.tracking.forEach((t) => {
+            engine.executeInward({
+              productId: effectiveProductId,
+              serial: t.serial,
+              barcode: t.barcode,
+              qty: 1,
+              gst: gstRate,
+              price: line.price,
+              source: "INWARD",
+              metadata: {
+                reference: line.ticket_id,
+                reference_id: header.reference,
+                invoice: header.invoiceNumber,
+                supplier: header.vendor,
+                sub_type: isTemp ? 'TEMP_ITEM' : 'MASTER_ITEM'
+              }
+            });
           });
-        });
+        } else if (line.serials) {
+          line.serials.forEach((s: any) => {
+            const serial = typeof s === 'string' ? s : s.serial;
+            const barcode = typeof s === 'string' ? undefined : (s as any).barcode;
+            engine.executeInward({
+              productId: effectiveProductId,
+              serial,
+              barcode,
+              qty: 1,
+              gst: gstRate,
+              price: line.price,
+              source: "INWARD",
+              metadata: {
+                reference: line.ticket_id,
+                reference_id: header.reference,
+                invoice: header.invoiceNumber,
+                supplier: header.vendor,
+                warehouse_id: header.warehouse,
+                sub_type: isTemp ? 'TEMP_ITEM' : 'MASTER_ITEM'
+              }
+            });
+          });
+        }
       } else {
         engine.executeInwardBulk({
           productId: effectiveProductId,
@@ -1130,11 +1318,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           gst: gstRate,
           price: line.price,
           source: "INWARD",
-          metadata: { 
-            reference: line.ticket_id, 
+          metadata: {
+            reference: line.ticket_id,
             reference_id: header.reference,
-            invoice: header.invoiceNumber, 
-            supplier: header.vendor, 
+            invoice: header.invoiceNumber,
+            supplier: header.vendor,
+            warehouse_id: header.warehouse,
             sub_type: isTemp ? 'TEMP_ITEM' : 'MASTER_ITEM'
           }
         });
@@ -1241,14 +1430,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     );
   }, [transactions, tickets]);
 
-  const processJournal = async (engineerId: string, lines: { serial: string, from_ticket: string, to_ticket: string }[]) => {
+  const processJournal = async (engineer_id: string, lines: { serial: string, from_ticket: string, to_ticket: string }[]) => {
     if (!lines || lines.length === 0) throw new Error("HARD_FAIL: NO_ITEMS_TO_JOURNAL");
 
     for (const line of lines) {
-      engine.executeJournal(line.serial, engineerId, line.from_ticket, line.to_ticket);
+      engine.executeJournal(line.serial, engineer_id, line.from_ticket, line.to_ticket);
     }
 
-    addLog(`ENGINEER_JOURNAL: ${engineerId} | Reassigned ${lines.length} items`);
+    addLog(`ENGINEER_JOURNAL: ${engineer_id} | Reassigned ${lines.length} items`);
     await fetchData();
   }
 
@@ -1261,6 +1450,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       description: string,
       amount: number,
       gst_rate?: number,
+      gst_amount?: number,
       igst?: number,
       cgst?: number,
       sgst?: number
@@ -1276,35 +1466,43 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (!line.ticket_id) throw new Error("HARD_FAIL: TICKET_REQUIRED");
       if (line.amount <= 0) throw new Error("HARD_FAIL: AMOUNT_MUST_BE_POSITIVE");
 
-      const tickets = line.ticket_id.split(',').map(t => t.trim()).filter(Boolean);
-      if (tickets.length === 0) throw new Error("HARD_FAIL: TICKET_REQUIRED");
-
-      const splitAmount = line.amount / tickets.length;
-
-      for (const ticket of tickets) {
-        engine.commitTransaction({
-          type: "REVENUE",
-          reference: ticket,
-          amount: splitAmount,
-          reference_type: "SALE",
-          reference_id: invoice.id,
-          customer_id: invoice.customer_id,
-          notes: line.description + (tickets.length > 1 ? ` (Split ${tickets.indexOf(ticket) + 1}/${tickets.length})` : ''),
-          timestamp: new Date(invoice.date).getTime() || Date.now()
-        });
-      }
+      engine.commitTransaction({
+        type: "REVENUE",
+        reference: line.ticket_id,
+        amount: line.amount + (line.gst_amount || 0),
+        reference_type: "SALE",
+        reference_id: invoice.id,
+        customer_id: invoice.customer_id,
+        notes: line.description,
+        timestamp: new Date(invoice.date).getTime() || Date.now()
+      });
     }
 
-    addLog(`SALES_INVOICE: ${invoice.id} | Customer: ${invoice.customer_id} | Tickets: ${invoice.lines.length} | Total: ₹${invoice.total_amount} | Tax: IGST=${invoice.total_igst || 0} CGST=${invoice.total_cgst || 0} SGST=${invoice.total_sgst || 0}`);
+    addLog(`SALES_INVOICE: ${invoice.id} | Customer: ${invoice.customer_id} | Tickets: ${invoice.lines.length} | Total: ₹${invoice.total_amount}`);
     await fetchData();
   }
 
   const getTicketBillableSummary = (ticketId: string) => {
     const profitData = engine.getTicketProfit(ticketId, transactions);
+    const ticketTxns = transactions.filter(t => t.reference === ticketId);
+
+    let gstAmount = 0;
+    ticketTxns.forEach(t => {
+      if (t.type === 'OUTWARD' || t.type === 'CONSUMED' || t.type === 'EXPENSE') {
+        const product = inventory.find(i => i.id === t.item_id);
+        const rate = product?.gst_rate || t.gst_rate || 0;
+        const amt = (t.amount || (t.quantity * (t.price || 0)) || (t.quantity * (t.purchase_price || 0)));
+        if (rate > 0) {
+          gstAmount += amt * (rate / 100);
+        }
+      }
+    });
+
     return {
       consumedAmount: profitData.cost,
       expenseAmount: profitData.expense,
       revenueAmount: profitData.revenue,
+      gstAmount,
       total: profitData.revenue > 0 ? profitData.revenue : (profitData.cost + profitData.expense)
     };
   }
@@ -1316,6 +1514,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     engineers,
     contacts,
     tickets,
+    setTickets,
+    invoices,
+    finalizeBill,
     getEngineerSerials,
     getEngineerTickets,
     fetchData,
@@ -1342,7 +1543,25 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     recordExpense,
     recordManualExpense: recordExpense,
     saveTicketData,
+    recordOutsidePurchase: async (data: { item_name: string, qty: number, cost: number, ticket_id: string, notes?: string }) => {
+      engine.commitTransaction({
+        type: "PURCHASE",
+        item_id: data.item_name,
+        serial: `OP-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        quantity: data.qty,
+        amount: data.cost * data.qty,
+        price: data.cost,
+        reference: data.ticket_id,
+        reference_type: 'OUTSIDE_PURCHASE',
+        reference_id: `OP-${Date.now()}`,
+        notes: data.notes,
+        timestamp: Date.now()
+      });
+      addLog(`OUTSIDE PURCHASE: ${data.item_name} for ticket ${data.ticket_id}`);
+      await fetchData();
+    },
     getTicketProfit: (ticketNo: string) => engine.getTicketProfit(ticketNo, transactions),
+    getAvailableStock: (productId: string) => engine.getAvailableStock(productId),
     addEngineer: (data: { name: string, type: "IT" | "TECHNICAL" }) => {
       setEngineers(prev => [...prev, { id: "eng_" + Date.now(), name: data.name, type: data.type }]);
       addLog(`ENGINEER CREATED: ${data.name}`);
@@ -1412,7 +1631,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         await legacyReturnItem(t.item_id, t.engineer_id, 1)
       }
     }
-  }), [inventory, transactions, logs, engineers, contacts, tickets, gstConfigs, expenseConfigs, users, roles, fetchData, getEngineerSerials, getEngineerTickets, addLog, addContact, editContact, deleteContacts, addItem, editItem, deleteItems, addGstConfig, updateGstConfig, deleteGstConfig, sellFromPOS, addUser, editUser, deleteUser, addRole, userPermissions, updateUserPermission, bulkUpdateModulePermissions, checkUserPermission, getUserPermissions])
+  }), [inventory, transactions, logs, engineers, contacts, tickets, gstConfigs, expenseConfigs, users, roles, fetchData, getEngineerSerials, getEngineerTickets, addLog, addContact, editContact, deleteContacts, addItem, editItem, deleteItems, addGstConfig, updateGstConfig, deleteGstConfig, sellFromPOS, addUser, editUser, deleteUser, addRole, userPermissions, updateUserPermission, bulkUpdateModulePermissions, checkUserPermission, getUserPermissions, invoices, finalizeBill])
 
   return (
     <DataContext.Provider value={value}>

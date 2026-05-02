@@ -69,26 +69,38 @@ function SectionHeader({ title, subtitle, icon: Icon, color = "text-primary" }: 
 }
 
 function ActionAlert({ title, insight, actionLabel, onClick, variant = "warning" }: any) {
-   const colors = {
-      warning: "bg-orange-50 border-orange-100 text-orange-900 icon-bg-orange-100 icon-text-orange-600 btn-bg-orange-600",
-      danger: "bg-red-50 border-red-100 text-red-900 icon-bg-red-100 icon-text-red-600 btn-bg-red-600",
-      info: "bg-blue-50 border-blue-100 text-blue-900 icon-bg-blue-100 icon-text-blue-600 btn-bg-blue-600",
+   const styles = {
+      warning: {
+         container: "bg-orange-50 border-orange-100 text-orange-900",
+         icon: "bg-orange-100 text-orange-600",
+         button: "bg-orange-600 hover:bg-orange-700 shadow-orange-200"
+      },
+      danger: {
+         container: "bg-red-50 border-red-100 text-red-900",
+         icon: "bg-red-100 text-red-600",
+         button: "bg-red-600 hover:bg-red-700 shadow-red-200"
+      },
+      info: {
+         container: "bg-blue-50 border-blue-100 text-blue-900",
+         icon: "bg-blue-100 text-blue-600",
+         button: "bg-blue-600 hover:bg-blue-700 shadow-blue-200"
+      },
    }[variant as "warning" | "danger" | "info"]
 
    return (
-      <div className={cn("p-5 rounded-[24px] border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all hover:shadow-lg hover:translate-y-[-2px]", colors.split(' ').slice(0, 3).join(' '))}>
+      <div className={cn("p-5 rounded-[24px] border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all hover:shadow-lg hover:translate-y-[-2px]", styles.container)}>
          <div className="flex items-center gap-4">
-            <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center shrink-0", colors.split(' ')[3], colors.split(' ')[4])}>
+            <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center shrink-0", styles.icon)}>
                {variant === "danger" ? <AlertTriangle className="w-6 h-6" /> : variant === "info" ? <FileText className="w-6 h-6" /> : <AlertCircle className="w-6 h-6" />}
             </div>
             <div>
-               <p className="text-sm font-black uppercase italic leading-none mb-1">{title}</p>
-               <p className="text-xs font-bold opacity-60 uppercase tracking-widest">{insight}</p>
+               <p className="text-sm font-black uppercase italic leading-none mb-1 tracking-tight">{title}</p>
+               <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest leading-none">{insight}</p>
             </div>
          </div>
          <button 
             onClick={onClick}
-            className={cn("px-6 py-3 rounded-xl text-white text-[10px] font-black uppercase tracking-widest italic shadow-lg transition-all active:scale-95", colors.split(' ')[5])}
+            className={cn("px-6 py-3 rounded-xl text-white text-[10px] font-black uppercase tracking-widest italic shadow-lg transition-all active:scale-95 whitespace-nowrap", styles.button)}
          >
             {actionLabel}
          </button>
@@ -113,11 +125,11 @@ export default function DashboardPage() {
          window.removeEventListener('open-quick-entry', handleOpenQuickEntry);
       };
    }, []);
-   
+
    // Dashboard data layer
-   const stats = useDashboardData({ 
+   const stats = useDashboardData({
       data: {
-         sales: transactions.filter((t: Transaction) => t.type === 'OUTWARD').map((t: Transaction) => {
+         sales: transactions.filter((t: Transaction) => t.type === 'OUTWARD' || t.type === 'REVENUE').map((t: Transaction) => {
             const match = inventory.find((i: InventoryItem) => i.id == t.item_id);
             return {
                date: t.date?.split("T")[0],
@@ -125,7 +137,7 @@ export default function DashboardPage() {
                items: [{ id: t.item_id, qty: t.quantity, costPrice: match?.purchase_price || 0, price: t.price || match?.price || 0, category: match?.category, name: match?.name }]
             }
          }),
-         purchases: transactions.filter((t: Transaction) => t.type === 'INWARD').map((t: Transaction) => {
+         purchases: transactions.filter((t: Transaction) => t.type === 'INWARD' || t.type === 'PO').map((t: Transaction) => {
             const match = inventory.find((i: InventoryItem) => i.id == t.item_id);
             return {
                date: t.date?.split("T")[0],
@@ -149,35 +161,35 @@ export default function DashboardPage() {
 
    return (
       <div className="space-y-8 pb-20 animate-in fade-in duration-700">
-         
+
          {/* SECTION 1: ACTION CENTER */}
          <section>
-            <SectionHeader 
-               title="Action Center" 
-               subtitle="Immediate Decisions" 
-               icon={Target} 
+            <SectionHeader
+               title="Action Center"
+               subtitle="Immediate Decisions"
+               icon={Target}
                color="text-red-500"
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                {stats.lowStockCount > 0 && (
-                  <ActionAlert 
-                     title={`${stats.lowStockCount} items will run out in 3 days`}
+                  <ActionAlert
+                     title={`${stats.lowStockCount} items will stock out in 3 days`}
                      insight="Inventory levels below safety threshold"
                      actionLabel="Reorder Now"
                      variant="warning"
                      onClick={() => {
-                        const event = new CustomEvent('open-quick-entry', { 
-                           detail: { 
+                        const event = new CustomEvent('open-quick-entry', {
+                           detail: {
                               tab: 'purchase',
                               purchase: { reference: 'REORDER-' + Date.now() }
-                           } 
+                           }
                         });
                         window.dispatchEvent(event);
                      }}
                   />
                )}
                {stats.pendingApprovals > 0 && (
-                  <ActionAlert 
+                  <ActionAlert
                      title={`${stats.pendingApprovals} purchase orders pending approval`}
                      insight="Blocked procurement workflow detected"
                      actionLabel="Approve Now"
@@ -186,7 +198,7 @@ export default function DashboardPage() {
                   />
                )}
                {stats.deadStock.length > 0 && (
-                  <ActionAlert 
+                  <ActionAlert
                      title={`${stats.deadStock.length} items not sold in 30+ days`}
                      insight={`Dead stock value: ₹${(stats.deadStock.length * 5000).toLocaleString('en-IN')}`}
                      actionLabel="Review"
@@ -194,14 +206,14 @@ export default function DashboardPage() {
                      onClick={() => router.push('/reports?v=dead-stock')}
                   />
                )}
-               <ActionAlert 
+               <ActionAlert
                   title="Create Purchase Order"
                   insight="Quickly restock your inventory"
                   actionLabel="Create PO"
                   variant="info"
                   onClick={() => {
-                     const event = new CustomEvent('open-quick-entry', { 
-                        detail: { tab: 'purchase' } 
+                     const event = new CustomEvent('open-quick-entry', {
+                        detail: { tab: 'purchase' }
                      });
                      window.dispatchEvent(event);
                   }}
@@ -209,93 +221,12 @@ export default function DashboardPage() {
             </div>
          </section>
 
-         {/* SECTION 2: REORDER INTELLIGENCE */}
-         <section className="bg-white rounded-[32px] border border-gray-100 shadow-xl shadow-black/5 overflow-hidden">
-            <div className="p-8 border-b border-gray-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-               <div>
-                  <h2 className="text-sm font-black tracking-[0.2em] uppercase italic text-gray-400 leading-none mb-1">Stock Optimization</h2>
-                  <h1 className="text-2xl font-black tracking-tighter uppercase italic text-primary leading-none">Reorder Intelligence</h1>
-               </div>
-               <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-xl border border-blue-100">
-                  <Activity className="w-4 h-4 text-primary animate-pulse" />
-                  <span className="text-[10px] font-black uppercase italic text-primary tracking-widest">Real-time Prediction Active</span>
-               </div>
-            </div>
-            <div className="overflow-x-auto">
-               <table className="w-full text-left">
-                  <thead>
-                     <tr className="bg-gray-50/50">
-                        <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Item Details</th>
-                        <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Current Stock</th>
-                        <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Daily Usage</th>
-                        <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Run Out Time</th>
-                        <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-right">Suggested Order</th>
-                        <th className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-right">Action</th>
-                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                     {stats.reorderItems.map((item: any, idx: number) => {
-                        const runOutDays = item.velocity > 0 ? Math.floor(item.qty / item.velocity) : 99;
-                        const suggestedOrder = Math.ceil(item.velocity * 7);
-                        const isCritical = runOutDays <= 3;
-                        const isWarning = runOutDays <= 7;
-
-                        return (
-                           <tr key={idx} className="group hover:bg-gray-50/30 transition-colors">
-                              <td className="px-8 py-6">
-                                 <p className="text-sm font-black text-primary italic uppercase leading-none mb-1">{item.name}</p>
-                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{item.category || 'General'}</p>
-                              </td>
-                              <td className="px-8 py-6">
-                                 <div className="flex items-center gap-2">
-                                    <span className="text-sm font-black text-primary tabular-nums">{item.qty}</span>
-                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{item.unit || 'units'}</span>
-                                 </div>
-                              </td>
-                              <td className="px-8 py-6">
-                                 <span className="text-sm font-black text-primary tabular-nums">{item.velocity || 0.4}</span>
-                              </td>
-                              <td className="px-8 py-6">
-                                 <div className={cn(
-                                    "inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-black uppercase italic tracking-widest",
-                                    isCritical ? "bg-red-100 text-red-600" : isWarning ? "bg-orange-100 text-orange-600" : "bg-green-100 text-green-600"
-                                 )}>
-                                    {isCritical ? <AlertTriangle className="w-3 h-3" /> : isWarning ? <Clock className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
-                                    {runOutDays <= 0 ? 'Out of Stock' : `${runOutDays} Days`}
-                                 </div>
-                              </td>
-                              <td className="px-8 py-6 text-right">
-                                 <span className="text-sm font-black text-primary tabular-nums bg-gray-50 px-3 py-1 rounded-lg border border-gray-100">{suggestedOrder || 10}</span>
-                              </td>
-                              <td className="px-8 py-6 text-right">
-                                 <button 
-                                    onClick={() => {
-                                       const event = new CustomEvent('open-quick-entry', { 
-                                          detail: { 
-                                             tab: 'purchase',
-                                             purchase: { itemId: item.id, qty: suggestedOrder, reference: 'REORDER-' + Date.now() }
-                                          } 
-                                       });
-                                       window.dispatchEvent(event);
-                                    }}
-                                    className="h-9 px-4 bg-primary text-white text-[10px] font-black uppercase tracking-widest italic rounded-xl shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
-                                 >
-                                    Auto Create PO
-                                 </button>
-                              </td>
-                           </tr>
-                        )
-                     })}
-                  </tbody>
-               </table>
-            </div>
-         </section>
 
          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            
+
             {/* LEFT COLUMN */}
             <div className="lg:col-span-8 space-y-8">
-               
+
                {/* SECTION 3: KPI STRIP */}
                <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <MetricCard
@@ -334,22 +265,22 @@ export default function DashboardPage() {
                      </div>
                      <div className="grid grid-cols-3 gap-6">
                         <div className="text-right">
-                           <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Total Sales</p>
-                           <p className="text-xs font-black text-primary italic leading-none mt-1">₹4.2L</p>
+                           <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Total Sales</p>
+                           <p className="text-sm font-black text-primary italic leading-none mt-1">₹4.2L</p>
                         </div>
                         <div className="text-right border-x border-gray-100 px-6">
-                           <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Avg Daily</p>
-                           <p className="text-xs font-black text-primary italic leading-none mt-1">₹14.5K</p>
+                           <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Avg Daily</p>
+                           <p className="text-sm font-black text-primary italic leading-none mt-1">₹14.5K</p>
                         </div>
                         <div className="text-right">
-                           <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Best Day</p>
-                           <p className="text-xs font-black text-green-600 italic leading-none mt-1">Fri (₹42K)</p>
+                           <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Best Day</p>
+                           <p className="text-sm font-black text-green-600 italic leading-none mt-1">Fri (₹42K)</p>
                         </div>
                      </div>
                   </div>
                   <div className="h-[300px] w-full">
                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart 
+                        <BarChart
                            data={[
                               { day: 'Mon', sales: 12000 },
                               { day: 'Tue', sales: 18000 },
@@ -362,18 +293,18 @@ export default function DashboardPage() {
                            margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                         >
                            <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#F1F5F9" />
-                           <XAxis 
-                              dataKey="day" 
-                              axisLine={false} 
-                              tickLine={false} 
+                           <XAxis
+                              dataKey="day"
+                              axisLine={false}
+                              tickLine={false}
                               tick={{ fill: '#94A3B8', fontSize: 10, fontWeight: 900 }}
                            />
-                           <YAxis 
-                              axisLine={false} 
-                              tickLine={false} 
+                           <YAxis
+                              axisLine={false}
+                              tickLine={false}
                               tick={{ fill: '#94A3B8', fontSize: 10, fontWeight: 900 }}
                            />
-                           <Tooltip 
+                           <Tooltip
                               cursor={{ fill: '#F8FAFC' }}
                               contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', fontStyle: 'italic', fontWeight: 900 }}
                            />
@@ -387,48 +318,98 @@ export default function DashboardPage() {
                   </div>
                </section>
 
-               {/* SECTION 5: TOP SELLING ITEMS */}
-               <section className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-8">
-                  <SectionHeader 
-                     title="Top Selling Items" 
-                     subtitle="Market Favorites" 
-                     icon={TrendingUp} 
-                     color="text-green-500"
-                  />
-                  <div className="space-y-4">
-                     {stats.topSelling.map((item: any, idx: number) => (
-                        <div key={idx} className="flex items-center justify-between p-4 bg-gray-50/50 rounded-2xl hover:bg-gray-100/50 transition-all group">
-                           <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-xl bg-white border border-gray-100 flex items-center justify-center font-black text-xs italic text-primary shadow-sm group-hover:scale-110 transition-transform">
-                                 #{idx + 1}
-                              </div>
-                              <div>
-                                 <p className="text-sm font-black text-primary italic uppercase leading-none mb-1">{item.name}</p>
-                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{item.qty} units sold this week</p>
-                              </div>
-                           </div>
-                           <div className="text-right">
-                              <p className="text-sm font-black text-primary italic tabular-nums leading-none mb-1">₹{(item.qty * 1200).toLocaleString('en-IN')}</p>
-                              <div className="flex items-center justify-end gap-1 text-[8px] font-black text-green-500 uppercase tracking-widest">
-                                 <ArrowUpRight className="w-2 h-2" /> 8.4%
-                              </div>
-                           </div>
+               {/* SIDE-BY-SIDE INTELLIGENCE */}
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* COMPACT REORDER INTELLIGENCE */}
+                  <section className="bg-white rounded-[32px] border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                     <div className="p-6 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
+                        <div>
+                           <h2 className="text-[10px] font-black tracking-[0.2em] uppercase italic text-gray-400 leading-none mb-1">Optimization</h2>
+                           <h1 className="text-sm font-black tracking-tighter uppercase italic text-primary leading-none">Reorder Intelligence</h1>
                         </div>
-                     ))}
-                  </div>
-               </section>
+                        <Activity className="w-4 h-4 text-blue-500 animate-pulse" />
+                     </div>
+                     <div className="overflow-x-auto flex-1">
+                        <table className="w-full text-left">
+                           <thead>
+                              <tr className="border-b border-gray-100 bg-gray-50/20">
+                                 <th className="px-6 py-3 text-[9px] font-black text-gray-400 uppercase tracking-widest italic">Item</th>
+                                 <th className="px-6 py-3 text-[9px] font-black text-gray-400 uppercase tracking-widest italic text-center">Stock</th>
+                                 <th className="px-6 py-3 text-[9px] font-black text-gray-400 uppercase tracking-widest italic text-right">Status</th>
+                              </tr>
+                           </thead>
+                           <tbody className="divide-y divide-gray-50">
+                              {stats.reorderItems.slice(0, 5).map((item: any, idx: number) => {
+                                 const runOutDays = item.velocity > 0 ? Math.floor(item.qty / item.velocity) : 99;
+                                 return (
+                                    <tr key={idx} className="group hover:bg-gray-50/50 transition-colors">
+                                       <td className="px-6 py-4">
+                                          <p className="text-[11px] font-black text-primary italic uppercase leading-tight line-clamp-1">{item.name}</p>
+                                          <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{item.category}</p>
+                                       </td>
+                                       <td className="px-6 py-4 text-center">
+                                          <span className="text-[11px] font-black tabular-nums">{item.qty}</span>
+                                       </td>
+                                       <td className="px-6 py-4 text-right">
+                                          <div className={cn(
+                                             "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-black uppercase italic tracking-widest",
+                                             runOutDays <= 3 ? "bg-red-100 text-red-600" : runOutDays <= 7 ? "bg-orange-100 text-orange-600" : "bg-green-100 text-green-600"
+                                          )}>
+                                             {runOutDays <= 0 ? 'Out' : `${runOutDays}D`}
+                                          </div>
+                                       </td>
+                                    </tr>
+                                 )
+                              })}
+                           </tbody>
+                        </table>
+                     </div>
+                  </section>
+
+                  {/* COMPACT TOP SELLING */}
+                  <section className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-6">
+                     <div className="flex justify-between items-center mb-6">
+                        <div>
+                           <h2 className="text-[10px] font-black tracking-[0.2em] uppercase italic text-gray-400 leading-none mb-1">Market Favorites</h2>
+                           <h1 className="text-sm font-black tracking-tighter uppercase italic text-primary leading-none">Top Selling Items</h1>
+                        </div>
+                        <TrendingUp className="w-4 h-4 text-green-500" />
+                     </div>
+                     <div className="space-y-3">
+                        {stats.topSelling.slice(0, 5).map((item: any, idx: number) => (
+                           <div key={idx} className="flex items-center justify-between p-3 bg-gray-50/50 rounded-2xl hover:bg-white hover:shadow-md transition-all group border border-transparent hover:border-gray-100">
+                              <div className="flex items-center gap-3">
+                                 <div className="w-8 h-8 rounded-lg bg-white border border-gray-100 flex items-center justify-center font-black text-[10px] italic text-primary shadow-sm group-hover:scale-110 transition-transform">
+                                    #{idx + 1}
+                                 </div>
+                                 <div>
+                                    <p className="text-[11px] font-black text-primary italic uppercase leading-none mb-1 line-clamp-1">{item.name}</p>
+                                    <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{item.qty} units</p>
+                                 </div>
+                              </div>
+                              <div className="text-right">
+                                 <p className="text-[11px] font-black text-primary italic tabular-nums leading-none mb-1">₹{(item.qty * 1200).toLocaleString('en-IN')}</p>
+                                 <div className="flex items-center justify-end gap-1 text-[7px] font-black text-green-500 uppercase tracking-widest">
+                                    <ArrowUpRight className="w-2 h-2" /> 8.4%
+                                 </div>
+                              </div>
+                           </div>
+                        ))}
+                     </div>
+                  </section>
+               </div>
 
             </div>
 
             {/* RIGHT COLUMN */}
             <div className="lg:col-span-4 space-y-8">
-               
+
                {/* SECTION 6: ALERTS & NOTIFICATIONS */}
                <section className="bg-white rounded-[32px] border border-gray-100 shadow-sm p-8 flex flex-col h-full max-h-[500px]">
-                  <SectionHeader 
-                     title="System Feed" 
-                     subtitle="Alerts & Logs" 
-                     icon={Bell} 
+                  <SectionHeader
+                     title="System Feed"
+                     subtitle="Alerts & Logs"
+                     icon={Bell}
                      color="text-orange-500"
                   />
                   <div className="space-y-4 overflow-y-auto custom-scrollbar flex-1 pr-2">
@@ -467,66 +448,18 @@ export default function DashboardPage() {
                   </div>
                </section>
 
-               {/* SECTION 7: QUICK ACTION GRID */}
-               <section className="bg-primary rounded-[32px] p-8 shadow-2xl shadow-primary/30">
-                  <SectionHeader 
-                     title="Quick Actions" 
-                     subtitle="Control Panel" 
-                     icon={Zap} 
-                     color="text-white bg-white/10 border-white/10"
-                  />
-                  <div className="grid grid-cols-2 gap-3">
-                     {[
-                        { label: 'New Sale', icon: ShoppingCart, href: '/pos', color: 'bg-green-500' },
-                        { label: 'New Purchase', icon: Boxes, href: '/purchase/new', color: 'bg-blue-500' },
-                        { label: 'Add Item', icon: Plus, href: '/master?v=items&action=new', color: 'bg-orange-500' },
-                        { label: 'Create PO', icon: FileText, href: '/purchase/new', color: 'bg-purple-500' },
-                        { label: 'Adjustment', icon: Activity, href: '/inventory?action=adjust', color: 'bg-yellow-500' },
-                        { label: 'Reports', icon: BarChart3, href: '/reports', color: 'bg-red-500' },
-                        { label: 'Approvals', icon: CheckCircle2, href: '/purchase?filter=pending', color: 'bg-cyan-500' },
-                        { label: 'Inventory', icon: Package, href: '/inventory', color: 'bg-indigo-500' },
-                     ].map((action, i) => (
-                        <button 
-                           key={i}
-                           onClick={() => router.push(action.href)}
-                           className="flex flex-col items-center justify-center p-4 bg-white/10 rounded-2xl border border-white/5 hover:bg-white/20 transition-all group active:scale-95"
-                        >
-                           <action.icon className="w-5 h-5 text-white mb-2 group-hover:scale-110 transition-transform" />
-                           <span className="text-[8px] font-black uppercase tracking-widest text-white/80">{action.label}</span>
-                        </button>
-                     ))}
-                  </div>
-               </section>
 
-               {/* INTELLIGENCE LAYER: INSIGHTS */}
-               <section className="bg-gray-900 rounded-[32px] p-8 text-white relative overflow-hidden group">
-                  <div className="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 transition-transform duration-700">
-                     <Layers className="w-32 h-32" />
-                  </div>
-                  <h4 className="text-[10px] font-black uppercase italic tracking-[0.3em] text-blue-400 mb-6">AI Intelligence Layer</h4>
-                  <div className="space-y-6 relative z-10">
-                     <div>
-                        <p className="text-xs font-black italic uppercase text-white/60 mb-2">Inventory Risk Insight</p>
-                        <p className="text-sm font-bold leading-relaxed">"Inventory risk increased by <span className="text-orange-400">18% today</span>. Top item <span className="text-blue-400">Dell OptiPlex</span> contributing 40% of revenue is running low."</p>
-                     </div>
-                     <div className="h-[1px] bg-white/10" />
-                     <div>
-                        <p className="text-xs font-black italic uppercase text-white/60 mb-2">Liquidity Insight</p>
-                        <p className="text-sm font-bold leading-relaxed">"Dead stock value is <span className="text-red-400">₹25,000</span>. Liquidation recommended to optimize working capital."</p>
-                     </div>
-                  </div>
-               </section>
 
             </div>
          </div>
 
          <QuickEntryModal isOpen={isQuickEntryOpen} onClose={() => setIsQuickEntryOpen(false)} />
 
-         <DashboardMetricModal 
-            type={activeMetric} 
-            onClose={() => setActiveMetric(null)} 
+         <DashboardMetricModal
+            type={activeMetric}
+            onClose={() => setActiveMetric(null)}
             data={{
-               sales: transactions.filter((t: Transaction) => t.type === 'OUTWARD').map((t: Transaction) => {
+               sales: transactions.filter((t: Transaction) => t.type === 'OUTWARD' || t.type === 'REVENUE').map((t: Transaction) => {
                   const match = inventory.find((i: InventoryItem) => i.id == t.item_id);
                   return {
                      date: t.date?.split("T")[0],
@@ -534,7 +467,7 @@ export default function DashboardPage() {
                      items: [{ id: t.item_id, qty: t.quantity, costPrice: match?.purchase_price || 0, price: t.price || match?.price || 0, category: match?.category, name: match?.name }]
                   }
                }),
-               purchases: transactions.filter((t: Transaction) => t.type === 'INWARD').map((t: Transaction) => {
+               purchases: transactions.filter((t: Transaction) => t.type === 'INWARD' || t.type === 'PO').map((t: Transaction) => {
                   return {
                      date: t.date?.split("T")[0],
                      total: t.amount || (t.quantity * (t.price || 0))

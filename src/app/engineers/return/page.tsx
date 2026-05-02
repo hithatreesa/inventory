@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo, useEffect, Suspense } from 'react'
+import React, { useState, useMemo, useEffect, Suspense, useRef } from 'react'
 import {
     CheckCircle2,
     Scan,
@@ -59,11 +59,13 @@ function EngineerReturnContent() {
         return getEngineerSerials(selectedEngineerId);
     }, [selectedEngineerId, getEngineerSerials])
 
+    const scanRef = useRef<HTMLInputElement>(null);
+
     // Focus Guard
     useEffect(() => {
         if (scanActive && !duplicateError) {
-            const timer = setTimeout(() => document.getElementById('return-scanner-input')?.focus(), 100);
-            return () => clearTimeout(timer);
+            console.log("[SCANNER] Return Scan Active - Initial Focus");
+            setTimeout(() => scanRef.current?.focus(), 100);
         }
     }, [scanActive, duplicateError])
 
@@ -201,13 +203,24 @@ function EngineerReturnContent() {
                             </div>
 
                             <input
-                                id="return-scanner-input"
-                                autoFocus
+                                ref={scanRef}
                                 className="absolute inset-0 opacity-0 cursor-default"
+                                onBlur={() => {
+                                    if (scanActive && !duplicateError) {
+                                        console.log("[SCANNER] Return Blur - Refocusing...");
+                                        setTimeout(() => scanRef.current?.focus(), 10);
+                                    }
+                                }}
+                                onChange={(e) => {
+                                    console.log("[SCANNER] Input Typing (Return):", e.target.value);
+                                }}
                                 onKeyDown={(e) => {
+                                    console.log("[SCANNER] Key Pressed (Return):", e.key);
                                     if (e.key === 'Enter') {
                                         handleScan((e.target as HTMLInputElement).value.trim());
                                         (e.target as HTMLInputElement).value = '';
+                                        // Force refocus after scan
+                                        setTimeout(() => scanRef.current?.focus(), 50);
                                     }
                                 }}
                             />

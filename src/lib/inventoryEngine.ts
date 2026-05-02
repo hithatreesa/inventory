@@ -21,14 +21,19 @@ export interface Transaction {
 
   item_id: string
   serial: string
+  barcode?: string
   qty?: number       // alias used by some callers
   quantity: number
+
+  source?: "PURCHASE" | "OUTSIDE_PURCHASE"
+  affects_stock?: boolean
 
   engineer_id?: string
   customer_id?: string
   customer_name?: string
   from_ticket?: string
   to_ticket?: string
+  ticket_id?: string   // Unified ticket field
 
   // GST fields (stored in transaction, not inventory)
   gst_rate?: number
@@ -40,6 +45,7 @@ export interface Transaction {
   purchase_price?: number
   sale_price?: number
   price?: number   // legacy compat
+  cost?: number    // User requested cost field
 
   // Reference
   reference_type?: "PO" | "SALE" | "TICKET" | "ADJUSTMENT"
@@ -143,7 +149,13 @@ transactions.push(
 
   // TICKET-202 Test Case
   { id: "TXN-T202-1", type: "OUTWARD", serial: "ITM002-1", item_id: "ITM002", timestamp: Date.now() - 172800000, quantity: 1, reference: "TICKET-202", purchase_price: 6500, engineer_id: "eng2" },
-  { id: "TXN-T202-2", type: "REVENUE", serial: "REV-202", item_id: "REVENUE", timestamp: Date.now() - 172800000, quantity: 1, reference: "TICKET-202", price: 12000 }
+  { id: "TXN-T202-2", type: "REVENUE", serial: "REV-202", item_id: "REVENUE", timestamp: Date.now() - 172800000, quantity: 1, reference: "TICKET-202", price: 12000 },
+
+  // Dummy Outside Purchases
+  { id: "OP-1", type: "CONSUMED", serial: "PVC-PIPE-10FT", item_id: "PVC Pipe 10ft", timestamp: Date.now() - 43200000, quantity: 2, ticket_id: "TICKET-101", cost: 450, source: "OUTSIDE_PURCHASE", affects_stock: false, date: "2024-04-26" },
+  { id: "OP-2", type: "CONSUMED", serial: "CAT6-CABLE-50M", item_id: "Cat6 Cable 50m", timestamp: Date.now() - 36000000, quantity: 1, ticket_id: "TICKET-101", cost: 1200, source: "OUTSIDE_PURCHASE", affects_stock: false, date: "2024-04-26" },
+  { id: "OP-3", type: "CONSUMED", serial: "ELECTRICAL-TAPE", item_id: "Electrical Tape", timestamp: Date.now() - 21600000, quantity: 5, ticket_id: "TICKET-102", cost: 250, source: "OUTSIDE_PURCHASE", affects_stock: false, date: "2024-04-27" },
+  { id: "OP-4", type: "CONSUMED", serial: "SCREWS-PACK-50", item_id: "Screws Pack 50", timestamp: Date.now() - 14400000, quantity: 1, ticket_id: "TICKET-102", cost: 150, source: "OUTSIDE_PURCHASE", affects_stock: false, date: "2024-04-27" }
 );
 
 // --------------------------------------------------
@@ -216,6 +228,9 @@ export function buildState(
   const serialMap: Record<string, SerialState> = {};
 
   for (const t of txns) {
+    // If transaction explicitly says it does not affect stock, skip state machine
+    if (t.affects_stock === false) continue;
+
     const current = serialMap[t.serial];
 
     if (t.type === "INWARD" || t.type === "ADJUSTMENT") {
@@ -284,7 +299,7 @@ export function buildState(
 }
 
 export function getTicketProfit(ticketNo: string, txns: Transaction[] = transactions): TicketSummary {
-  const ticketTxns = txns.filter(t => t.reference === ticketNo);
+  const ticketTxns = txns.filter(t => t.reference === ticketNo || t.ticket_id === ticketNo || t.reference_id === ticketNo);
   
   let revenue = 0;
   let cost = 0;
@@ -293,9 +308,10 @@ export function getTicketProfit(ticketNo: string, txns: Transaction[] = transact
   ticketTxns.forEach(t => {
     if (t.type === 'REVENUE') {
       revenue += (t.amount || (t.quantity * (t.price || 0)));
-    } else if (t.type === 'OUTWARD') {
-      // Rule 2: Always use cost_snapshot (t.price or t.amount)
-      cost += (t.amount || (t.quantity * (t.price || 0)));
+    } else if (t.type === 'OUTWARD' || t.type === 'CONSUMED') {
+      // Rule 2: Always use cost_snapshot (t.price or t.amount or t.cost)
+      const lineCost = t.cost || t.purchase_price || t.price || t.amount || 0;
+      cost += (lineCost * (t.quantity || 1));
     } else if (t.type === 'EXPENSE') {
       expense += (t.amount || (t.quantity * (t.price || 0)));
     }
@@ -369,18 +385,20 @@ export function commitTransaction(txn: any) {
 export function executeInward(params: { 
   productId: string, 
   serial: string, 
+  barcode?: string,
   qty: number, 
   gst: number, 
   price: number, 
   source: string,
   metadata?: Partial<Transaction> 
 }) {
-  const { productId, serial, qty, gst, price, source, metadata } = params;
+  const { productId, serial, barcode, qty, gst, price, source, metadata } = params;
 
   return commitTransaction({
     id: `TXN-IN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
     type: "INWARD",
     serial,
+    barcode,
     item_id: productId,
     quantity: qty || 1,
     gst_rate: gst,

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import {
     CheckCircle2,
     X,
@@ -48,12 +48,13 @@ export default function StockAuditPage() {
     const [viewFilter, setViewFilter] = useState<'ALL' | 'MISSING' | 'EXTRA' | 'MATCHED'>('ALL')
 
     const report = useMemo(() => getAuditReport(scannedSerials), [scannedSerials, getAuditReport])
+    const scanRef = useRef<HTMLInputElement>(null);
 
     // Focus Guard
     useEffect(() => {
         if (auditActive) {
-            const timer = setTimeout(() => document.getElementById('audit-scanner-input')?.focus(), 100);
-            return () => clearTimeout(timer);
+            console.log("[SCANNER] Audit Active - Initial Focus");
+            setTimeout(() => scanRef.current?.focus(), 100);
         }
     }, [auditActive])
 
@@ -74,10 +75,12 @@ export default function StockAuditPage() {
     }, [scannedSerials])
 
     const handleScan = (barcode: string) => {
+        console.log("[SCANNER] Audit Scan:", barcode);
         if (!barcode) return;
 
         // 1. Validation: Duplicate physical scan?
         if (scannedSerials.includes(barcode)) {
+            console.log("[SCANNER] Duplicate Local Scan:", barcode);
             playError();
             setDuplicateError(`DUPLICATE_PHYSICAL_SCAN: ${barcode} already recorded in this session.`);
             return;
@@ -85,9 +88,8 @@ export default function StockAuditPage() {
 
         // 2. Validation: Unknown serial found? (Optional strict rule)
         const item = processBarcode(barcode);
-        // We'll allow unknown serials but report them as EXTRA in the engine's buildAuditReport logic.
-        // But the prompt says HARD_FAIL: UNKNOWN_SERIAL_FOUND.
         if (!item) {
+             console.log("[SCANNER] Unknown Item Blocked:", barcode);
              playError();
              setDuplicateError(`UNKNOWN_SERIAL_FOUND: Barcode ${barcode} does not exist in the system ledger.`);
              return;
@@ -95,6 +97,8 @@ export default function StockAuditPage() {
 
         playSuccess();
         setScannedSerials(prev => [...prev, barcode]);
+        console.log("[SCANNER] Scan Success. Refocusing...");
+        setTimeout(() => scanRef.current?.focus(), 50);
     }
 
     const removeSerial = (serial: string) => {
@@ -195,11 +199,20 @@ export default function StockAuditPage() {
                                 </div>
                             </div>
                             <input
-                                id="audit-scanner-input"
+                                ref={scanRef}
                                 className="absolute inset-0 opacity-0 cursor-default"
                                 tabIndex={-1}
-                                onBlur={() => auditActive && setTimeout(() => document.getElementById('audit-scanner-input')?.focus(), 10)}
+                                onBlur={() => {
+                                    if (auditActive) {
+                                        console.log("[SCANNER] Blur detected, refocusing...");
+                                        setTimeout(() => scanRef.current?.focus(), 10);
+                                    }
+                                }}
+                                onChange={(e) => {
+                                    console.log("[SCANNER] Input Typing (Audit):", e.target.value);
+                                }}
                                 onKeyDown={(e) => {
+                                    console.log("[SCANNER] Key Pressed (Audit):", e.key);
                                     if (e.key === 'Enter') {
                                         handleScan((e.target as HTMLInputElement).value.trim());
                                         (e.target as HTMLInputElement).value = '';

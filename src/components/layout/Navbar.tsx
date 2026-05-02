@@ -5,8 +5,17 @@ import {
   Bell,
   Menu,
   ChevronRight,
-  Zap
+  Zap,
+  ShoppingCart,
+  Boxes,
+  Plus,
+  FileText,
+  Activity,
+  BarChart3,
+  CheckCircle2,
+  Package
 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { cn } from '@/lib/utils'
@@ -16,6 +25,7 @@ import { toast } from 'sonner'
 import { Breadcrumb } from '@/components/shared/Breadcrumb'
 
 export function Navbar() {
+  const router = useRouter()
   const { toggleSidebar, isCollapsed } = useLayout()
   const [time, setTime] = useState<Date | null>(null)
 
@@ -109,16 +119,51 @@ export function Navbar() {
 
         <div className="hidden md:block h-8 w-[1px] bg-gray-100" />
 
-        <Button
-          className="hidden sm:flex h-11 px-6 rounded-2xl bg-primary text-white font-black text-[10px] tracking-[0.2em] uppercase italic shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all gap-2"
-          onClick={() => {
-            // Trigger quick action modal - this would typically be handled via a global state or event
-            const event = new CustomEvent('open-quick-entry');
-            window.dispatchEvent(event);
-          }}
-        >
-          <Zap className="w-4 h-4 fill-white" /> Quick Actions
-        </Button>
+        {/* Floating Quick Action Panel */}
+        <div className="relative group">
+          <Button
+            className="h-11 w-11 sm:w-auto sm:px-6 rounded-2xl bg-primary text-white font-black text-[10px] tracking-[0.2em] uppercase italic shadow-xl shadow-primary/20 hover:scale-105 active:scale-95 transition-all gap-2"
+          >
+            <Zap className="w-4 h-4 fill-white" /> 
+            <span className="hidden sm:inline">Control Panel</span>
+          </Button>
+
+          {/* High-Density Dropdown */}
+          <div className="absolute right-0 top-full pt-4 opacity-0 translate-y-2 pointer-events-none group-hover:opacity-100 group-hover:translate-y-0 group-hover:pointer-events-auto transition-all duration-300 z-50">
+            <div className="w-[320px] bg-white rounded-[32px] border border-gray-100 shadow-2xl overflow-hidden p-6">
+              <div className="flex items-center gap-2 mb-6 px-2">
+                <Zap className="w-3 h-3 text-primary" />
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Rapid Execution Panel</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: 'New Sale', icon: ShoppingCart, href: '/pos', color: 'bg-green-500' },
+                  { label: 'New Purchase', icon: Boxes, href: '/purchase/entry', color: 'bg-blue-500' },
+                  { label: 'Add Item', icon: Plus, href: '/master?v=items&action=new', color: 'bg-orange-500' },
+                  { label: 'Create PO', icon: FileText, href: '/purchase/entry', color: 'bg-purple-500' },
+                  { label: 'Adjustment', icon: Activity, href: '/inventory?action=adjust', color: 'bg-yellow-500' },
+                  { label: 'Reports', icon: BarChart3, href: '/reports', color: 'bg-red-500' },
+                  { label: 'Approvals', icon: CheckCircle2, href: '/purchase?filter=pending', color: 'bg-cyan-500' },
+                  { label: 'Inventory', icon: Package, href: '/inventory', color: 'bg-indigo-500' },
+                ].map((action, i) => (
+                  <button
+                    key={i}
+                    onClick={() => router.push(action.href)}
+                    className="flex flex-col items-center justify-center p-4 bg-gray-50/50 rounded-2xl border border-transparent hover:border-primary/20 hover:bg-white hover:shadow-lg transition-all group active:scale-95"
+                  >
+                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center mb-2 text-white shadow-sm transition-transform group-hover:scale-110", action.color)}>
+                      <action.icon className="w-4 h-4" />
+                    </div>
+                    <span className="text-[9px] font-black uppercase tracking-widest text-primary italic leading-none">{action.label}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-6 pt-4 border-t border-gray-50 text-center">
+                <p className="text-[8px] font-black text-gray-300 uppercase tracking-[0.3em] italic">Cobalt Slate ERP Intelligence</p>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <Button
           variant="secondary"

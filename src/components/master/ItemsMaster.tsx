@@ -39,8 +39,8 @@ export function ItemsMaster() {
     }
   }
 
-  const filteredItems = inventory.filter(i => 
-    i.name.toLowerCase().includes(search.toLowerCase()) || 
+  const filteredItems = inventory.filter(i =>
+    i.name.toLowerCase().includes(search.toLowerCase()) ||
     i.sku.toLowerCase().includes(search.toLowerCase()) ||
     i.barcode.toLowerCase().includes(search.toLowerCase())
   )
@@ -55,14 +55,14 @@ export function ItemsMaster() {
         <div className="flex gap-3 w-full lg:w-auto">
           <div className="relative flex-1 lg:w-64">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
-            <Input 
+            <Input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search items, SKU, barcodes..." 
+              placeholder="Search items, SKU, barcodes..."
               className="h-12 pl-12 bg-gray-50/50 border-gray-100 rounded-2xl italic font-bold"
             />
           </div>
-          <Button 
+          <Button
             onClick={() => { setIsAdding(true); setEditingId(null); }}
             className="rounded-2xl italic font-black uppercase text-[10px] tracking-widest px-8 h-12 bg-[#003366] text-white shadow-xl shadow-blue-900/20"
           >
@@ -88,25 +88,25 @@ export function ItemsMaster() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div className="md:col-span-2 space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Product Global Name</label>
-              <Input 
+              <Input
                 value={formData.name}
                 onChange={e => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g. Nvidia RTX 4090 TI" 
+                placeholder="e.g. Nvidia RTX 4090 TI"
                 className="h-14 rounded-2xl bg-gray-50/50 border-gray-100 font-bold text-base"
               />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">HSN / SAC Code</label>
-              <Input 
+              <Input
                 value={formData.hsn_code}
                 onChange={e => setFormData({ ...formData, hsn_code: e.target.value })}
-                placeholder="8471" 
+                placeholder="8471"
                 className="h-14 rounded-2xl bg-gray-50/50 border-gray-100 font-black tracking-widest"
               />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">GST Slab (%)</label>
-              <select 
+              <select
                 value={formData.gst_rate}
                 onChange={e => setFormData({ ...formData, gst_rate: parseInt(e.target.value) })}
                 className="w-full h-14 bg-gray-50/50 border border-gray-100 rounded-2xl px-4 font-black italic text-primary outline-none focus:ring-4 focus:ring-primary/5"
@@ -117,76 +117,76 @@ export function ItemsMaster() {
 
             <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">SKU (Unique)</label>
-              <Input 
+              <Input
                 value={formData.sku}
                 onChange={e => setFormData({ ...formData, sku: e.target.value })}
-                placeholder="GPU-NV-4090" 
+                placeholder="GPU-NV-4090"
                 className="h-14 rounded-2xl bg-gray-50/50 border-gray-100 font-bold uppercase"
               />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Barcode / EAN</label>
-              <Input 
+              <Input
                 value={formData.barcode}
                 onChange={e => setFormData({ ...formData, barcode: e.target.value })}
-                placeholder="789012345678" 
+                placeholder="789012345678"
                 className="h-14 rounded-2xl bg-gray-50/50 border-gray-100 font-bold"
               />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Brand Identity</label>
-              <Input 
+              <Input
                 value={formData.brand}
                 onChange={e => setFormData({ ...formData, brand: e.target.value })}
-                placeholder="Nvidia" 
+                placeholder="Nvidia"
                 className="h-14 rounded-2xl bg-gray-50/50 border-gray-100 font-bold italic"
               />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Model / Version</label>
-              <Input 
+              <Input
                 value={formData.model}
                 onChange={e => setFormData({ ...formData, model: e.target.value })}
-                placeholder="Founders Edition" 
+                placeholder="Founders Edition"
                 className="h-14 rounded-2xl bg-gray-50/50 border-gray-100 font-bold"
               />
             </div>
 
             <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Category</label>
-              <Input 
+              <Input
                 value={formData.category}
                 onChange={e => setFormData({ ...formData, category: e.target.value })}
-                placeholder="Hardware" 
+                placeholder="Hardware"
                 className="h-14 rounded-2xl bg-gray-50/50 border-gray-100 font-bold"
               />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Measurement Unit</label>
-              <Input 
+              <Input
                 value={formData.unit}
                 onChange={e => setFormData({ ...formData, unit: e.target.value })}
-                placeholder="Nos / Box" 
+                placeholder="Nos / Box"
                 className="h-14 rounded-2xl bg-gray-50/50 border-gray-100 font-bold italic"
               />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Purchase Price (Est)</label>
-              <Input 
+              <Input
                 type="number"
                 value={formData.purchase_price}
                 onChange={e => setFormData({ ...formData, purchase_price: parseFloat(e.target.value) || 0 })}
-                placeholder="0.00" 
+                placeholder="0.00"
                 className="h-14 rounded-2xl bg-gray-50/50 border-gray-100 font-black tabular-nums"
               />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Sales Price (Retail)</label>
-              <Input 
+              <Input
                 type="number"
                 value={formData.sale_price}
                 onChange={e => setFormData({ ...formData, sale_price: parseFloat(e.target.value) || 0 })}
-                placeholder="0.00" 
+                placeholder="0.00"
                 className="h-14 rounded-2xl bg-gray-50/50 border-gray-100 font-black text-primary tabular-nums"
               />
             </div>
@@ -197,28 +197,28 @@ export function ItemsMaster() {
                 <p className="text-[9px] font-bold text-gray-400 leading-none">Mandates barcode scan for every unit movement.</p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
-                <input 
-                  type="checkbox" 
+                <input
+                  type="checkbox"
                   checked={formData.is_serialized}
                   onChange={e => setFormData({ ...formData, is_serialized: e.target.checked })}
-                  className="sr-only peer" 
+                  className="sr-only peer"
                 />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:after:w-5 after:transition-all peer-checked:bg-primary"></div>
               </label>
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Stock Threshold</label>
-              <Input 
+              <Input
                 type="number"
                 value={formData.min_stock}
                 onChange={e => setFormData({ ...formData, min_stock: parseInt(e.target.value) || 0 })}
-                placeholder="5" 
+                placeholder="5"
                 className="h-14 rounded-2xl bg-gray-50/50 border-gray-100 font-black tabular-nums"
               />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Status</label>
-              <select 
+              <select
                 value={formData.status}
                 onChange={e => setFormData({ ...formData, status: e.target.value as 'ACTIVE' | 'INACTIVE' })}
                 className="w-full h-14 bg-gray-50/50 border border-gray-100 rounded-2xl px-4 font-black italic outline-none"
@@ -261,13 +261,13 @@ export function ItemsMaster() {
                       <div>
                         <p className="text-base font-black text-[#003366] italic uppercase leading-none">{item.name}</p>
                         <div className="flex items-center gap-3 mt-2">
-                           <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase">
-                              <Hash className="w-3 h-3" /> {item.sku}
-                           </div>
-                           <div className="w-[1px] h-3 bg-gray-100" />
-                           <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase">
-                              <BarcodeIcon className="w-3 h-3" /> {item.barcode}
-                           </div>
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase">
+                            <Hash className="w-3 h-3" /> {item.sku}
+                          </div>
+                          <div className="w-[1px] h-3 bg-gray-100" />
+                          <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase">
+                            <BarcodeIcon className="w-3 h-3" /> {item.barcode}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -297,13 +297,13 @@ export function ItemsMaster() {
                   </td>
                   <td className="px-10 py-8 text-right">
                     <div className="flex justify-end gap-2">
-                      <button 
+                      <button
                         onClick={() => { setEditingId(item.id); setFormData(item); setIsAdding(true); }}
                         className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-300 hover:text-primary hover:bg-primary/5 transition-all"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
-                      <button 
+                      <button
                         onClick={() => {
                           if (confirm(`Purge blueprint for "${item.name}"? This action is IRREVERSIBLE.`)) {
                             deleteItems([item.id])

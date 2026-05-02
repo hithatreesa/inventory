@@ -25,6 +25,8 @@ export function QuickEntryModal({ isOpen, onClose }: { isOpen: boolean, onClose:
     gst_rate: '18',
     unit: 'Nos',
     model: '',
+    barcode: '',
+    hsn_code: '8471',
     is_serialized: 'NO'
   })
   const [purchaseForm, setPurchaseForm] = useState({ itemId: '', qty: '', reference: '' })
@@ -55,13 +57,19 @@ export function QuickEntryModal({ isOpen, onClose }: { isOpen: boolean, onClose:
           name: itemForm.name,
           category: itemForm.category,
           sku: `SKU-${Date.now().toString().slice(-6)}`,
+          barcode: itemForm.barcode || `BC-${Date.now()}`,
+          hsn_code: itemForm.hsn_code || '8471',
           unit: itemForm.unit,
+          purchase_price: 0,
+          sale_price: 0,
           price: 0,
           brand: 'N/A',
           location: 'Main Store',
           threshold: 5,
+          gst_id: 'gst-1', // Default or lookup
           gst_rate: Number(itemForm.gst_rate),
           model: itemForm.model,
+          status: 'ACTIVE',
           is_serialized: itemForm.is_serialized === 'YES'
         })
         // Rule 1: createItem() must NOT affect inventory. 
@@ -203,6 +211,22 @@ export function QuickEntryModal({ isOpen, onClose }: { isOpen: boolean, onClose:
                   placeholder="e.g. Nexus 9000"
                   value={itemForm.model}
                   onChange={(e) => setItemForm({ ...itemForm, model: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-black text-text-secondary uppercase tracking-widest pl-1">Barcode</label>
+                <Input
+                  placeholder="Scan or enter barcode"
+                  value={itemForm.barcode}
+                  onChange={(e) => setItemForm({ ...itemForm, barcode: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-black text-text-secondary uppercase tracking-widest pl-1">HSN CODE</label>
+                <Input
+                  placeholder="8471"
+                  value={itemForm.hsn_code}
+                  onChange={(e) => setItemForm({ ...itemForm, hsn_code: e.target.value })}
                 />
               </div>
               <div className="space-y-1.5">

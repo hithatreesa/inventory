@@ -170,12 +170,6 @@ export default function PurchaseDashboard() {
           >
             <Plus className="w-4 h-4 sm:w-5 sm:h-5 mr-1" /> NEW ENTRY
           </Button>
-          <Button
-            onClick={() => router.push('/purchase/new')}
-            className="flex-shrink-0 rounded-xl sm:rounded-2xl shadow-[0_10px_30px_rgba(0,51,102,0.3)] font-black text-[8px] sm:text-[10px] tracking-widest h-10 sm:h-12 px-6 sm:px-8 italic bg-[#003366] text-white snap-end"
-          >
-            <Plus className="w-4 h-4 sm:w-5 sm:h-5 mr-1" /> NEW PO
-          </Button>
         </div>
       </div>
 

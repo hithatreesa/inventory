@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo, useEffect, useCallback, Suspense } from 'react'
+import React, { useState, useMemo, useEffect, useCallback, Suspense, useRef } from 'react'
 import {
     Plus,
     Trash2,
@@ -102,11 +102,13 @@ function EngineerIssueContent() {
         } catch (e) {}
     }, [selectedEngineerId, lines, issueToEngineer, router]);
 
+    const scanRef = useRef<HTMLInputElement>(null);
+
     // Focus Guard
     useEffect(() => {
         if (scanSession) {
-            const timer = setTimeout(() => document.getElementById('scanner-capture-input')?.focus(), 100);
-            return () => clearTimeout(timer);
+            console.log("[SCANNER] Issue Scan Session Active - Initial Focus");
+            setTimeout(() => scanRef.current?.focus(), 100);
         }
     }, [scanSession])
 
@@ -436,14 +438,25 @@ function EngineerIssueContent() {
                                         <p className="text-white/30 text-[9px] sm:text-[10px] font-black uppercase tracking-[0.3em]">Scanner Interface Active</p>
                                     </div>
                                     <input
-                                        id="scanner-capture-input"
-                                        autoFocus
+                                        ref={scanRef}
                                         className="absolute inset-0 opacity-0 cursor-default"
+                                        onBlur={() => {
+                                            if (scanSession) {
+                                                console.log("[SCANNER] Modal Blur - Refocusing...");
+                                                setTimeout(() => scanRef.current?.focus(), 10);
+                                            }
+                                        }}
+                                        onChange={(e) => {
+                                            console.log("[SCANNER] Input Typing (Issue):", e.target.value);
+                                        }}
                                         onKeyDown={(e) => {
+                                            console.log("[SCANNER] Key Pressed (Issue):", e.key);
                                             if (e.key === 'Enter') {
                                                 const val = (e.target as HTMLInputElement).value.trim();
                                                 if (val) handleSessionScan(val);
                                                 (e.target as HTMLInputElement).value = '';
+                                                // Force refocus after scan
+                                                setTimeout(() => scanRef.current?.focus(), 50);
                                             }
                                         }}
                                     />

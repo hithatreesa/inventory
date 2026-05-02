@@ -1,7 +1,7 @@
 "use client"
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useData } from '@/lib/context/DataContext';
 import { LedgerLine, LedgerHeader, BillSundry, TaxSummaryRow } from '@/modules/ledger/types';
 import { calculateLedgerTotals, calculateLineAmount } from '@/modules/ledger/ledger-engine';
@@ -10,19 +10,28 @@ import { useGlobalKeyboardShortcuts } from '@/modules/ledger/keyboard-handler';
 import { toast } from 'sonner';
 import { EntityLookup } from '@/components/shared/EntityLookup';
 import { cn } from '@/lib/utils';
-import { X, QrCode, Calculator, Save, LogOut, AlertCircle } from 'lucide-react';
+import { X, QrCode, Calculator, Save, LogOut, AlertCircle, Trash2 } from 'lucide-react';
+import { buildState } from '@/lib/inventoryEngine';
 import { Button } from '@/components/ui/Button';
 
 export default function PurchaseLedgerEntry() {
   const router = useRouter();
-  const { inventory, contacts, processInward, addItem, gstConfigs } = useData();
+  const searchParams = useSearchParams();
+  const { inventory, contacts, processInward, processPO, addItem, gstConfigs, transactions } = useData();
   const [isTaxApplied, setIsTaxApplied] = useState(true);
-  const [pendingTempItems, setPendingTempItems] = useState<any[]>([]);
+  const [voucherType, setVoucherType] = useState<'PURCHASE_VOUCHER' | 'PURCHASE_ORDER'>('PURCHASE_VOUCHER');
+
+  useEffect(() => {
+    const type = searchParams.get('type');
+    if (type === 'po') {
+      setVoucherType('PURCHASE_ORDER');
+    }
+  }, [searchParams]);
 
   const [header, setHeader] = useState<LedgerHeader>({
     series: 'Main',
     date: new Date().toISOString().split('T')[0],
-    voucherNumber: `PUR/26-27/${Math.floor(1000 + Math.random() * 9000)}`,
+    voucherNumber: 'PUR/26-27/0000',
     type: 'Purchase',
     gstType: 'LGST 18% (Registered)',
     partyAccount: '',
@@ -31,6 +40,13 @@ export default function PurchaseLedgerEntry() {
     itcEligibility: 'Input Goods/Services',
     supplierReference: ''
   });
+
+  useEffect(() => {
+    setHeader(prev => ({
+      ...prev,
+      voucherNumber: `PUR/26-27/${Math.floor(1000 + Math.random() * 9000)}`
+    }));
+  }, []);
 
   const [lines, setLines] = useState<LedgerLine[]>([
     { id: '1', sno: 1, description: '', qty: 0, unit: '', price: 0, amount: 0, gstRate: 18, isLocked: false, serials: [], ticketId: '' }
@@ -43,6 +59,26 @@ export default function PurchaseLedgerEntry() {
 
   const [activeRowIndex, setActiveRowIndex] = useState<number | null>(null);
   const [showSerialModal, setShowSerialModal] = useState(false);
+  const [scanMode, setScanMode] = useState<'barcode' | 'serial'>('barcode');
+  const [currentUnitIndex, setCurrentUnitIndex] = useState(0);
+
+  const scanRef = useRef<HTMLInputElement>(null);
+  const modalScanRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    console.log("[SCANNER] Page Mount - Initial Focus");
+    scanRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (showSerialModal) {
+      console.log("[SCANNER] Modal Open - Redirecting Focus");
+      setTimeout(() => modalScanRef.current?.focus(), 100);
+    } else {
+      console.log("[SCANNER] Modal Closed - Returning Focus");
+      setTimeout(() => scanRef.current?.focus(), 100);
+    }
+  }, [showSerialModal]);
 
   const {
     totalQty,
@@ -56,7 +92,7 @@ export default function PurchaseLedgerEntry() {
     const minRows = 12;
     if (currentLines.length < minRows) {
       const pad = Array.from({ length: minRows - currentLines.length }).map((_, i) => ({
-        id: `empty-${Date.now()}-${i}`,
+        id: `empty-${i}`,
         sno: currentLines.length + i + 1,
         description: '',
         qty: 0,
@@ -83,25 +119,26 @@ export default function PurchaseLedgerEntry() {
 
       if (field === 'qty' || field === 'price' || field === 'gstRate') {
         line.amount = calculateLineAmount(Number(line.qty) || 0, Number(line.price) || 0);
+        
+        // Auto-modal trigger moved to onKeyDown for better UX (prevents pop-up while typing)
       } else if (field === 'description' && typeof value === 'object') {
-        // SSOT Entity Selection
         const item = value;
         line.productId = item.id;
         line.description = item.name;
         line.price = item.purchase_price || 0;
         line.unit = (item.unit || 'NOS.').toUpperCase();
         line.gstRate = item.gst_rate || 0;
-        line.isLocked = true; // Mark as master-derived
+        line.isLocked = true;
         line.amount = calculateLineAmount(Number(line.qty) || 0, Number(line.price) || 0);
         
-        // Auto-open serial modal if item is serialized and qty > 0
-        if (item.is_serialized && line.qty > 0) {
+        if (item.is_serialized && Number(line.qty) > 0) {
           setActiveRowIndex(index);
           setShowSerialModal(true);
+          setScanMode('barcode');
+          setCurrentUnitIndex(0);
         }
       } else if (field === 'description' && typeof value === 'string') {
         line.description = value;
-        // If user manually types, clear the derived ID to allow free-entry
         if (line.productId) {
           line.productId = undefined;
           line.isLocked = false;
@@ -114,7 +151,6 @@ export default function PurchaseLedgerEntry() {
       return newLines;
     });
   };
-
 
   const addRow = useCallback(() => {
     setLines(prev => {
@@ -156,16 +192,20 @@ export default function PurchaseLedgerEntry() {
           qty: Number(l.qty),
           price: Number(l.price),
           gstRate: l.gstRate || 0,
-          isSerialized: masterItem?.is_serialized || (l.serials && l.serials.length > 0),
-          serials: (l.serials || []).map((s: any) => typeof s === 'string' ? s : s.serial),
+          isSerialized: masterItem?.is_serialized || (l.tracking && l.tracking.length > 0),
+          tracking: l.tracking || [],
+          serials: (l.tracking || []).map((t: any) => ({ serial: t.serial, barcode: t.barcode, timestamp: Date.now() })),
           isLocked: false,
           ticket_id: l.ticketId
         };
       });
 
-      await toast.promise(processInward(payload, mappedLines), {
-        loading: 'COMMITTING_VOUCHER_TO_LEDGER...',
-        success: 'LEDGER_ENTRY_RECORDED_SUCCESSFULLY',
+      const action = voucherType === 'PURCHASE_ORDER' ? processPO : processInward;
+      const label = voucherType === 'PURCHASE_ORDER' ? 'PO_RECORDED' : 'INWARD_COMMITTED';
+
+      await toast.promise(action(payload, mappedLines), {
+        loading: voucherType === 'PURCHASE_ORDER' ? 'DRAFTING_PURCHASE_ORDER...' : 'COMMITTING_VOUCHER_TO_LEDGER...',
+        success: label,
         error: (err) => `HARD_FAIL: ${err.message || 'SAVE_FAILED'}`
       });
 
@@ -173,7 +213,7 @@ export default function PurchaseLedgerEntry() {
     } catch (e: any) {
       console.error(e);
     }
-  }, [header, processInward, inventory, router]);
+  }, [header, processInward, inventory, router, voucherType, processPO]);
 
   const handleSave = useCallback(async () => {
     const validLines = lines.filter(l => l.description.trim() !== '' && l.qty > 0);
@@ -186,36 +226,33 @@ export default function PurchaseLedgerEntry() {
       return;
     }
 
-    // Strict Validation
     const sessionSerials = new Set<string>();
     for (const l of validLines) {
       if (l.qty <= 0) return toast.error(`Invalid quantity for line ${l.sno}`);
       if (l.price < 0) return toast.error(`Invalid price for line ${l.sno}`);
-      if (!l.ticketId) return toast.error(`Ticket ID missing for line ${l.sno} (Ledger Integrity Rule)`);
+      if (!l.ticketId) return toast.error(`Ticket ID missing for line ${l.sno}`);
       
       const masterItem = inventory.find(i => i.id === l.productId);
-      const isSerialized = masterItem?.is_serialized || (l.serials && l.serials.length > 0);
+      const isSerialized = masterItem?.is_serialized || (l.tracking && l.tracking.length > 0);
 
-      if (isSerialized) {
-        if (!l.serials || l.serials.length !== l.qty) {
-          return toast.error(`Serial mismatch for ${l.description}. Need ${l.qty}, got ${l.serials?.length || 0}`);
+      if (isSerialized && voucherType === 'PURCHASE_VOUCHER') {
+        if (!l.tracking || l.tracking.length !== Number(l.qty)) {
+          return toast.error(`Tracking mismatch for ${l.description}. Need ${l.qty} units.`);
         }
-        for (const s of l.serials) {
-          if (sessionSerials.has(s as string)) return toast.error(`Duplicate serial in session: ${s}`);
-          sessionSerials.add(s as string);
+        for (const t of l.tracking) {
+          if (!t.barcode || !t.serial) return toast.error(`Incomplete tracking for ${l.description}`);
+          if (sessionSerials.has(t.serial)) return toast.error(`Duplicate serial: ${t.serial}`);
+          sessionSerials.add(t.serial);
         }
       }
     }
 
     await executeCommit(validLines);
-  }, [lines, header, inventory, executeCommit]);
-
-
-
+  }, [lines, header, inventory, executeCommit, voucherType]);
 
   const toggleTax = useCallback(() => {
-    setIsTaxApplied((prev: boolean) => !prev);
-    toast.info(isTaxApplied ? "Tax Applied Removed" : "Tax Applied Successfully");
+    setIsTaxApplied(prev => !prev);
+    toast.info(isTaxApplied ? "Tax Removed" : "Tax Applied");
   }, [isTaxApplied]);
 
   const handleQuit = useCallback(() => {
@@ -230,14 +267,19 @@ export default function PurchaseLedgerEntry() {
 
   return (
     <div className="min-h-screen bg-[var(--color-ledger-purchase)] text-black font-sans uppercase flex flex-col h-screen overflow-hidden">
-
       {/* TOP HEADER */}
       <div className="flex justify-between items-end border-b-2 border-[var(--color-ledger-border)] p-4 shrink-0 bg-white/50">
         <div className="flex items-center gap-6">
           <h1 className="text-3xl font-black tracking-tighter italic">THE DIGITAL LEDGER</h1>
           <div className="flex items-center">
-            <span className="text-xl font-black bg-white px-4 py-1 border border-gray-300 shadow-sm italic uppercase tracking-tighter">PURCHASE VOUCHER</span>
-            <span className="text-[10px] bg-blue-100 text-blue-800 font-black px-3 py-1.5 border border-blue-200 ml-2 tracking-widest italic">TRANSACTION: GST_INWARD</span>
+            <select 
+              value={voucherType}
+              onChange={(e) => setVoucherType(e.target.value as any)}
+              className="text-xl font-black bg-white px-4 py-1 border border-gray-300 italic uppercase tracking-tighter outline-none cursor-pointer"
+            >
+              <option value="PURCHASE_VOUCHER">Purchase Voucher</option>
+              <option value="PURCHASE_ORDER">Purchase Order (PO)</option>
+            </select>
           </div>
         </div>
         <div className="text-right">
@@ -246,461 +288,329 @@ export default function PurchaseLedgerEntry() {
         </div>
       </div>
 
-      {/* HEADER FORM */}
-      <div className="shrink-0 bg-white/30 border-b-2 border-[var(--color-ledger-border)]">
-        <div className="grid grid-cols-1 md:grid-cols-12 border-b border-[var(--color-ledger-border)]">
-          <div className="col-span-12 md:col-span-2 border-r border-[var(--color-ledger-border)] p-2">
-            <label className="block text-[9px] font-black text-gray-500 italic tracking-widest">SERIES</label>
-            <input
-              value={header.series}
-              onChange={e => setHeader({ ...header, series: e.target.value })}
-              className="w-full bg-transparent outline-none font-black text-sm border-b border-gray-300 focus:border-blue-500 py-1"
-            />
+      {/* HEADER FORM - COBALT SLATE HUD */}
+      <div className="shrink-0 bg-white border-b-2 border-[var(--color-ledger-border)]">
+        {/* ROW 1: System Metadata */}
+        <div className="grid grid-cols-10 border-b border-gray-100 bg-[#F1F5F9]/50">
+          <div className="col-span-2 p-3 border-r border-gray-200">
+            <div className="flex items-center gap-3">
+              <label className="text-[9px] font-black text-gray-400 italic tracking-tighter w-12">SERIES</label>
+              <span className="font-black text-xs italic uppercase tracking-tighter">MAIN</span>
+            </div>
           </div>
-          <div className="col-span-12 md:col-span-2 border-r border-[var(--color-ledger-border)] p-2">
-            <label className="block text-[9px] font-black text-gray-500 italic tracking-widest">DATE (DAY)</label>
-            <div className="flex items-center gap-2 border-b border-gray-300 focus-within:border-blue-500 py-1">
-              <input
-                type="date"
-                value={header.date}
-                onChange={e => setHeader({ ...header, date: e.target.value })}
-                className="bg-transparent outline-none font-black text-sm w-full"
+          <div className="col-span-2 p-3 border-r border-gray-200">
+            <div className="flex items-center gap-3">
+              <label className="text-[9px] font-black text-gray-400 italic tracking-tighter w-12">DATE</label>
+              <input 
+                type="date" 
+                value={header.date} 
+                onChange={e => setHeader({ ...header, date: e.target.value })} 
+                className="bg-transparent outline-none font-black text-xs italic uppercase tracking-tighter w-full" 
               />
             </div>
           </div>
-          <div className="col-span-12 md:col-span-3 border-r border-[var(--color-ledger-border)] p-2">
-            <label className="block text-[9px] font-black text-gray-500 italic tracking-widest">SUPPLIER REF. / INV NO.</label>
-            <input
-              value={header.supplierReference}
-              onChange={e => setHeader({ ...header, supplierReference: e.target.value })}
-              placeholder="e.g. INV-2023-100"
-              className="w-full bg-transparent outline-none font-black text-blue-700 text-sm border-b border-gray-300 focus:border-blue-500 py-1 italic"
-            />
+          <div className="col-span-2 p-3 border-r border-gray-200">
+            <div className="flex items-center gap-3">
+              <label className="text-[9px] font-black text-gray-400 italic tracking-tighter w-12">VCH NO.</label>
+              <span className="font-black text-xs italic uppercase tracking-tighter text-blue-700">{header.voucherNumber}</span>
+            </div>
           </div>
-          <div className="col-span-12 md:col-span-3 border-r border-[var(--color-ledger-border)] p-2">
-            <label className="block text-[9px] font-black text-gray-500 italic tracking-widest">PURCHASE TYPE</label>
-            <select
-              value={header.gstType}
-              onChange={e => setHeader({ ...header, gstType: e.target.value })}
-              className="w-full bg-transparent outline-none font-black text-sm border-b border-gray-300 focus:border-blue-500 py-1 italic"
-            >
-              <option>LGST 18% (Registered)</option>
-              <option>IGST 18% (Interstate)</option>
-              <option>Exempt</option>
-            </select>
+          <div className="col-span-2 p-3 border-r border-gray-200">
+            <div className="flex items-center gap-3">
+              <label className="text-[9px] font-black text-gray-400 italic tracking-tighter w-12">TYPE</label>
+              <span className="font-black text-xs italic uppercase tracking-tighter">DIRECT</span>
+            </div>
           </div>
-          <div className="col-span-12 md:col-span-2 p-2 flex items-end justify-end gap-2">
-            <button className="text-[9px] font-black tracking-widest border border-gray-300 bg-white px-4 py-1.5 hover:bg-gray-50 shadow-sm italic uppercase">VCH_IMAGE</button>
+          <div className="col-span-2 p-3">
+            <div className="flex items-center gap-3">
+              <label className="text-[9px] font-black text-gray-400 italic tracking-tighter w-16">PURC TYPE</label>
+              <select 
+                value={header.gstType} 
+                onChange={e => setHeader({ ...header, gstType: e.target.value })} 
+                className="bg-transparent outline-none font-black text-xs italic uppercase tracking-tighter cursor-pointer"
+              >
+                <option value="LGST 18% (Registered)">L/GST-18%</option>
+                <option value="IGST 18% (Registered)">I/GST-18%</option>
+                <option value="LGST 12% (Registered)">L/GST-12%</option>
+                <option value="LGST 5% (Registered)">L/GST-5%</option>
+              </select>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-12 border-b border-[var(--color-ledger-border)]">
-          <div className="col-span-12 md:col-span-8 border-r border-[var(--color-ledger-border)] p-2">
-            <div className="flex justify-between items-end mb-1">
-              <label className="text-[9px] font-black text-gray-500 uppercase tracking-[0.2em] italic">VENDOR_ACCOUNT (PARTY_LEDGER)</label>
-              {header.partyAccount && (
-                <div className="text-[9px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 italic">
-                  BALANCE: ₹{contacts.find((v: any) => v.name === header.partyAccount) ? "24,500.00 CR" : "0.00"}
-                </div>
-              )}
-            </div>
+        {/* ROW 2: Account Selection */}
+        <div className="p-3 border-b border-gray-100 bg-white">
+          <div className="flex items-center gap-6">
+            <label className="text-[9px] font-black text-gray-400 italic tracking-tighter w-16">PARTY</label>
             <EntityLookup
               type="contact"
               contactFilter="VENDOR"
               value={header.partyAccount}
               onChange={val => setHeader({ ...header, partyAccount: val })}
-              onSelect={vendor => {
-                setHeader(prev => ({
-                  ...header,
-                  partyAccount: vendor.name,
-                }));
-              }}
-              placeholder="Select Ledger (Press Space)"
-              className="w-full bg-transparent outline-none font-black text-blue-700 text-base border-b border-gray-300 focus:border-blue-500 py-1 placeholder:text-gray-300 placeholder:italic"
-            />
-          </div>
-
-          <div className="col-span-12 md:col-span-4 p-2">
-            <label className="block text-[9px] font-black text-gray-500 italic tracking-widest">MATERIAL CENTRE / HUB</label>
-            <input
-              value={header.materialCentre}
-              onChange={e => setHeader({ ...header, materialCentre: e.target.value })}
-              className="w-full bg-transparent outline-none font-black text-sm border-b border-gray-300 focus:border-blue-500 py-1"
+              onSelect={vendor => setHeader(prev => ({ ...prev, partyAccount: vendor.name }))}
+              placeholder="Search Vendor Account (F2 to Register)..."
+              className="flex-1 font-black text-base italic text-blue-700 uppercase tracking-tight"
             />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-12">
-          <div className="col-span-12 md:col-span-4 border-r border-[var(--color-ledger-border)] p-2">
-            <label className="block text-[9px] font-black text-gray-500 italic tracking-widest">ITC ELIGIBILITY</label>
-            <select
-              value={header.itcEligibility}
-              onChange={e => setHeader({ ...header, itcEligibility: e.target.value })}
-              className="w-full bg-transparent outline-none font-black text-sm border-b border-gray-300 focus:border-blue-500 py-1 italic"
-            >
-              <option>Input Goods/Services</option>
-              <option>Capital Goods</option>
-              <option>Ineligible</option>
-            </select>
+        {/* ROW 3: Inventory & Compliance */}
+        <div className="grid grid-cols-2 border-b border-gray-100 bg-white">
+          <div className="p-3 border-r border-gray-200">
+            <div className="flex items-center gap-6">
+              <label className="text-[9px] font-black text-gray-400 italic tracking-tighter w-16 whitespace-nowrap">MAT. CENTRE</label>
+              <input 
+                value={header.materialCentre} 
+                onChange={e => setHeader({ ...header, materialCentre: e.target.value })} 
+                className="flex-1 bg-transparent outline-none font-black text-xs italic uppercase tracking-tighter" 
+              />
+            </div>
           </div>
-          <div className="col-span-12 md:col-span-8 p-2">
-            <label className="block text-[9px] font-black text-gray-500 italic tracking-widest">NARRATION / AUDIT_NOTES</label>
-            <input
-              value={header.narration}
-              onChange={e => setHeader({ ...header, narration: e.target.value })}
-              placeholder="Being goods purchased vide Bill No..."
-              className="w-full bg-transparent outline-none font-black text-sm border-b border-gray-300 focus:border-blue-500 py-1 italic text-gray-600 placeholder:text-gray-300"
+          <div className="p-3">
+            <div className="flex items-center gap-6">
+              <label className="text-[9px] font-black text-gray-400 italic tracking-tighter w-24 whitespace-nowrap">ITC ELIGIBILITY</label>
+              <select 
+                value={header.itcEligibility} 
+                onChange={e => setHeader({ ...header, itcEligibility: e.target.value })} 
+                className="bg-transparent outline-none font-black text-xs italic uppercase tracking-tighter cursor-pointer"
+              >
+                <option value="Input Goods/Services">Input Goods/Services</option>
+                <option value="None">None</option>
+                <option value="Capital Goods">Capital Goods</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* ROW 4: Remarks */}
+        <div className="p-3 bg-white">
+          <div className="flex items-center gap-6">
+            <label className="text-[9px] font-black text-gray-400 italic tracking-tighter w-16">NARRATION</label>
+            <input 
+              value={header.narration} 
+              onChange={e => setHeader({ ...header, narration: e.target.value })} 
+              placeholder="Voucher specific remarks..." 
+              className="flex-1 bg-transparent outline-none font-bold text-[11px] italic uppercase tracking-tight text-gray-600" 
             />
           </div>
         </div>
       </div>
 
       {/* MAIN GRID */}
-      <div className="flex-1 overflow-auto bg-white border-b-2 border-[var(--color-ledger-border)] relative input-grid-container">
+      <div className="flex-1 overflow-auto bg-white border-b-2 border-[var(--color-ledger-border)] relative">
         <table className="w-full text-sm border-collapse" style={{ tableLayout: 'fixed' }}>
-          <thead className="bg-[#1E293B] text-white sticky top-0 z-10 font-black text-[9px] tracking-widest shadow-sm uppercase italic">
+          <thead className="bg-[#1E293B] text-white sticky top-0 z-10 font-black text-[9px] tracking-widest uppercase italic">
             <tr>
               <th className="border-r border-[#334155] px-2 py-2 text-center w-12">S.N.</th>
-              <th className="border-r border-[#334155] px-4 py-2 text-left">ITEM_DESCRIPTION</th>
-              <th className="border-r border-[#334155] px-2 py-2 text-right w-20">QTY.</th>
-              <th className="border-r border-[#334155] px-2 py-2 text-left w-48">SERIALS</th>
-              <th className="border-r border-[#334155] px-2 py-2 text-center w-16">UNIT</th>
-              <th className="border-r border-[#334155] px-2 py-2 text-right w-28">PRICE (₹)</th>
+              <th className="border-r border-[#334155] px-2 py-2 text-left w-24">CODE/SKU</th>
+              <th className="border-r border-[#334155] px-4 py-2 text-left">PRODUCT_SPECIFICATION</th>
+              <th className="border-r border-[#334155] px-2 py-2 text-right w-20">QUANTITY</th>
+              <th className="border-r border-[#334155] px-2 py-2 text-center w-16">UOM</th>
+              <th className="border-r border-[#334155] px-2 py-2 text-right w-28">RATE (₹)</th>
               <th className="border-r border-[#334155] px-2 py-2 text-right w-20">GST%</th>
-              <th className="px-4 py-2 text-right w-36">AMOUNT (₹)</th>
+              <th className="px-4 py-2 text-right w-36">TOTAL (₹)</th>
             </tr>
           </thead>
           <tbody>
             {lines.map((line, rowIndex) => (
-              <tr key={line.id} className="border-b border-gray-100 hover:bg-blue-50/30 group transition-colors">
-                <td className="border-r border-gray-100 px-2 py-1 text-center font-black text-gray-300 text-[10px] italic">
-                  {line.description || line.qty > 0 ? (
-                    <span className={line.qty > 0 ? "text-primary" : ""}>{line.sno}.</span>
-                  ) : rowIndex + 1}
-                </td>
+              <tr key={line.id} className="border-b border-gray-100 hover:bg-blue-50/30 transition-colors">
+                <td className="border-r border-gray-100 px-2 py-1 text-center font-black text-gray-300 text-[10px] italic">{line.sno}.</td>
+                <td className="border-r border-gray-100 px-2 py-1 text-center font-black text-blue-600 text-[10px] italic truncate">{inventory.find(i => i.id === line.productId)?.sku || inventory.find(i => i.id === line.productId)?.barcode || '---'}</td>
                 <td className="border-r border-gray-100 px-2 py-1 relative">
-                  <div className="flex justify-between items-center">
-                    <EntityLookup
-                      type="item"
-                      value={line.description}
-                      onChange={(val) => updateLine(rowIndex, 'description', val)}
-                      onSelect={(item) => updateLine(rowIndex, 'description', item)}
-                      onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 1, lines.length, 6, addRow)}
-                      data-row={rowIndex}
-                      data-col={1}
-                      placeholder={rowIndex === 0 && !line.description ? "SEARCH PRODUCT..." : ""}
-                      className="w-full bg-transparent outline-none font-black text-sm focus:bg-blue-50 px-1"
+                  <EntityLookup
+                    ref={rowIndex === lines.findIndex(l => !l.description) ? scanRef : null}
+                    type="item"
+                    value={line.description}
+                    onChange={(val) => updateLine(rowIndex, 'description', val)}
+                    onSelect={(item) => {
+                      console.log("[SCANNER] Item Selected:", item.name);
+                      updateLine(rowIndex, 'description', item);
+                      setTimeout(() => {
+                        const qtyInput = document.querySelector(`input[data-row="${rowIndex}"][data-col="2"]`) as HTMLInputElement;
+                        qtyInput?.focus();
+                      }, 50);
+                    }}
+                    onKeyDown={(e) => {
+                      console.log("[SCANNER] Key in Grid:", e.key);
+                      handleGridKeyDown(e, rowIndex, 1, lines.length, 6, addRow);
+                    }}
+                    data-row={rowIndex}
+                    data-col={1}
+                    className="w-full bg-transparent outline-none font-black text-sm px-1"
+                  />
+                </td>
+                <td className="border-r border-gray-100 px-2 py-1">
+                  <div className="relative flex items-center">
+                    <input 
+                      type="number" 
+                      value={line.qty || ''} 
+                      onChange={e => updateLine(rowIndex, 'qty', e.target.value)} 
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          const masterItem = inventory.find(i => i.id === line.productId);
+                          if (masterItem?.is_serialized && Number(line.qty) > 0) {
+                            e.preventDefault();
+                            setActiveRowIndex(rowIndex);
+                            setShowSerialModal(true);
+                            setScanMode('barcode');
+                            setCurrentUnitIndex(0);
+                            return;
+                          }
+                        }
+                        handleGridKeyDown(e, rowIndex, 2, lines.length, 4, addRow);
+                      }} 
+                      data-row={rowIndex} 
+                      data-col={2} 
+                      className="w-full bg-transparent outline-none font-black text-sm text-right px-1 pr-5" 
                     />
-                    {line.productId && (
-                      <span className="absolute -top-1 right-1 text-[7px] font-black bg-gray-800 text-white px-1.5 py-0.5 rounded italic tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
-                        STOCK: {inventory.find(i => i.id === line.productId)?.total_qty || 0}
-                      </span>
+                    {inventory.find(i => i.id === line.productId)?.is_serialized && (
+                      <button 
+                        onClick={() => { setActiveRowIndex(rowIndex); setShowSerialModal(true); }}
+                        className="absolute right-0.5 text-blue-500 hover:text-blue-700 p-0.5"
+                        title="Click to Scan Serials"
+                      >
+                        <QrCode className="w-3 h-3" />
+                      </button>
                     )}
                   </div>
                 </td>
-
+                <td className="border-r border-gray-100 px-2 py-1 text-center font-black text-xs italic">{line.unit}</td>
                 <td className="border-r border-gray-100 px-2 py-1">
-                  <input
-                    type="number"
-                    value={line.qty || ''}
-                    onChange={(e) => updateLine(rowIndex, 'qty', e.target.value)}
-                    onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 2, lines.length, 6, addRow)}
-                    data-row={rowIndex}
-                    data-col={2}
-                    className="w-full bg-transparent outline-none font-black text-sm text-right focus:bg-blue-50 px-1 italic"
-                  />
+                  <input type="number" value={line.price || ''} onChange={e => updateLine(rowIndex, 'price', e.target.value)} onKeyDown={e => handleGridKeyDown(e, rowIndex, 3, lines.length, 4, addRow)} data-row={rowIndex} data-col={3} className="w-full bg-transparent outline-none font-black text-sm text-right px-1" />
                 </td>
                 <td className="border-r border-gray-100 px-2 py-1">
-                  <input
-                    type="text"
-                    value={line.serials?.join(',') || ''}
-                    onChange={(e) => updateLine(rowIndex, 'serials', e.target.value.split(',').map(s => s.trim()).filter(s => s !== ''))}
-                    onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 3, lines.length, 6, addRow)}
-                    data-row={rowIndex}
-                    data-col={3}
-                    placeholder="S1, S2..."
-                    className="w-full bg-transparent outline-none font-black text-[10px] uppercase focus:bg-blue-50 px-1 placeholder:text-gray-200 italic"
-                  />
+                  <input type="number" value={line.gstRate || ''} onChange={e => updateLine(rowIndex, 'gstRate', e.target.value)} onKeyDown={e => handleGridKeyDown(e, rowIndex, 4, lines.length, 4, addRow)} data-row={rowIndex} data-col={4} className="w-full bg-transparent outline-none font-black text-sm text-right px-1" />
                 </td>
-                <td className="border-r border-gray-100 px-2 py-1">
-                  <input
-                    type="text"
-                    value={line.unit}
-                    onChange={(e) => updateLine(rowIndex, 'unit', e.target.value)}
-                    onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 4, lines.length, 6, addRow)}
-                    data-row={rowIndex}
-                    data-col={4}
-                    className="w-full bg-transparent outline-none font-black text-xs text-center focus:bg-blue-50 px-1 italic"
-                  />
-                </td>
-                <td className="border-r border-gray-100 px-2 py-1">
-                  <input
-                    type="number"
-                    value={line.price || ''}
-                    onChange={(e) => updateLine(rowIndex, 'price', e.target.value)}
-                    onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 5, lines.length, 6, addRow)}
-                    data-row={rowIndex}
-                    data-col={5}
-                    className="w-full bg-transparent outline-none font-black text-sm text-right px-1 focus:bg-blue-50 italic"
-                  />
-                </td>
-                <td className="border-r border-gray-100 px-2 py-1">
-                  <input
-                    type="number"
-                    value={line.gstRate || ''}
-                    onChange={(e) => updateLine(rowIndex, 'gstRate', e.target.value)}
-                    onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 6, lines.length, 6, addRow)}
-                    data-row={rowIndex}
-                    data-col={6}
-                    className="w-full bg-transparent outline-none font-black text-sm text-right px-1 focus:bg-blue-50 italic"
-                  />
-                </td>
-                <td className="px-4 py-1 text-right font-black text-sm text-black italic">
-                  {line.amount > 0 ? line.amount.toFixed(2) : ''}
-                </td>
+                <td className="px-4 py-1 text-right font-black text-sm italic">{line.amount > 0 ? line.amount.toFixed(2) : ''}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {/* BOTTOM PANELS */}
-      <div className="h-44 shrink-0 flex bg-[var(--color-ledger-purchase)] border-b border-[var(--color-ledger-border)]">
-
-        {/* Tax Summary */}
-        <div className="w-1/4 border-r border-[var(--color-ledger-border)] p-4 flex flex-col bg-white/50">
-          <div className="text-[9px] font-black bg-gray-100 px-2 py-1 border border-gray-200 mb-2">TAX SUMMARY</div>
-          <div className="flex-1 overflow-y-auto">
-            {taxSummaries.length > 0 ? taxSummaries.map((tax: TaxSummaryRow, i: number) => (
-              <div key={i} className="mb-2 bg-white/30 p-2 rounded border border-gray-200">
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-gray-500 font-bold">GST @ {tax.taxRate.toFixed(1)}%</span>
-                  <span className="font-mono font-black">{tax.taxableAmount.toFixed(2)}</span>
-                </div>
-                {tax.igst > 0 ? (
-                  <div className="flex justify-between text-xs text-purple-700">
-                    <span className="font-bold">IGST</span>
-                    <span className="font-mono">{tax.igst.toFixed(2)}</span>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex justify-between text-xs text-blue-600">
-                      <span className="font-bold">CGST ({(tax.taxRate / 2).toFixed(1)}%)</span>
-                      <span className="font-mono">{tax.cgst.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-xs text-blue-600">
-                      <span className="font-bold">SGST ({(tax.taxRate / 2).toFixed(1)}%)</span>
-                      <span className="font-mono">{tax.sgst.toFixed(2)}</span>
-                    </div>
-                  </>
-                )}
-              </div>
-            )) : (
-              <div className="text-xs text-gray-400 italic text-center py-4">No tax applied</div>
-            )}
-          </div>
-
+      {/* FOOTER PANELS */}
+      <div className="h-44 shrink-0 flex bg-white/50 border-t-2 border-[var(--color-ledger-border)]">
+        <div className="w-1/4 border-r border-gray-200 p-4">
+           <div className="text-[9px] font-black text-gray-400 mb-2 italic">TAX SUMMARY</div>
+           <div className="space-y-1">
+             {taxSummaries.map((tax, i) => (
+               <div key={i} className="flex justify-between text-[11px] font-black italic">
+                 <span>GST @ {tax.taxRate}%</span>
+                 <span>₹{tax.cgst + tax.sgst + tax.igst}</span>
+               </div>
+             ))}
+           </div>
         </div>
-
-        {/* Center Totals */}
-        <div className="w-2/4 border-r border-[var(--color-ledger-border)] p-6 flex flex-col justify-between items-center bg-[var(--color-ledger-purchase)]/30">
-          <button
-            onClick={toggleTax}
-            className={`px-8 py-2 font-black text-sm shadow border transition-colors ${isTaxApplied ? 'bg-red-600 text-white border-red-700 hover:bg-red-700' : 'bg-[#1E3A8A] text-white border-blue-900 hover:bg-blue-800'}`}
-          >
-            {isTaxApplied ? "REMOVE TAX (F4)" : "APPLY TAX (F4)"}
-          </button>
-
-          <div className="w-full flex justify-between items-end mt-4">
-            <div className="flex gap-8 px-4">
-              <div className="text-center">
-                <div className="text-[10px] font-bold text-gray-500 tracking-widest mb-1">TOTAL QTY</div>
-                <div className="text-xl font-black font-mono">{totalQty.toFixed(2)}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-[10px] font-bold text-gray-500 tracking-widest mb-1">ALT QTY</div>
-                <div className="text-xl font-black font-mono">0.00</div>
-              </div>
-            </div>
-            <div className="bg-black text-white px-6 py-3 ml-auto shadow-xl">
-              <div className="text-[10px] text-gray-400 font-bold tracking-widest mb-1">GRAND TOTAL (₹)</div>
-              <div className="text-3xl font-black font-mono tracking-tighter">{grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Bill Sundry */}
-        <div className="w-1/4 p-4 flex flex-col bg-white/50">
-          <div className="text-[9px] font-black bg-gray-100 px-2 py-1 border border-gray-200 mb-2">BILL SUNDRY / CHARGES</div>
-          <div className="flex-1 space-y-2">
-            {sundries.map((sundry, index) => (
-              <div key={sundry.id} className="flex justify-between items-center text-xs">
-                <span className="font-bold">{sundry.name}</span>
-                <input
-                  type="number"
-                  value={sundry.amount || ''}
-                  onChange={(e) => {
-                    const newSundries = [...sundries];
-                    newSundries[index].amount = Number(e.target.value);
-                    setSundries(newSundries);
-                  }}
-                  className={`w-20 text-right bg-transparent outline-none font-mono font-black ${sundry.amount < 0 ? 'text-red-600' : ''}`}
-                />
-              </div>
-            ))}
-          </div>
-          <div className="mt-auto border-t border-dashed border-gray-300 pt-2 flex justify-between text-xs">
-            <span className="font-bold text-gray-500">TOTAL CHARGES</span>
-            <span className="font-mono font-black">{sundryTotal > 0 ? '+' : ''}{sundryTotal.toFixed(2)}</span>
-          </div>
+        <div className="flex-1 flex flex-col justify-center items-center gap-4">
+           <div className="bg-black text-white px-8 py-4 shadow-2xl">
+              <div className="text-[10px] font-bold text-gray-500 tracking-widest mb-1 italic">GRAND TOTAL</div>
+              <div className="text-4xl font-black font-mono tracking-tighter">₹{grandTotal.toLocaleString()}</div>
+           </div>
+           <div className="flex gap-4">
+             <button onClick={handleSave} className="bg-blue-700 text-white px-6 py-2 font-black text-xs italic uppercase tracking-widest hover:bg-blue-800 transition-colors">SAVE VOUCHER (F2)</button>
+             <button onClick={handleQuit} className="bg-red-700 text-white px-6 py-2 font-black text-xs italic uppercase tracking-widest hover:bg-red-800 transition-colors">QUIT (ESC)</button>
+           </div>
         </div>
       </div>
 
-      {/* FIXED FOOTER */}
-      <div className="shrink-0 h-10 bg-[#0F172A] text-white flex items-center shadow-inner overflow-x-auto text-[9px] font-black tracking-widest">
-        <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
-          <span><span className="text-blue-400 border-b border-blue-400">V</span>CH DETAIL</span>
-        </button>
-        <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
-          <span>MASTER DETAIL</span>
-        </button>
-        <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
-          <span>PARTY DASH</span>
-        </button>
-        <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
-          <span>VCH IMAGE</span>
-        </button>
-        <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
-          <span>HOLD VCH</span>
-        </button>
-        <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
-          <span>UPDATE DISC</span>
-        </button>
-        <button className="px-6 h-full border-r border-[#334155] hover:bg-[#1E293B] flex items-center gap-2">
-          <span>CHECK SCHEME</span>
-        </button>
-        <button onClick={handleSave} className="px-8 h-full bg-[#1E3A8A] border-r border-blue-900 hover:bg-blue-800 flex items-center gap-2 ml-auto shadow-md">
-          SAVE (F2)
-        </button>
-        <button onClick={handleQuit} className="px-6 h-full bg-[#7F1D1D] hover:bg-red-800 flex items-center gap-2">
-          QUIT (ESC)
-        </button>
-      </div>
-
-      {/* SERIAL MODAL (Individual Filing Logic) */}
+      {/* SERIAL MODAL - HARDWARE OPTIMIZED */}
       {showSerialModal && activeRowIndex !== null && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 uppercase">
-          <div className="bg-white rounded-lg w-full max-w-lg shadow-2xl overflow-hidden border-2 border-[var(--color-ledger-border)] animate-in zoom-in-95 duration-200">
-            <div className="bg-[#1E3A8A] text-white p-4 flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <QrCode className="w-5 h-5" />
-                <h3 className="font-black text-sm tracking-widest">INDIVIDUAL SERIAL FILING</h3>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[32px] w-full max-w-xl shadow-2xl overflow-hidden border-4 border-[#003366] animate-in zoom-in-95 duration-200">
+            <div className="bg-[#003366] text-white p-6 flex justify-between items-center">
+              <div>
+                <h3 className="font-black text-lg uppercase italic tracking-tighter">Unit-Level Dual Capture</h3>
+                <p className="text-[10px] opacity-60 font-bold uppercase italic tracking-widest mt-1">Item: {lines[activeRowIndex].description}</p>
               </div>
-              <button onClick={() => setShowSerialModal(false)} className="hover:rotate-90 transition-transform">
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => setShowSerialModal(false)} className="hover:rotate-90 transition-transform"><X className="w-6 h-6" /></button>
             </div>
             
-            <div className="p-6 space-y-6">
-              <div className="bg-gray-50 p-4 border border-gray-200 rounded">
-                <div className="text-[10px] font-bold text-gray-500 mb-1">PRODUCT</div>
-                <div className="text-sm font-black text-blue-900">{lines[activeRowIndex]?.description}</div>
-                <div className="mt-2 flex justify-between text-[10px] font-bold">
-                  <span>UNITS REQUIRED: {lines[activeRowIndex]?.qty}</span>
-                  <span className={cn(
-                    "px-2 py-0.5 rounded",
-                    (lines[activeRowIndex]?.serials?.length || 0) === lines[activeRowIndex]?.qty ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
-                  )}>
-                    SCANNED: {lines[activeRowIndex]?.serials?.length || 0}
-                  </span>
-                </div>
+            <div className="p-8 space-y-6">
+              <div className="flex justify-center items-center gap-4">
+                <div className={cn("px-4 py-2 rounded-full font-black text-xs italic tracking-widest transition-all", scanMode === 'barcode' ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-400")}>1. BARCODE</div>
+                <div className="w-8 h-1 bg-gray-100" />
+                <div className={cn("px-4 py-2 rounded-full font-black text-xs italic tracking-widest transition-all", scanMode === 'serial' ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-400")}>2. SERIAL</div>
               </div>
 
-              <div className="space-y-4">
-                <label className="block text-[10px] font-black text-gray-500">SCAN SERIAL NUMBER</label>
-                <div className="flex gap-2">
-                  <input
-                    autoFocus
-                    placeholder="ENTER SERIAL & PRESS ENTER..."
-                    className="flex-1 h-12 bg-gray-100 border-2 border-gray-200 rounded px-4 font-mono font-black text-lg outline-none focus:border-blue-500 transition-colors"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        const val = (e.target as HTMLInputElement).value.trim();
-                        if (!val) return;
-                        
-                        const currentSerials = lines[activeRowIndex].serials || [];
-                        if (currentSerials.includes(val)) {
-                          toast.error("DUPLICATE SERIAL IN THIS VOUCHER");
-                          return;
-                        }
-                        
-                        if (currentSerials.length >= lines[activeRowIndex].qty) {
-                          toast.error("ALL UNITS ALREADY SCANNED");
-                          return;
-                        }
+              <div className="relative">
+                <input
+                  ref={modalScanRef}
+                  placeholder={scanMode === 'barcode' ? "SCAN BARCODE..." : "SCAN SERIAL..."}
+                  className="w-full h-16 bg-blue-50 border-4 border-blue-100 rounded-2xl px-12 font-black text-2xl tracking-widest uppercase italic outline-none focus:border-blue-600 focus:bg-white transition-all text-center"
+                  onChange={(e) => {
+                    console.log(`[SCANNER] Modal ${scanMode} Typing:`, e.target.value);
+                  }}
+                  onKeyDown={(e) => {
+                    console.log(`[SCANNER] Modal ${scanMode} Key:`, e.key);
+                    if (e.key === 'Enter') {
+                      const val = (e.target as HTMLInputElement).value.trim();
+                      if (!val) return;
 
-                        const newSerials = [...currentSerials, val];
-                        updateLine(activeRowIndex, 'serials', newSerials);
-                        (e.target as HTMLInputElement).value = "";
+                      const currentTracking = [...(lines[activeRowIndex].tracking || [])];
+                      // Ensure slot exists
+                      if (!currentTracking[currentUnitIndex]) currentTracking[currentUnitIndex] = { barcode: '', serial: '' };
+                      const unit = { ...currentTracking[currentUnitIndex] };
+
+                      if (scanMode === 'barcode') {
+                        unit.barcode = val;
+                        currentTracking[currentUnitIndex] = unit;
+                        updateLine(activeRowIndex, 'tracking', currentTracking);
+                        setScanMode('serial');
+                        toast.success("BARCODE OK");
+                      } else {
+                        // Check master duplicate
+                        const state = buildState(transactions);
+                        if (state.serialMap[val]) {
+                           toast.error("SERIAL ALREADY IN SYSTEM");
+                           (e.target as HTMLInputElement).value = "";
+                           return;
+                        }
+                        unit.serial = val;
+                        currentTracking[currentUnitIndex] = unit;
+                        updateLine(activeRowIndex, 'tracking', currentTracking);
                         
-                        if (newSerials.length === lines[activeRowIndex].qty) {
-                          toast.success("ALL SERIALS CAPTURED");
-                          setTimeout(() => setShowSerialModal(false), 300);
+                        if (currentUnitIndex < lines[activeRowIndex].qty - 1) {
+                          setCurrentUnitIndex(prev => prev + 1);
+                          setScanMode('barcode');
+                          toast.success("UNIT COMPLETE");
+                        } else {
+                          toast.success("ALL UNITS CAPTURED");
+                          setTimeout(() => setShowSerialModal(false), 500);
                         }
                       }
-                    }}
-                  />
-                </div>
+                      (e.target as HTMLInputElement).value = "";
+                      setTimeout(() => modalScanRef.current?.focus(), 50);
+                    }
+                  }}
+                />
+                <QrCode className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-300 w-6 h-6" />
               </div>
 
-              <div className="max-h-48 overflow-y-auto border border-gray-100 rounded bg-gray-50/50 p-2">
-                {lines[activeRowIndex]?.serials?.length === 0 ? (
-                  <div className="text-center py-8 text-[10px] font-bold text-gray-300 italic tracking-widest">
-                    AWAITING SCANNER INPUT...
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2">
-                    {lines[activeRowIndex]?.serials?.map((s, idx) => (
-                      <div key={idx} className="flex justify-between items-center bg-white p-2 rounded border border-gray-200 text-[10px] font-black">
-                        <span>{s}</span>
-                        <button 
-                          onClick={() => {
-                            const newSerials = (lines[activeRowIndex].serials || []).filter((_, i) => i !== idx);
-                            updateLine(activeRowIndex, 'serials', newSerials);
-                          }}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
+              <div className="max-h-48 overflow-y-auto rounded-xl border border-gray-100 bg-gray-50 p-2">
+                 <div className="flex justify-between items-center px-4 py-2 border-b border-gray-200 mb-2">
+                    <span className="text-[10px] font-black text-gray-400 italic uppercase">Audit Trail (Unit {currentUnitIndex + 1}/{lines[activeRowIndex].qty})</span>
+                 </div>
+                 {Array.from({ length: lines[activeRowIndex].qty }).map((_, i) => {
+                    const t = lines[activeRowIndex].tracking?.[i];
+                    return (
+                      <div key={i} className={cn("flex justify-between items-center px-4 py-2 text-[11px] font-black italic", i === currentUnitIndex ? "bg-blue-100 text-blue-900 rounded-lg" : "text-gray-400")}>
+                        <span>UNIT {i+1}</span>
+                        <div className="flex gap-4">
+                          <span>B: {t?.barcode || "---"}</span>
+                          <span>S: {t?.serial || "---"}</span>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    );
+                 })}
               </div>
             </div>
-
-            <div className="bg-gray-50 p-4 border-t border-gray-200 flex justify-end gap-3">
-              <Button 
-                variant="secondary" 
-                onClick={() => setShowSerialModal(false)}
-                className="h-10 px-6 font-black text-[10px] tracking-widest"
-              >
-                CANCEL
-              </Button>
-              <Button 
-                onClick={() => setShowSerialModal(false)}
-                disabled={(lines[activeRowIndex]?.serials?.length || 0) < lines[activeRowIndex]?.qty}
-                className="h-10 px-8 bg-[#1E3A8A] text-white font-black text-[10px] tracking-widest"
-              >
-                DONE (F10)
-              </Button>
+            
+            <div className="bg-gray-100 p-4 text-center">
+               <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest italic leading-none">Scanning is Mandatory for Serialized Inventory Integrity</p>
             </div>
           </div>
         </div>
       )}
-
-
     </div>
   );
 }
-

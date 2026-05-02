@@ -37,6 +37,7 @@ const playSuccess = () => playBeep(880, 0.1);
 interface ReturnLine {
     productId: string
     name: string
+    category: string
     serial: string
     isConsumed: boolean
 }
@@ -45,14 +46,14 @@ function EngineerReturnContent() {
     const { engineers, inventory, getEngineerSerials, processEngineerReturn } = useData()
     const router = useRouter()
     const searchParams = useSearchParams()
-    
+
     const [selectedEngineerId, setSelectedEngineerId] = useState(searchParams.get('id') || '')
     const [scannedItems, setScannedItems] = useState<ReturnLine[]>([])
     const [duplicateError, setDuplicateError] = useState<string | null>(null)
     const [scanActive, setScanActive] = useState(true)
 
     const selectedEngineer = useMemo(() => engineers.find(e => e.id === selectedEngineerId), [engineers, selectedEngineerId])
-    
+
     // Get absolute source of truth for items held by this engineer
     const heldSerials = useMemo(() => {
         if (!selectedEngineerId || !getEngineerSerials) return [];
@@ -88,11 +89,12 @@ function EngineerReturnContent() {
         }
 
         const product = inventory.find(i => i.id === heldItem.item_id);
-        
+
         playSuccess();
         setScannedItems(prev => [...prev, {
             productId: heldItem.item_id,
             name: product?.name || 'Unknown Item',
+            category: product?.category || 'General',
             serial: barcode,
             isConsumed: false
         }]);
@@ -103,20 +105,20 @@ function EngineerReturnContent() {
     }
 
     const toggleConsumed = (serial: string) => {
-        setScannedItems(prev => prev.map(item => 
+        setScannedItems(prev => prev.map(item =>
             item.serial === serial ? { ...item, isConsumed: !item.isConsumed } : item
         ));
     }
 
     const finalizeReturn = async () => {
         if (scannedItems.length === 0) return toast.error("Scan items to return first");
-        
+
         try {
             // We'll treat 'Consumed' entries as a different transaction type later if needed, 
             // but for now, the return flow moves them back to INWARD as 'Damaged' or 'Consumed' if we wanted.
             // The prompt says: "Return unused/damaged (INWARD)" and "Execution: moves to consumed".
             // For now, I'll commit all scanned as ENGINEER_RETURN (INWARD).
-            
+
             await toast.promise(processEngineerReturn(selectedEngineerId, scannedItems.map(item => ({
                 productId: item.productId,
                 qty: 1,
@@ -137,17 +139,17 @@ function EngineerReturnContent() {
     return (
         <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#F8F9FC] p-4 sm:p-8">
             <div className="max-w-6xl mx-auto space-y-8 sm:space-y-12">
-                
+
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row justify-between items-start gap-6">
                     <div className="space-y-2">
-                        <button 
+                        <button
                             onClick={() => router.back()}
                             className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-primary transition-colors"
                         >
                             <ArrowLeft className="w-3 h-3" /> Back to Dashboard
                         </button>
-                        <h1 className="text-3xl sm:text-5xl font-black text-[#1A1C21] tracking-tight italic">Return Registry</h1>
+                        <h1 className="text-3xl sm:text-5xl font-black text-[#1A1C21] tracking-tight italic">Return Unused Items</h1>
                     </div>
                     <div className="flex gap-4">
                         <Button
@@ -164,147 +166,91 @@ function EngineerReturnContent() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                    
-                    {/* Left: Scanner & Stats */}
-                    <div className="lg:col-span-12 xl:col-span-5 space-y-8">
-                        
-                        {/* Status Card */}
-                        <div className="bg-white p-8 rounded-[40px] shadow-sm border border-gray-100 flex items-center gap-8">
-                            <div className="w-20 h-20 bg-orange-50 rounded-3xl flex items-center justify-center text-orange-600 border-2 border-orange-100">
-                                <User className="w-10 h-10" />
-                            </div>
-                            <div className="flex-1">
-                                <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest italic">Engineer Profile</label>
-                                <h2 className="text-2xl font-black italic text-[#1A1C21]">{selectedEngineer?.name || 'Invalid Personnel'}</h2>
-                                <p className="text-[10px] font-bold text-orange-500 uppercase tracking-widest mt-1">
-                                    {heldSerials.length} Items in Possession
-                                </p>
-                            </div>
+
+                {/* Right: Scanned List */}
+                <div className="bg-white rounded-[48px] shadow-sm border border-gray-100 flex flex-col min-h-[600px] overflow-hidden">
+                    <div className="px-10 py-8 border-b border-gray-50 flex justify-between items-center bg-[#F8F9FC]/50">
+                        <div className="flex flex-col gap-1">
+                            <h2 className="text-sm font-black text-[#1A1C21] uppercase tracking-[0.2em] italic">Return Manifest</h2>
+                            <p className="text-[10px] font-bold text-orange-500 uppercase tracking-widest italic">{selectedEngineer?.name} | {heldSerials.length} Held</p>
                         </div>
 
-                        {/* Visual Scanner HUD */}
-                        <div className="relative group rounded-[40px] overflow-hidden shadow-2xl bg-black border-[12px] border-white ring-1 ring-gray-100 group">
-                            <div className="aspect-video w-full bg-slate-900 flex items-center justify-center relative overflow-hidden">
-                                {/* Laser line */}
-                                <div className="absolute inset-0 z-10 flex items-center justify-center">
-                                    <div className="w-4/5 h-[3px] bg-orange-500 shadow-[0_0_30px_rgba(249,115,22,1)] animate-scan-line" />
-                                </div>
-                                
-                                <div className="text-center space-y-4 z-20">
-                                    <div className="w-20 h-20 bg-orange-500/20 rounded-full flex items-center justify-center mx-auto border border-orange-500/30 animate-pulse">
-                                        <Scan className="w-10 h-10 text-orange-500" />
-                                    </div>
-
-                                </div>
-
-                                {/* In-scanner progress */}
-
-                            </div>
-
+                        <div className="relative w-64 group">
                             <input
                                 ref={scanRef}
-                                className="absolute inset-0 opacity-0 cursor-default"
+                                placeholder="SCAN BARCODE TO RETURN..."
+                                className="w-full h-12 bg-white border border-gray-200 rounded-xl px-10 text-[10px] font-black italic outline-none focus:border-orange-500 transition-all placeholder:text-gray-300"
                                 onBlur={() => {
                                     if (scanActive && !duplicateError) {
-                                        console.log("[SCANNER] Return Blur - Refocusing...");
                                         setTimeout(() => scanRef.current?.focus(), 10);
                                     }
                                 }}
-                                onChange={(e) => {
-                                    console.log("[SCANNER] Input Typing (Return):", e.target.value);
-                                }}
                                 onKeyDown={(e) => {
-                                    console.log("[SCANNER] Key Pressed (Return):", e.key);
                                     if (e.key === 'Enter') {
                                         handleScan((e.target as HTMLInputElement).value.trim());
                                         (e.target as HTMLInputElement).value = '';
-                                        // Force refocus after scan
-                                        setTimeout(() => scanRef.current?.focus(), 50);
                                     }
                                 }}
                             />
-                        </div>
-
-                        <div className="bg-[#1A1C21] p-8 rounded-[40px] text-white space-y-6 shadow-2xl">
-                            <h3 className="text-xs font-black uppercase tracking-widest italic text-white/40">Reference Manual</h3>
-                            <div className="space-y-4">
-                                <div className="flex items-center gap-4 text-sm font-bold opacity-80 border-b border-white/5 pb-4">
-                                    <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-[10px] font-black tracking-widest">01</div>
-                                    <p>Only barcodes issued to this engineer will be accepted.</p>
-                                </div>
-                                <div className="flex items-center gap-4 text-sm font-bold opacity-80">
-                                    <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-[10px] font-black tracking-widest">02</div>
-                                    <p>Mark items as &apos;Consumed&apos; if they cannot be returned to stock.</p>
-                                </div>
-                            </div>
+                            <Scan className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 group-focus-within:text-orange-500 transition-colors" />
                         </div>
                     </div>
 
-                    {/* Right: Scanned List */}
-                    <div className="lg:col-span-12 xl:col-span-7 bg-white rounded-[48px] shadow-sm border border-gray-100 flex flex-col min-h-[600px] overflow-hidden">
-                        <div className="px-10 py-8 border-b border-gray-50 flex justify-between items-center bg-[#F8F9FC]/50">
-                            <h2 className="text-sm font-black text-[#1A1C21] uppercase tracking-[0.2em] italic">Return Manifest</h2>
+                    <div className="flex-1 overflow-x-auto">
+                        <table className="w-full border-collapse">
+                            <thead>
+                                <tr className="bg-gray-50 border-b border-gray-100">
+                                    <th className="px-10 py-5 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest italic w-[50%]">Item Identity</th>
+                                    <th className="px-6 py-5 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest italic w-[30%]">Lifecycle Status</th>
+                                    <th className="px-10 py-5 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest italic w-[20%]">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                                {scannedItems.map((item, idx) => (
+                                    <tr key={idx} className="hover:bg-gray-50/50 transition-all group">
+                                        <td className="px-10 py-6">
+                                            <div className="space-y-1">
+                                                <p className="text-lg font-black text-[#1A1C21] italic truncate">{item.name}</p>
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                                    {item.category} | SERIAL: {item.serial}
+                                                </p>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-6 text-center">
+                                            <button
+                                                onClick={() => toggleConsumed(item.serial)}
+                                                className={cn(
+                                                    "px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border-2",
+                                                    item.isConsumed
+                                                        ? "bg-red-50 text-red-600 border-red-100 shadow-sm"
+                                                        : "bg-emerald-50 text-emerald-600 border-emerald-100 shadow-sm"
+                                                )}
+                                            >
+                                                {item.isConsumed ? 'Consumed (In Ticket)' : 'Ready for Store'}
+                                            </button>
+                                        </td>
+                                        <td className="px-10 py-6 text-right">
+                                            <button
+                                                onClick={() => removeRow(item.serial)}
+                                                className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
 
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto custom-scrollbar">
-                            {scannedItems.length > 0 ? (
-                                <table className="w-full text-left">
-                                    <thead className="sticky top-0 bg-white z-10">
-                                        <tr className="border-b border-gray-50">
-                                            <th className="px-10 py-6 text-[10px] font-black text-gray-300 uppercase tracking-widest italic">Item Identification</th>
-                                            <th className="px-6 py-6 text-[10px] font-black text-gray-300 uppercase tracking-widest italic text-center">Status</th>
-                                            <th className="px-10 py-6 text-[10px] font-black text-gray-300 uppercase tracking-widest italic text-right">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-50">
-                                        {scannedItems.map((item, idx) => (
-                                            <tr key={idx} className="hover:bg-gray-50/50 transition-colors group">
-                                                <td className="px-10 py-8">
-                                                    <div className="flex items-center gap-6">
-                                                        <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-gray-300 group-hover:bg-white transition-colors border border-transparent group-hover:border-gray-100">
-                                                            <Barcode className="w-6 h-6" />
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-lg font-black text-[#1A1C21] italic">{item.name}</p>
-                                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Serial: {item.serial}</p>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-8 text-center">
-                                                    <button 
-                                                        onClick={() => toggleConsumed(item.serial)}
-                                                        className={cn(
-                                                            "px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all scale-95 group-hover:scale-100",
-                                                            item.isConsumed 
-                                                                ? "bg-red-50 text-red-600 border border-red-100" 
-                                                                : "bg-green-50 text-green-600 border border-green-100"
-                                                        )}
-                                                    >
-                                                        {item.isConsumed ? 'Consumed' : 'Ready to Restock'}
-                                                    </button>
-                                                </td>
-                                                <td className="px-10 py-8 text-right">
-                                                    <button 
-                                                        onClick={() => removeRow(item.serial)}
-                                                        className="p-4 bg-gray-50 text-gray-300 rounded-2xl hover:bg-red-50 hover:text-red-500 transition-all"
-                                                    >
-                                                        <Trash2 className="w-5 h-5" />
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            ) : (
-                                <div className="h-full flex flex-col items-center justify-center py-20 opacity-20 italic">
-                                    <Package className="w-24 h-24 mb-6" />
-                                    <p className="text-sm font-black uppercase tracking-[0.5em]">Waiting for Scans</p>
-                                    <p className="text-[10px] font-bold mt-2">Ready to verify possession...</p>
-                                </div>
-                            )}
-                        </div>
+                                {scannedItems.length === 0 && (
+                                    <tr>
+                                        <td colSpan={3} className="py-32 text-center opacity-20">
+                                            <Package className="w-20 h-20 mx-auto mb-4" />
+                                            <p className="text-sm font-black uppercase tracking-[0.5em] italic">Waiting for Scans</p>
+                                            <p className="text-[9px] font-bold mt-2">READY TO VERIFY POSSESSION...</p>
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -321,7 +267,7 @@ function EngineerReturnContent() {
                             <p className="text-red-500 font-bold bg-red-50 px-6 py-2 rounded-xl inline-block text-xs tracking-widest uppercase">{duplicateError.split(':')[0]}</p>
                             <p className="text-gray-400 font-black text-sm tracking-wider block mt-4">{duplicateError.split(':')[1]}</p>
                         </div>
-                        <Button 
+                        <Button
                             onClick={() => setDuplicateError(null)}
                             className="w-full h-16 bg-[#1A1C21] text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:scale-[1.02] transition-all"
                         >

@@ -73,7 +73,7 @@ function SidePanel({
 export default function InventoryPage() {
    const { inventory, transactions, engineers, returnAsset, deleteItems, adjustItem } = useData()
    const [selectedIds, setSelectedIds] = useState<string[]>([])
-   const [viewMode, setViewMode] = useState<'stock' | 'outside_purchase'>('stock')
+   const [viewMode, setViewMode] = useState<'STOCK' | 'ISSUED' | 'RETURNED'>('STOCK')
    const [filters, setFilters] = useState({
       search: '',
       category: 'All Divisions',
@@ -87,6 +87,11 @@ export default function InventoryPage() {
    const [isItemModalOpen, setIsItemModalOpen] = useState(false)
    const [editingItem, setEditingItem] = useState<unknown>(null)
    const [exportMenuOpen, setExportMenuOpen] = useState<'top' | 'mobile' | 'bulk' | null>(null)
+   const [mounted, setMounted] = useState(false)
+
+   useEffect(() => {
+       setMounted(true)
+   }, [])
 
    useEffect(() => {
       const onScan = (e: Event) => {
@@ -180,19 +185,28 @@ export default function InventoryPage() {
 
    const filteredTransactions = useMemo(() => {
       return transactions.filter(t => {
-         if (viewMode === 'outside_purchase' && t.source !== 'OUTSIDE_PURCHASE') return false;
+         // View Mode Filtering
+         if (viewMode === 'ISSUED') {
+            if (t.type !== 'OUTWARD' || t.source !== 'STORE_ISSUE') return false;
+         } else if (viewMode === 'RETURNED') {
+            if (t.type !== 'INWARD' || t.source !== 'RETURN') return false;
+         } else {
+            // Default: Stock or legacy
+            return false;
+         }
 
          const matchSearch = (t.item_id || '').toLowerCase().includes(filters.search.toLowerCase()) ||
             (t.reference || '').toLowerCase().includes(filters.search.toLowerCase()) ||
             (t.ticket_id || '').toLowerCase().includes(filters.search.toLowerCase()) ||
-            (t.serial || '').toLowerCase().includes(filters.search.toLowerCase())
+            (t.serial || '').toLowerCase().includes(filters.search.toLowerCase()) ||
+            (inventory.find(i => i.id === t.item_id)?.name || '').toLowerCase().includes(filters.search.toLowerCase())
 
          const matchSource = filters.source === 'All Sources' || t.source === filters.source
          const matchWarehouse = filters.warehouse === 'All Warehouses' || t.warehouse_id === filters.warehouse
 
          return matchSearch && matchSource && matchWarehouse
       })
-   }, [transactions, filters, viewMode])
+   }, [transactions, filters, viewMode, inventory])
 
    const stats = useMemo(() => {
       const totalItems = inventory.length
@@ -239,6 +253,8 @@ export default function InventoryPage() {
       return ['All Divisions', ...cats]
    }, [inventory])
 
+   if (!mounted) return null;
+
    return (
       <div className="space-y-6 pb-24 animate-in fade-in duration-500 text-text-main">
          {/* TOP HEADER BAR */}
@@ -251,6 +267,36 @@ export default function InventoryPage() {
 
             {/* Action Row - Fixed for zero-clipping scroll */}
             <div className="w-full lg:w-auto flex items-center gap-3 overflow-x-auto pb-2 lg:pb-0 custom-scrollbar-hide snap-x -mr-6 sm:mr-0 px-2 sm:px-0">
+               <div className="flex bg-gray-50 p-1 rounded-2xl border-2 border-gray-100 flex-shrink-0 snap-start">
+                  <button
+                     onClick={() => setViewMode('STOCK')}
+                     className={cn(
+                        "px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest italic transition-all",
+                        viewMode === 'STOCK' ? "bg-white text-primary shadow-sm" : "text-gray-400 hover:text-gray-600"
+                     )}
+                  >
+                     Stock
+                  </button>
+                  <button
+                     onClick={() => setViewMode('ISSUED')}
+                     className={cn(
+                        "px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest italic transition-all",
+                        viewMode === 'ISSUED' ? "bg-white text-primary shadow-sm" : "text-gray-400 hover:text-gray-600"
+                     )}
+                  >
+                     Issued
+                  </button>
+                  <button
+                     onClick={() => setViewMode('RETURNED')}
+                     className={cn(
+                        "px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest italic transition-all",
+                        viewMode === 'RETURNED' ? "bg-white text-primary shadow-sm" : "text-gray-400 hover:text-gray-600"
+                     )}
+                  >
+                     Returned
+                  </button>
+               </div>
+
                <Button
                   variant="secondary"
                   className="flex-shrink-0 h-10 lg:h-12 px-3 sm:px-5 rounded-xl sm:rounded-2xl font-black text-[8px] sm:text-[10px] tracking-widest uppercase italic bg-white border-2 border-gray-100 hover:bg-gray-50 flex items-center justify-center gap-2 sm:gap-3 snap-start"
@@ -296,27 +342,6 @@ export default function InventoryPage() {
             onClose={() => setIsOPModalOpen(false)}
          />
 
-         {/* VIEW MODE TOGGLE */}
-         <div className="flex bg-gray-100 p-1 rounded-2xl w-fit">
-            <button
-               onClick={() => setViewMode('stock')}
-               className={cn(
-                  "px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest italic transition-all",
-                  viewMode === 'stock' ? "bg-white text-primary shadow-sm" : "text-gray-400 hover:text-gray-600"
-               )}
-            >
-               Stock Balance
-            </button>
-            <button
-               onClick={() => setViewMode('outside_purchase')}
-               className={cn(
-                  "px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest italic transition-all",
-                  viewMode === 'outside_purchase' ? "bg-white text-primary shadow-sm" : "text-gray-400 hover:text-gray-600"
-               )}
-            >
-               Outside Purchase
-            </button>
-         </div>
 
          {/* Section 2: KPI Grid */}
          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
@@ -439,13 +464,13 @@ export default function InventoryPage() {
 
          {/* DATA TABLE */}
          <div className="bg-white rounded-3xl border border-border-main flex flex-col overflow-hidden shadow-sm">
-            {viewMode === 'stock' ? (
+            {viewMode === 'STOCK' ? (
                filteredItems.length > 0 ? (
                   <div className="overflow-x-auto min-h-[500px]">
                      <table className="w-full text-left">
                         <thead>
                            <tr className="bg-gray-50/50 border-b border-gray-100">
-                              <th className="px-8 py-5 w-10">
+                              <th className="px-8 py-5">
                                  <input
                                     type="checkbox"
                                     checked={selectedIds.length === filteredItems.length && filteredItems.length > 0}
@@ -543,45 +568,41 @@ export default function InventoryPage() {
                   </div>
                )
             ) : (
-               /* OUTSIDE PURCHASE VIEW */
+               /* ISSUED / RETURNED VIEW (TRANSACTIONAL) */
                filteredTransactions.length > 0 ? (
                   <div className="overflow-x-auto min-h-[500px]">
                      <table className="w-full text-left">
                         <thead>
                            <tr className="bg-gray-50/50 border-b border-gray-100">
-                              <th className="px-8 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic">Date</th>
-                              <th className="px-6 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic">Item / Descr.</th>
+                              <th className="px-8 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic">Item Name</th>
                               <th className="px-6 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic text-center">Qty</th>
-                              <th className="px-6 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic">Ticket / Ref</th>
-                              <th className="px-6 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic text-right">Cost</th>
-                              <th className="px-8 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic text-right">Status</th>
+                              <th className="px-6 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic">Engineer</th>
+                              <th className="px-6 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic">Ticket ID</th>
+                              <th className="px-8 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic text-right">Date</th>
                            </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                            {filteredTransactions.map((txn) => (
                               <tr key={txn.id} className="group hover:bg-gray-50/20 transition-all cursor-default">
-                                 <td className="px-8 py-6">
-                                    <p className="text-sm font-black text-gray-400 uppercase tracking-widest italic">{txn.date}</p>
-                                 </td>
-                                 <td className="px-6 py-6 font-bold text-text-main">
+                                 <td className="px-8 py-6 font-bold text-text-main">
                                     <p className="font-bold text-[#003366] italic tracking-tight uppercase leading-none">
                                        {inventory.find(i => i.id === txn.item_id)?.name || txn.item_id}
                                     </p>
-                                    <p className="text-[10px] font-mono font-black text-gray-300 uppercase tracking-widest mt-1.5">{txn.serial || 'EXTERNAL'}</p>
+                                    <p className="text-[10px] font-mono font-black text-gray-300 uppercase tracking-widest mt-1.5">{txn.serial || 'BULK'}</p>
                                  </td>
                                  <td className="px-6 py-6 text-center font-black italic tabular-nums text-sm">
                                     {txn.quantity}
                                  </td>
                                  <td className="px-6 py-6">
-                                    <p className="text-sm font-black text-primary uppercase tracking-tighter italic">{txn.ticket_id || txn.reference || '-'}</p>
+                                    <p className="text-sm font-black text-gray-400 uppercase tracking-widest italic">
+                                       {engineers.find(e => e.id === txn.engineer_id)?.name || txn.engineer_id || 'N/A'}
+                                    </p>
                                  </td>
-                                 <td className="px-6 py-6 text-right font-black italic text-sm text-[#003366] tabular-nums tracking-tighter">
-                                    ₹{(txn.cost || 0).toLocaleString('en-IN')}
+                                 <td className="px-6 py-6">
+                                    <p className="text-sm font-black text-primary uppercase tracking-tighter italic">{txn.ticket_id || '-'}</p>
                                  </td>
                                  <td className="px-8 py-6 text-right">
-                                    <span className="italic font-black text-[10px] tracking-tighter uppercase px-2 py-0.5 rounded border bg-orange-50 text-orange-600 border-orange-100">
-                                       CONSUMED
-                                    </span>
+                                    <p className="text-sm font-black text-gray-400 uppercase tracking-widest italic">{txn.date}</p>
                                  </td>
                               </tr>
                            ))}
@@ -591,8 +612,8 @@ export default function InventoryPage() {
                ) : (
                   <div className="flex flex-col items-center justify-center py-32 px-4 text-center">
                      <Archive className="w-12 h-12 text-gray-200 mb-4" />
-                     <h3 className="text-xl font-black text-[#003366] italic tracking-tight uppercase mb-2">No outside purchases recorded</h3>
-                     <p className="text-sm text-gray-400 font-bold italic">Link your external costs to tickets to see them here.</p>
+                     <h3 className="text-xl font-black text-[#003366] italic tracking-tight uppercase mb-2">No records found</h3>
+                     <p className="text-sm text-gray-400 font-bold italic">No {viewMode.toLowerCase()} items found for the selected filters.</p>
                   </div>
                )
             )}

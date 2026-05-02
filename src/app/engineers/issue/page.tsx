@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/Button'
 import { useData, InventoryItem } from '@/lib/context/DataContext'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { EntityLookup } from '@/components/shared/EntityLookup'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 // UI Enhancement Sounds
@@ -40,6 +41,7 @@ interface IssueLine {
     id: string
     productId: string
     name: string
+    category: string
     qty: number
     model: string
     brand: string
@@ -54,11 +56,43 @@ function EngineerIssueContent() {
     const searchParams = useSearchParams()
     
     const [selectedEngineerId, setSelectedEngineerId] = useState(searchParams.get('id') || '')
+    const [ticketId, setTicketId] = useState('')
+    const [customerName, setCustomerName] = useState('')
     const [lines, setLines] = useState<IssueLine[]>([])
     
+    const { tickets, getAvailableStock, transactions } = useData()
+
+    // Step 2: Bidirectional Auto-fetch
+    useEffect(() => {
+        if (ticketId) {
+            // 1. Get Customer from Master Ticket
+            const t = tickets.find(x => x.id === ticketId);
+            if (t) {
+                setCustomerName(t.customer_name || '');
+            }
+
+            // 2. Try to find Engineer from existing transactions for this ticket
+            const existingTxn = transactions.find(tx => (tx.ticket_id === ticketId || tx.reference === ticketId) && tx.engineer_id && tx.engineer_id !== 'N/A');
+            if (existingTxn && !selectedEngineerId) {
+                setSelectedEngineerId(existingTxn.engineer_id || '');
+            }
+        }
+    }, [ticketId, tickets, transactions, selectedEngineerId]);
+
+    // Reverse: Engineer -> Last Ticket
+    useEffect(() => {
+        if (selectedEngineerId && !ticketId) {
+            const lastTicketTxn = [...transactions].reverse().find(tx => tx.engineer_id === selectedEngineerId && (tx.ticket_id || tx.reference));
+            if (lastTicketTxn) {
+                setTicketId(lastTicketTxn.ticket_id || lastTicketTxn.reference || '');
+            }
+        }
+    }, [selectedEngineerId, transactions, ticketId]);
+
     const [pendingRow, setPendingRow] = useState<{
         item: InventoryItem | null,
         name: string,
+        category: string,
         qty: number,
         isSerialized: boolean,
         model: string,
@@ -83,6 +117,7 @@ function EngineerIssueContent() {
     }, [scanSession]);
 
     const finalizeIssue = useCallback(async () => {
+        if (!ticketId) return toast.error("Ticket No is required");
         if (!selectedEngineerId) return toast.error("Select an engineer first");
         if (lines.length === 0) return toast.error("No items to issue");
         
@@ -93,14 +128,17 @@ function EngineerIssueContent() {
         }
 
         try {
-            await toast.promise(issueToEngineer(selectedEngineerId, lines), {
+            await toast.promise(issueToEngineer(selectedEngineerId, lines, { 
+                ticket_id: ticketId, 
+                customer_name: customerName 
+            }), {
                 loading: 'Recording Outward Movement...',
                 success: 'OUTWARD COMMITTED: Inventory Assigned',
                 error: (err: Error) => err.message || 'Issuance Failed'
             });
             router.push('/engineers');
         } catch (e) {}
-    }, [selectedEngineerId, lines, issueToEngineer, router]);
+    }, [selectedEngineerId, ticketId, customerName, lines, issueToEngineer, router]);
 
     const scanRef = useRef<HTMLInputElement>(null);
 
@@ -142,7 +180,7 @@ function EngineerIssueContent() {
     }, [scanSession, lines, selectedEngineerId, removeLastSerial, finalizeIssue])
 
     const startAdding = () => {
-        setPendingRow({ item: null, name: '', qty: 1, isSerialized: false, model: 'N/A', brand: 'N/A' })
+        setPendingRow({ item: null, name: '', category: '', qty: 1, isSerialized: false, model: 'N/A', brand: 'N/A' })
     }
 
     const triggerScan = useCallback((lineId: string, customLines?: IssueLine[]) => {
@@ -162,10 +200,21 @@ function EngineerIssueContent() {
     const commitLine = useCallback((autoScan = false) => {
         if (!pendingRow || !pendingRow.name || pendingRow.qty <= 0) return;
         
+        // Step 5: Stock Validation
+        if (pendingRow.item) {
+            const available = getAvailableStock(pendingRow.item.id).length;
+            if (pendingRow.qty > available) {
+                playError();
+                toast.error(`NOT ENOUGH STOCK: ${pendingRow.name} (Available: ${available})`);
+                return;
+            }
+        }
+
         const newLine: IssueLine = {
-            id: `issue_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            id: Date.now().toString(),
             productId: pendingRow.item?.id || 'MANUAL_ENTRY',
-            name: pendingRow.name,
+            name: pendingRow.item?.name || pendingRow.name,
+            category: pendingRow.item?.category || pendingRow.category,
             brand: pendingRow.item?.brand || pendingRow.brand || 'N/A',
             model: pendingRow.item?.model || pendingRow.model || 'N/A',
             qty: pendingRow.qty,
@@ -182,7 +231,7 @@ function EngineerIssueContent() {
         if (autoScan && newLine.isSerialized) {
             setTimeout(() => triggerScan(newLine.id, updatedLines), 10);
         }
-    }, [pendingRow, lines, triggerScan]);
+    }, [pendingRow, lines, triggerScan, getAvailableStock]);
 
     const handleSessionScan = (barcode: string) => {
         if (!scanSession || !barcode) return;
@@ -263,17 +312,37 @@ function EngineerIssueContent() {
                     </div>
                 </div>
 
-                {/* Engineer Selection */}
-                <div className="bg-white p-6 sm:p-10 rounded-[40px] shadow-sm border border-gray-100 flex flex-col sm:flex-row items-center gap-8">
-                    <div className="w-20 h-20 bg-primary/10 rounded-3xl flex items-center justify-center text-primary border-2 border-primary/5">
-                        <User className="w-10 h-10" />
+                {/* Header Fields - Step 1 */}
+                <div className="bg-white p-6 sm:p-10 rounded-[40px] shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="space-y-3">
+                        <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest italic ml-1">Ticket Reference <span className="text-red-500">*</span></label>
+                        <EntityLookup
+                            type="ticket"
+                            value={ticketId}
+                            onChange={setTicketId}
+                            onSelect={(t) => setTicketId(t.id)}
+                            placeholder="SEARCH TICKET..."
+                            className="h-14 bg-gray-50 border-none rounded-2xl px-6 font-black italic text-blue-900"
+                        />
                     </div>
-                    <div className="flex-1 space-y-4 w-full">
-                        <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest italic">Assigning To Engineer</label>
+                    <div className="space-y-3">
+                        <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest italic ml-1">Customer / Project</label>
+                        <EntityLookup
+                            type="contact"
+                            contactFilter="CLIENT"
+                            value={customerName}
+                            onChange={setCustomerName}
+                            onSelect={(c) => setCustomerName(c.name)}
+                            placeholder="CUSTOMER NAME..."
+                            className="h-14 bg-gray-50 border-none rounded-2xl px-6 font-black italic text-gray-600"
+                        />
+                    </div>
+                    <div className="space-y-3">
+                        <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest italic ml-1">Assigning To Engineer <span className="text-red-500">*</span></label>
                         <select
                             value={selectedEngineerId}
                             onChange={(e) => setSelectedEngineerId(e.target.value)}
-                            className="w-full h-16 bg-gray-50 border-2 border-transparent focus:border-primary px-6 rounded-2xl text-xl font-black italic text-[#1A1C21] outline-none transition-all appearance-none"
+                            className="w-full h-14 bg-gray-50 border-none rounded-2xl px-6 font-black italic text-emerald-900 outline-none appearance-none"
                         >
                             <option value="">Select Personnel...</option>
                             {engineers.map(e => (
@@ -297,116 +366,115 @@ function EngineerIssueContent() {
                         </button>
                     </div>
 
-                    <div className="divide-y divide-gray-50">
-                        {lines.map((l) => (
-                            <div key={l.id} className="flex flex-col lg:grid lg:grid-cols-12 px-6 sm:px-10 py-8 lg:items-center hover:bg-gray-50/50 transition-all group gap-6 border-b border-gray-50 last:border-none">
-                                <div className="col-span-12 lg:col-span-5 flex flex-col justify-center min-w-0">
-                                    <div className="space-y-1">
-                                        <p className="text-xl font-black text-[#1A1C21] italic truncate break-words whitespace-normal">{l.name}</p>
-                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{l.brand} | {l.model}</p>
-                                    </div>
-                                    {l.isSerialized && l.serials.length > 0 && (
-                                        <div className="mt-4 max-w-full overflow-x-auto pb-2 custom-scrollbar">
-                                            <div className="flex gap-2 min-w-0">
-                                                {l.serials.map((s, idx) => (
-                                                    <div key={idx} className="bg-primary/5 px-3 py-1.5 rounded-lg border border-primary/10 flex items-center gap-2 flex-shrink-0">
-                                                        <Barcode className="w-3 h-3 text-primary" />
-                                                        <span className="text-[10px] font-black text-primary tracking-wider">{s}</span>
-                                                    </div>
-                                                ))}
+                    <div className="overflow-x-auto">
+                        <table className="w-full border-collapse">
+                            <thead>
+                                <tr className="bg-gray-50 border-b border-gray-100">
+                                    <th className="px-10 py-5 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest italic w-[45%]">Item Identity</th>
+                                    <th className="px-6 py-5 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest italic w-[15%]">Qty</th>
+                                    <th className="px-6 py-5 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest italic w-[25%]">Status / Scans</th>
+                                    <th className="px-10 py-5 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest italic w-[15%]">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                                {lines.map((l) => (
+                                    <tr key={l.id} className="hover:bg-gray-50/50 transition-all group">
+                                        <td className="px-10 py-6">
+                                            <div className="space-y-1">
+                                                <p className="text-lg font-black text-[#1A1C21] italic truncate">{l.name}</p>
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{l.category} | {l.brand} | {l.model}</p>
                                             </div>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="col-span-12 lg:col-span-2 text-center flex items-center justify-between lg:block">
-                                    <label className="lg:hidden text-[9px] font-bold text-gray-400 uppercase tracking-widest">Qty</label>
-                                    <input
-                                        type="number"
-                                        value={l.qty}
-                                        onChange={(e) => setLines(prev => prev.map(item => item.id === l.id ? { ...item, qty: parseInt(e.target.value) || 0 } : item))}
-                                        className="qty-input w-24 bg-transparent text-center text-2xl font-black text-[#1A1C21] outline-none"
-                                    />
-                                </div>
-
-                                <div className="col-span-12 lg:col-span-3 flex flex-col items-center justify-center gap-2 pt-4 lg:pt-0 border-t lg:border-none">
-                                    {l.isSerialized ? (
-                                        <>
-                                            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                                <div className="h-full bg-primary transition-all duration-300" style={{ width: `${(l.serials.length / l.qty) * 100}%` }} />
-                                            </div>
-                                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest italic">{l.serials.length} / {l.qty} Scanned</span>
-                                        </>
-                                    ) : (
-                                        <span className="text-[10px] font-black text-green-500 uppercase tracking-widest italic flex items-center gap-2">
-                                            <CheckCircle2 className="w-4 h-4" /> Ready for issue
-                                        </span>
-                                    )}
-                                </div>
-
-                                <div className="col-span-12 lg:col-span-2 flex justify-end gap-3 pt-4 lg:pt-0 border-t lg:border-none">
-                                    {l.isSerialized && l.serials.length < l.qty && (
-                                        <button onClick={() => triggerScan(l.id)} className="p-3 bg-primary/10 text-primary rounded-xl hover:bg-primary hover:text-white transition-all shadow-sm">
-                                            <Scan className="w-5 h-5" />
-                                        </button>
-                                    )}
-                                    <button onClick={() => setLines(lines.filter(item => item.id !== l.id))} className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all shadow-sm">
-                                        <Trash2 className="w-5 h-5" />
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-
-                        {pendingRow && (
-                            <div className="p-6 sm:p-10 bg-primary/5 animate-in slide-in-from-bottom-2 duration-300">
-                                <div className="flex flex-col lg:grid lg:grid-cols-12 gap-8 items-end">
-                                    <div className="w-full col-span-12 lg:col-span-6 space-y-4">
-                                        <label className="text-[10px] font-black text-primary uppercase tracking-widest italic">Inventory Search</label>
-                                        <div className="relative">
+                                            {l.isSerialized && l.serials.length > 0 && (
+                                                <div className="mt-3 flex flex-wrap gap-2">
+                                                    {l.serials.map((s, idx) => (
+                                                        <div key={idx} className="bg-primary/5 px-2 py-1 rounded-md border border-primary/10 flex items-center gap-1.5">
+                                                            <Barcode className="w-2.5 h-2.5 text-primary" />
+                                                            <span className="text-[9px] font-black text-primary tracking-wider">{s}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-6 text-center">
                                             <input
-                                                value={pendingRow.name}
-                                                onChange={(e) => setPendingRow({ ...pendingRow, name: e.target.value })}
-                                                onKeyDown={(e) => e.key === 'Enter' && commitLine(true)}
-                                                placeholder="Search item..."
-                                                className="w-full h-16 bg-white border-2 border-primary/20 rounded-2xl px-6 font-black italic outline-none focus:border-primary text-lg"
+                                                type="number"
+                                                value={l.qty}
+                                                onChange={(e) => setLines(prev => prev.map(item => item.id === l.id ? { ...item, qty: parseInt(e.target.value) || 0 } : item))}
+                                                className="w-16 bg-transparent text-center text-xl font-black text-[#1A1C21] outline-none"
                                             />
-                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 bg-gray-50 p-2 rounded-xl">
-                                                <Package className="w-5 h-5 text-gray-300" />
+                                        </td>
+                                        <td className="px-6 py-6">
+                                            <div className="flex flex-col items-center gap-2">
+                                                {l.isSerialized ? (
+                                                    <>
+                                                        <div className="w-24 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                                            <div className="h-full bg-primary transition-all duration-300" style={{ width: `${(l.serials.length / l.qty) * 100}%` }} />
+                                                        </div>
+                                                        <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest italic">{l.serials.length} / {l.qty} Scanned</span>
+                                                    </>
+                                                ) : (
+                                                    <span className="text-[10px] font-black text-green-500 uppercase tracking-widest italic flex items-center gap-2">
+                                                        <CheckCircle2 className="w-3.5 h-3.5" /> Ready
+                                                    </span>
+                                                )}
                                             </div>
-                                        </div>
-                                    </div>
-                                    <div className="w-full sm:col-span-6 lg:col-span-2 space-y-4">
-                                        <label className="text-[10px] font-black text-primary uppercase tracking-widest italic text-center block">Serialization</label>
-                                        <button
-                                            onClick={() => setPendingRow({...pendingRow, isSerialized: !pendingRow.isSerialized})}
-                                            className={cn("w-full h-16 rounded-2xl font-black text-xs uppercase transition-all border-2", pendingRow.isSerialized ? "bg-primary text-white border-primary" : "bg-white text-gray-300 border-gray-100")}
-                                        >
-                                            {pendingRow.isSerialized ? 'Serialized' : 'Bulk'}
-                                        </button>
-                                    </div>
-                                    <div className="w-full sm:col-span-6 lg:col-span-2 space-y-4">
-                                        <label className="text-[10px] font-black text-primary uppercase tracking-widest italic text-center block">Qty</label>
-                                        <input
-                                            type="number"
-                                            value={pendingRow.qty}
-                                            onChange={(e) => setPendingRow({...pendingRow, qty: parseInt(e.target.value) || 0})}
-                                            className="qty-input w-full h-16 bg-white border-2 border-primary/20 rounded-2xl text-center text-2xl font-black outline-none"
-                                        />
-                                    </div>
-                                    <div className="w-full col-span-12 lg:col-span-2 flex gap-2 pt-4 lg:pt-0">
-                                        <button onClick={() => setPendingRow(null)} className="h-16 w-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center hover:bg-red-100 transition-all border border-red-100"><X className="w-6 h-6" /></button>
-                                        <button onClick={() => commitLine(true)} className="h-16 flex-1 bg-primary text-white rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20 hover:scale-105 transition-all"><CheckCircle2 className="w-6 h-6" /></button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                        
-                        {lines.length === 0 && !pendingRow && (
-                            <div className="py-32 text-center opacity-20">
-                                <Package className="w-20 h-20 mx-auto mb-4" />
-                                <p className="text-sm font-black uppercase tracking-[0.5em] italic">Manifest Empty</p>
-                            </div>
-                        )}
+                                        </td>
+                                        <td className="px-10 py-6 text-right">
+                                            <div className="flex justify-end gap-2">
+                                                {l.isSerialized && l.serials.length < l.qty && (
+                                                    <button onClick={() => triggerScan(l.id)} className="p-2.5 bg-primary/10 text-primary rounded-xl hover:bg-primary hover:text-white transition-all shadow-sm">
+                                                        <Scan className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                                <button onClick={() => setLines(lines.filter(item => item.id !== l.id))} className="p-2.5 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all shadow-sm">
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+
+                                {pendingRow && (
+                                    <tr className="bg-primary/[0.02] border-2 border-primary/20 animate-in slide-in-from-bottom-2 duration-300">
+                                        <td className="px-10 py-8">
+                                            <EntityLookup
+                                                type="item"
+                                                value={pendingRow.name}
+                                                onChange={(val) => setPendingRow({ ...pendingRow, name: val })}
+                                                onSelect={(item) => setPendingRow({ 
+                                                    ...pendingRow, 
+                                                    item,
+                                                    name: item.name, 
+                                                    category: item.category,
+                                                    isSerialized: !!item.is_serialized,
+                                                    brand: item.brand,
+                                                    model: item.model
+                                                })}
+                                                placeholder="SEARCH ITEM TO ISSUE..."
+                                                className="w-full h-14 bg-white border border-gray-100 rounded-2xl px-6 font-black italic outline-none focus:border-primary text-base shadow-sm"
+                                            />
+                                        </td>
+                                        <td className="px-6 py-8 text-center">
+                                            <input
+                                                type="number"
+                                                value={pendingRow.qty}
+                                                onChange={(e) => setPendingRow({...pendingRow, qty: parseInt(e.target.value) || 0})}
+                                                className="w-20 h-14 bg-white border border-gray-100 rounded-2xl text-center text-xl font-black outline-none shadow-sm focus:border-primary"
+                                            />
+                                        </td>
+                                        <td className="px-6 py-8 text-center text-[10px] font-black text-gray-300 uppercase tracking-widest italic">
+                                            Pending...
+                                        </td>
+                                        <td className="px-10 py-8 text-right">
+                                            <div className="flex justify-end gap-2">
+                                                <button onClick={() => setPendingRow(null)} className="h-14 w-14 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center hover:bg-red-100 transition-all border border-red-100 shadow-sm"><X className="w-5 h-5" /></button>
+                                                <button onClick={() => commitLine(true)} className="h-14 w-14 bg-primary text-white rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20 hover:scale-105 transition-all"><CheckCircle2 className="w-5 h-5" /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>

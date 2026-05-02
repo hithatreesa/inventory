@@ -27,7 +27,7 @@ export interface Transaction {
   qty?: number       // alias used by some callers
   quantity: number
 
-  source?: "PURCHASE" | "OUTSIDE_PURCHASE"
+  source?: "PURCHASE" | "OUTSIDE_PURCHASE" | "STORE_ISSUE" | "RETURN" | "JOB_USAGE"
   affects_stock?: boolean
 
   engineer_id?: string
@@ -366,7 +366,7 @@ export function validateTransaction(txn: any, ledger: Transaction[] = transactio
   }
 
   // Rule 8: Duplicate Protection
-  if (txn.type === 'INWARD' || txn.type === 'ADJUSTMENT') {
+  if ((txn.type === 'INWARD' || txn.type === 'ADJUSTMENT') && txn.source !== 'RETURN') {
     if (state.serialMap[txn.serial]) {
       throw new Error(`HARD_FAIL: DUPLICATE_SERIAL (${txn.serial})`);
     }

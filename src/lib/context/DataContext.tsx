@@ -362,7 +362,7 @@ interface DataContextType {
   }) => Promise<void>
   processPO: (header: { vendor: string, date: string, reference: string, warehouse: string, invoiceNumber: string }, lines: PurchaseLine[], sundry?: any[]) => Promise<void>
   processInward: (header: { vendor: string, date: string, reference: string, warehouse: string, invoiceNumber: string }, lines: PurchaseLine[], sundry?: any[]) => Promise<void>
-  issueToEngineer: (engineerId: string, lines: IssueLine[]) => Promise<void>
+  issueToEngineer: (engineerId: string, lines: any[], metadata?: { ticket_id?: string, customer_name?: string }) => Promise<void>
   processEngineerReturn: (engineerId: string, lines: any[]) => Promise<void>
   processJournal: (engineerId: string, lines: { serial: string, from_ticket: string, to_ticket: string }[]) => Promise<void>
   processBarcode: (barcode: string) => InventoryItem | undefined
@@ -1303,32 +1303,45 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     await fetchData();
   }
 
-  const issueToEngineer = async (engineerId: string, lines: any[]) => {
+  const issueToEngineer = async (engineerId: string, lines: any[], metadata?: { ticket_id?: string, customer_name?: string }) => {
     if (!lines || lines.length === 0) throw new Error("HARD_FAIL: NO_ITEMS_TO_ISSUE");
 
     for (const line of lines) {
       if (line.isSerialized) {
         line.serials.forEach((serial: string) => {
-          engine.assignItem(serial, engineerId, {
-            reference: "ENGINEER_ISSUE"
-          });
-        });
-      } else {
-        // Bulk issue logic (creates individual units for tracking)
-        for (let i = 0; i < line.qty; i++) {
-          const serial = `BULK-ISSUE-${line.productId}-${Date.now()}-${i}`;
           engine.commitTransaction({
-            type: "ASSIGN",
+            type: "OUTWARD",
+            source: "STORE_ISSUE",
             serial,
             item_id: line.productId,
             quantity: 1,
             engineer_id: engineerId,
-            reference: "ENGINEER_ISSUE"
+            ticket_id: metadata?.ticket_id,
+            customer_name: metadata?.customer_name,
+            affects_stock: true,
+            timestamp: Date.now()
+          });
+        });
+      } else {
+        // Bulk issue logic
+        for (let i = 0; i < line.qty; i++) {
+          const serial = `BULK-ISSUE-${line.productId}-${Date.now()}-${i}`;
+          engine.commitTransaction({
+            type: "OUTWARD",
+            source: "STORE_ISSUE",
+            serial,
+            item_id: line.productId,
+            quantity: 1,
+            engineer_id: engineerId,
+            ticket_id: metadata?.ticket_id,
+            customer_name: metadata?.customer_name,
+            affects_stock: true,
+            timestamp: Date.now()
           });
         }
       }
     }
-    addLog(`ISSUE_TO_ENGINEER: ${engineerId} | Lines: ${lines.length}`);
+    addLog(`ISSUE_TO_ENGINEER: ${engineerId} | Ticket: ${metadata?.ticket_id || 'N/A'} | Lines: ${lines.length}`);
     await fetchData();
   }
 
@@ -1339,29 +1352,56 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (line.isSerialized) {
         line.serials.forEach((serial: string) => {
           if (line.metadata?.isConsumed) {
-            engine.consumeItem(serial, engineerId, {
-              ...line.metadata,
-              notes: "Engineer Consumed"
+            engine.commitTransaction({
+              type: "CONSUMED",
+              source: "JOB_USAGE",
+              serial,
+              item_id: line.productId,
+              engineer_id: engineerId,
+              ticket_id: line.metadata?.reference,
+              affects_stock: false,
+              timestamp: Date.now()
             });
           } else {
-            engine.returnItem(serial, engineerId, {
-              ...line.metadata,
-              notes: "Engineer Return"
+            engine.commitTransaction({
+              type: "INWARD",
+              source: "RETURN",
+              serial,
+              item_id: line.productId,
+              engineer_id: engineerId,
+              quantity: 1,
+              affects_stock: true,
+              timestamp: Date.now()
             });
           }
         });
       } else {
-        // Bulk return
-        engine.executeInwardBulk({
-          productId: line.productId,
-          qty: line.qty,
-          gst: 0,
-          price: 0,
-          source: (line.metadata?.isConsumed ? "ENGINEER_CONSUMED" : "ENGINEER_RETURN") as any
-        });
+        // Bulk return/consume
+        if (line.metadata?.isConsumed) {
+          engine.commitTransaction({
+            type: "CONSUMED",
+            source: "JOB_USAGE",
+            item_id: line.productId,
+            engineer_id: engineerId,
+            quantity: line.qty,
+            ticket_id: line.metadata?.reference,
+            affects_stock: false,
+            timestamp: Date.now()
+          });
+        } else {
+          engine.commitTransaction({
+            type: "INWARD",
+            source: "RETURN",
+            item_id: line.productId,
+            engineer_id: engineerId,
+            quantity: line.qty,
+            affects_stock: true,
+            timestamp: Date.now()
+          });
+        }
       }
     }
-    addLog(`ENGINEER_RETURN: ${engineerId} | Lines: ${lines.length}`);
+    addLog(`ENGINEER_ACTION: ${engineerId} | Lines: ${lines.length}`);
     await fetchData();
   }
   const createTransaction = async () => { }

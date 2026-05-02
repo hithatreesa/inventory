@@ -240,6 +240,18 @@ export default function EngineerPage() {
             </div>
             <button 
               disabled={!selectedEngineerId}
+              onClick={() => router.push('/engineers/return')}
+              className={cn(
+                "px-8 h-12 rounded-2xl flex items-center gap-3 text-[10px] font-black tracking-widest uppercase transition-all shadow-lg",
+                selectedEngineerId 
+                  ? "bg-white text-[#003366] hover:bg-gray-50 hover:scale-[1.02] active:scale-[0.98] border border-blue-100" 
+                  : "bg-gray-500/20 text-white/40 cursor-not-allowed border border-white/5"
+              )}
+            >
+              <RotateCcw className="w-4 h-4" /> Return Item
+            </button>
+            <button 
+              disabled={!selectedEngineerId}
               onClick={() => router.push('/engineers/issue')}
               className={cn(
                 "px-8 h-12 rounded-2xl flex items-center gap-3 text-[10px] font-black tracking-widest uppercase transition-all shadow-lg",

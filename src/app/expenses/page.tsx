@@ -227,7 +227,7 @@ function ExpensesContent() {
                 </div>
 
                 {/* Temporal HUD Stats */}
-                {pageType !== 'outside' && (
+                {pageType === 'job' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         <div className="bg-white p-6 rounded-[40px] border border-gray-100 shadow-sm space-y-3">
                             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic ml-1">Start Point (Date)</p>

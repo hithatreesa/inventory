@@ -104,6 +104,7 @@ export interface InvoiceRecord {
   grand_total: number;
   status: 'FINAL';
   timestamp: number;
+  gstType?: string;
 }
 
 export interface SystemUser {
@@ -720,15 +721,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }
 
   const finalizeBill = async (invoice: InvoiceRecord) => {
-    // Atomically commit transactions for each line
+    // Phase 1: Atomically commit transactions for each line
     for (const line of invoice.lines) {
       const gstAmount = (line.price * line.gstRate) / 100;
+      const totalLineAmount = line.amount + (gstAmount * line.qty);
+
+      // Rule: Record Revenue for every line
       engine.commitTransaction({
         type: "REVENUE",
-        item_id: line.productId || line.description,
+        item_id: line.productId || 'SERVICE',
         serial: `REV-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
         quantity: line.qty,
-        amount: line.amount + (gstAmount * line.qty), // Total per line including GST
+        amount: totalLineAmount,
         price: line.price,
         gst_rate: line.gstRate,
         cgst: (gstAmount * line.qty) / 2,
@@ -740,10 +744,39 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         notes: line.description,
         timestamp: Date.now()
       });
+
+      // Rule: If it's a physical product AND NOT linked to a ticket, reduce stock
+      // (If linked to a ticket, stock was already reduced during ticket assignment/usage)
+      if (line.productId && !line.ticketId) {
+        const available = engine.getAvailableStock(line.productId);
+        
+        // Handle serialization
+        let targetSerials: string[] = [];
+        if (line.serials && line.serials.length > 0) {
+          targetSerials = line.serials;
+        } else {
+          targetSerials = available.slice(0, line.qty).map(s => s.serial);
+        }
+
+        for (const serial of targetSerials) {
+          engine.executeOutward({
+            productId: line.productId,
+            serial,
+            qty: 1,
+            customer_id: invoice.customer,
+            metadata: {
+              reference: invoice.id,
+              reference_type: 'SALE',
+              reference_id: invoice.id,
+              notes: `Direct Sale: ${invoice.id}`
+            }
+          });
+        }
+      }
     }
 
     setInvoices(prev => [...prev, invoice]);
-    addLog(`BILLED: ${invoice.id} for ${invoice.customer}`);
+    addLog(`BILLED: ${invoice.id} for ${invoice.customer} | Total: ₹${invoice.grand_total.toFixed(2)}`);
     await fetchData();
   };
 
@@ -827,93 +860,51 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (!cartItems || cartItems.length === 0)
       throw new Error('HARD_FAIL: EMPTY_CART');
 
-    const saleRef = `SALE-${Date.now()}`;
-    let totalUnits = 0;
-    let saleTotal = 0;
+    const saleRef = `POS-${Date.now()}`;
+    
+    // 1. Calculate totals using central ledger logic if possible, or build manually
+    let subtotal = 0;
+    let totalTax = 0;
 
-    for (const item of cartItems) {
-      const catalogItem = catalog.find(c => c.id === item.id);
-      const isService = !catalogItem || item.id.startsWith('SERVICE_') || item.id.includes('line-');
-      
-      // If it's a physical item, pre-validate stock
-      if (!isService) {
-        const available = engine.getAvailableStock(item.id);
-        if (available.length < item.qty) {
-          throw new Error(`HARD_FAIL: OUT_OF_STOCK for "${catalogItem?.name || item.id}". Needed: ${item.qty}, Available: ${available.length}`);
-        }
-      }
+    const invoiceLines = cartItems.map(item => {
+      const catalogItem = inventory.find(c => c.id === item.id);
+      const price = catalogItem ? (catalogItem.sale_price || catalogItem.price || 0) : (Number(item.price) || 0);
+      const gstRate = catalogItem ? (catalogItem.gst_rate || 0) : (Number(item.gstRate) || 0);
+      const amount = price * item.qty;
+      const gstAmount = (amount * gstRate) / 100;
 
-      // SSOT: Pull price and GST strictly from Master catalog for items, or use provided for services
-      const masterPrice = catalogItem ? (catalogItem.sale_price || catalogItem.price || 0) : (Number(item.price) || 0);
-      const masterGst = catalogItem ? (catalogItem.gst_rate || 0) : (Number(item.gstRate) || 0);
+      subtotal += amount;
+      totalTax += gstAmount;
 
-      const gstAmount = (masterPrice * masterGst) / 100;
-      const cgst = gstAmount / 2;
-      const sgst = gstAmount / 2;
+      return {
+        productId: item.id,
+        description: item.name || catalogItem?.name || item.id,
+        qty: item.qty,
+        price: price,
+        gstRate: gstRate,
+        amount: amount,
+        serials: item.serials || [],
+        ticketId: item.ticketId
+      };
+    });
 
-      if (!isService && catalogItem) {
-        // Physical Item Flow (Stock impact)
-        const available = engine.getAvailableStock(item.id);
-        let targetSerials: string[] = [];
-        if (catalogItem.is_serialized) {
-          if (!item.serials || item.serials.length !== item.qty) {
-            throw new Error(`HARD_FAIL: SERIAL_MISMATCH for "${catalogItem.name}". Needed: ${item.qty}, Provided: ${item.serials?.length || 0}`);
-          }
-          targetSerials = item.serials;
-          for (const s of targetSerials) {
-            const sInfo = available.find(a => a.serial === s);
-            if (!sInfo) throw new Error(`HARD_FAIL: SERIAL_NOT_AVAILABLE: ${s}`);
-          }
-        } else {
-          targetSerials = available.slice(0, item.qty).map(s => s.serial);
-        }
+    const invoice: InvoiceRecord = {
+      id: saleRef,
+      customer: customer_id,
+      date: new Date().toISOString().split('T')[0],
+      lines: invoiceLines,
+      subtotal: subtotal,
+      gst_total: totalTax,
+      grand_total: Math.round(subtotal + totalTax),
+      status: 'FINAL',
+      timestamp: Date.now(),
+      gstType: 'LGST 18%' // Default for POS
+    };
 
-        for (const serial of targetSerials) {
-          engine.executeOutward({
-            productId: item.id,
-            serial,
-            qty: 1,
-            customer_id,
-            metadata: {
-              sale_price: masterPrice,
-              gst_rate: masterGst,
-              cgst,
-              sgst,
-              igst: 0,
-              reference_type: 'SALE',
-              reference_id: saleRef,
-            }
-          });
-        }
-      } else {
-        // Service/Ad-hoc Flow (Revenue only)
-        engine.commitTransaction({
-          type: "REVENUE",
-          item_id: item.id,
-          serial: `SRV-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-          quantity: item.qty,
-          amount: (masterPrice + gstAmount) * item.qty,
-          price: masterPrice,
-          gst_rate: masterGst,
-          cgst: cgst * item.qty,
-          sgst: sgst * item.qty,
-          reference: item.ticketId || saleRef,
-          reference_type: 'SALE',
-          reference_id: saleRef,
-          customer_id: customer_id,
-          notes: item.name || `Service: ${item.id}`,
-          timestamp: Date.now()
-        });
-      }
-
-      totalUnits += item.qty;
-      saleTotal += (masterPrice + gstAmount) * item.qty;
-    }
-
-    addLog(
-      `POS_SALE: ${totalUnits} units | Customer: ${customer_id} | Ref: ${saleRef} | Total: ₹${saleTotal.toFixed(2)}`
-    );
-    await fetchData();
+    // 2. Finalize using unified billing engine (Handles Stock + Revenue + Invoice State)
+    await finalizeBill(invoice);
+    
+    addLog(`POS_SALE_COMMITTED: ${saleRef} | Total: ₹${invoice.grand_total}`);
   }
 
 
@@ -1029,11 +1020,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (data.qty <= 0) throw new Error("HARD_FAIL: INVALID_QTY");
     if (data.cost <= 0) throw new Error("HARD_FAIL: INVALID_COST");
 
-    const newTxn: Transaction = {
+    engine.commitTransaction({
       id: `TXN-OP-${Date.now()}`,
       item_id: data.item_name,
-      serial: `OP-${Date.now()}`,
-      type: 'CONSUMED',
+      serial: `OP-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      type: 'OUTSIDE_PURCHASE',
       quantity: data.qty,
       cost: data.cost,
       amount: data.cost * data.qty,
@@ -1045,10 +1036,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       reference: data.ticket_id,
       ticket_id: data.ticket_id,
       notes: data.notes
-    };
+    });
 
-    setTransactions(prev => [newTxn, ...prev]);
     addLog(`OUTSIDE PURCHASE RECORDED: ${data.item_name} for ${data.ticket_id}`);
+    await fetchData();
   }
 
   const saveTicketData = async (ticketNo: string, data: any) => {
@@ -1543,23 +1534,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     recordExpense,
     recordManualExpense: recordExpense,
     saveTicketData,
-    recordOutsidePurchase: async (data: { item_name: string, qty: number, cost: number, ticket_id: string, notes?: string }) => {
-      engine.commitTransaction({
-        type: "PURCHASE",
-        item_id: data.item_name,
-        serial: `OP-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-        quantity: data.qty,
-        amount: data.cost * data.qty,
-        price: data.cost,
-        reference: data.ticket_id,
-        reference_type: 'OUTSIDE_PURCHASE',
-        reference_id: `OP-${Date.now()}`,
-        notes: data.notes,
-        timestamp: Date.now()
-      });
-      addLog(`OUTSIDE PURCHASE: ${data.item_name} for ticket ${data.ticket_id}`);
-      await fetchData();
-    },
+    recordOutsidePurchase,
     getTicketProfit: (ticketNo: string) => engine.getTicketProfit(ticketNo, transactions),
     getAvailableStock: (productId: string) => engine.getAvailableStock(productId),
     addEngineer: (data: { name: string, type: "IT" | "TECHNICAL" }) => {

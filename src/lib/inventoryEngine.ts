@@ -13,7 +13,9 @@ export type TransactionType =
   | "EXPENSE"
   | "REVENUE"
   | "JOURNAL"
-  | "PO";
+  | "PO"
+  | "PURCHASE"
+  | "OUTSIDE_PURCHASE";
 
 export interface Transaction {
   id: string
@@ -66,6 +68,7 @@ export interface Transaction {
   notes?: string
   expense_id?: string
   amount?: number
+  date?: string
 }
 
 // Internal Tracking State

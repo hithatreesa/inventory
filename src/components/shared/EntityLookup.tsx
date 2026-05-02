@@ -155,7 +155,6 @@ export const EntityLookup = React.forwardRef<HTMLInputElement, EntityLookupProps
   const results = type === 'contact' ? contactResults : (type === 'item' ? itemResults : (type === 'expense' ? expenseResults : (type === 'engineer' ? engineerResults : ticketResults)));
 
   const handleSelect = useCallback((item: any) => {
-    console.log("[SCANNER] Selecting Entity:", item.name || item.id);
     onSelect(item);
     // Removed redundant onChange(string) call to prevent state collision with onSelect(object)
     setIsOpen(false);
@@ -201,7 +200,6 @@ export const EntityLookup = React.forwardRef<HTMLInputElement, EntityLookupProps
   }, [type]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    console.log("[SCANNER] Key Pressed (Lookup):", e.key);
 
     if (!isOpen) {
       if (e.key === 'ArrowDown' || e.key === 'Enter') {
@@ -228,7 +226,6 @@ export const EntityLookup = React.forwardRef<HTMLInputElement, EntityLookupProps
           i.barcode?.toLowerCase() === value.toLowerCase()
         );
         if (exactMatch) {
-          console.log("[SCANNER] Instant Match Found:", exactMatch.name);
           handleSelect({ ...exactMatch, type: 'item' });
           return;
         }
@@ -262,7 +259,6 @@ export const EntityLookup = React.forwardRef<HTMLInputElement, EntityLookupProps
           type="text"
           value={value}
           onChange={(e) => {
-            console.log("[SCANNER] Input Typing (Lookup):", e.target.value);
             onChange(e.target.value);
             setIsOpen(true);
           }}

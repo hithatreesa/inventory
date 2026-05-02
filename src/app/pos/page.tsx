@@ -63,10 +63,8 @@ export default function POSPage() {
   const paymentRef = useRef<HTMLInputElement>(null)
 
   const addItem = useCallback((itemIdOrSku: string) => {
-    console.log("[SCANNER] Processing Barcode:", itemIdOrSku);
     const product = inventory.find(i => i.id === itemIdOrSku || i.sku === itemIdOrSku || i.barcode === itemIdOrSku)
     if (!product) {
-      console.log("[SCANNER] Item not found:", itemIdOrSku);
       toast.error('Item not found')
       setQuery('')
       return
@@ -81,7 +79,6 @@ export default function POSPage() {
     }
 
     if (product.is_serialized) {
-      console.log("[SCANNER] Serialized item detected, opening modal...");
       setActiveItemForSerials(product)
       setSelectedSerials([])
       setShowSerialModal(true)
@@ -106,7 +103,6 @@ export default function POSPage() {
     ])
     setQuery('')
     toast.success(`Added ${product.name}`)
-    console.log("[SCANNER] Success. Refocusing...");
     setTimeout(() => scanRef.current?.focus(), 50)
   }, [inventory])
 
@@ -221,16 +217,12 @@ export default function POSPage() {
                          setQuery(e.target.value);
                        }}
                        onKeyDown={(e) => {
-                         console.log("[SCANNER] Key Pressed:", e.key);
-                         if (e.key === 'Enter') {
-                            if (query) {
+                             if (query) {
                                addItem(query)
                             } else if (billItems.length > 0) {
-                               console.log("[SCANNER] Empty Enter, moving to payment...");
                                setIsPaymentMode(true)
                                setTimeout(() => paymentRef.current?.focus(), 50)
                             }
-                         }
                        }}
                        placeholder="SCAN HERE..."
                        className="w-full h-full bg-transparent px-8 font-black italic text-sm outline-none text-primary placeholder:text-gray-200 uppercase"

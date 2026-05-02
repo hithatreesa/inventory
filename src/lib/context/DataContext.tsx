@@ -131,33 +131,7 @@ const MOCK_USERS: SystemUser[] = [
   { id: 'user-3', name: 'John Sales', email: 'john@terait.com', roleId: 'role-3', status: 'ACTIVE', lastLogin: '2024-04-25T16:45:00Z' },
 ];
 
-export interface Transaction {
-  id: string
-  item_id: string
-  serial: string
-  engineer_id?: string
-  type: engine.TransactionType
-  quantity: number
-  status: string
-  date: string
-  reference?: string
-  reference_id?: string
-  ticket_id?: string
-  source?: 'PURCHASE' | 'OUTSIDE_PURCHASE'
-  affects_stock?: boolean
-  cost?: number
-  price?: number
-  amount?: number
-  expense_id?: string
-  sub_type?: string
-  notes?: string
-  customer_name?: string
-  supplier?: string
-  gst_rate?: number
-  purchase_price?: number
-  warehouse_id?: string
-  timestamp: number
-}
+export type Transaction = engine.Transaction;
 
 export interface Log {
   id: string
@@ -667,7 +641,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         warehouse_id: tx.warehouse_id || (tx as any).metadata?.warehouse_id
       }));
 
-      parsedTxns.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      parsedTxns.sort((a, b) => {
+        const dateA = a.date ? new Date(a.date).getTime() : 0;
+        const dateB = b.date ? new Date(b.date).getTime() : 0;
+        return dateB - dateA;
+      });
 
       // Update state only if changed (shallow length + id check for transactions)
       setInventory(prev => {

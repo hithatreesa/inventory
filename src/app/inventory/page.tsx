@@ -24,7 +24,7 @@ import {
    Users2,
    Package2
 } from 'lucide-react'
-import { useData } from '@/lib/context/DataContext'
+import { useData, Transaction } from '@/lib/context/DataContext'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { MetricCard } from '@/components/shared/MetricCard'
@@ -758,7 +758,7 @@ export default function InventoryPage() {
                <div className="space-y-4">
                   <h4 className="text-sm font-black text-gray-400 uppercase tracking-widest italic border-b border-gray-50 pb-4">Activity Log</h4>
                   <div className="grid grid-cols-1 gap-3">
-                     {transactions.filter((t: { item_id: string }) => t.item_id === activeItem?.id).map((txn: { id: string, status: string, quantity: number, type: string, engineer_id?: string, date?: string }) => (
+                     {transactions.filter((t: Transaction) => t.item_id === activeItem?.id).map((txn: Transaction) => (
                         <div
                            key={txn.id}
                            onClick={() => txn.status === 'Returned' ? null : returnAsset(txn.id)}

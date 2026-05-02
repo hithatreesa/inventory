@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useData } from '@/lib/context/DataContext';
 import { LedgerLine, LedgerHeader, BillSundry, TaxSummaryRow } from '@/modules/ledger/types';
@@ -14,7 +14,7 @@ import { X, QrCode, Calculator, Save, LogOut, AlertCircle, Trash2 } from 'lucide
 import { buildState } from '@/lib/inventoryEngine';
 import { Button } from '@/components/ui/Button';
 
-export default function PurchaseLedgerEntry() {
+function PurchaseLedgerEntryContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { inventory, contacts, processInward, processPO, addItem, gstConfigs, transactions } = useData();
@@ -612,5 +612,13 @@ export default function PurchaseLedgerEntry() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function PurchaseLedgerEntry() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="w-12 h-12 border-4 border-[#003366] border-t-transparent rounded-full animate-spin" /></div>}>
+      <PurchaseLedgerEntryContent />
+    </Suspense>
   );
 }

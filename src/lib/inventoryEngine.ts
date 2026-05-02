@@ -62,6 +62,7 @@ export interface Transaction {
   from_location?: "STORE" | "ENGINEER"
   to_location?: "STORE" | "ENGINEER"
 
+  status?: string
   timestamp: number
   created_at?: number
   sub_type?: string

@@ -49,7 +49,7 @@ function PurchaseLedgerEntryContent() {
   }, []);
 
   const [lines, setLines] = useState<LedgerLine[]>([
-    { id: '1', sno: 1, description: '', qty: 0, unit: '', price: 0, amount: 0, gstRate: 18, isLocked: false, serials: [], ticketId: '' }
+    { id: '1', sno: 1, productName: '', description: '', qty: 0, unit: '', price: 0, amount: 0, gstRate: 18, isLocked: false, serials: [], ticketId: '' }
   ]);
 
   const [sundries, setSundries] = useState<BillSundry[]>([
@@ -94,6 +94,7 @@ function PurchaseLedgerEntryContent() {
       const pad = Array.from({ length: minRows - currentLines.length }).map((_, i) => ({
         id: `empty-${i}`,
         sno: currentLines.length + i + 1,
+        productName: '',
         description: '',
         qty: 0,
         unit: '',
@@ -101,6 +102,7 @@ function PurchaseLedgerEntryContent() {
         amount: 0,
         gstRate: 0,
         isLocked: false,
+        serials: [],
         ticketId: ''
       }));
       return [...currentLines, ...pad];
@@ -158,6 +160,7 @@ function PurchaseLedgerEntryContent() {
       return [...prev, {
         id: `row-${Date.now()}`,
         sno: lastSno + 1,
+        productName: '',
         description: '',
         qty: 0,
         unit: '',

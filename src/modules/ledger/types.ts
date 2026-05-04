@@ -7,6 +7,7 @@ export interface LedgerLine {
   id: string;
   sno: number;
   productId?: string;
+  productName: string;
   description: string;
   qty: number;
   unit: string;

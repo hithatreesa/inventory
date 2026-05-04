@@ -32,7 +32,7 @@ export default function SalesLedgerEntry() {
     series: 'GST',
     date: new Date().toISOString().split('T')[0],
     voucherNumber: 'TTPL-26-27-55',
-    type: 'Direct',
+    type: 'LOCAL',
     gstType: 'LGST 18% (Registered)',
     partyAccount: '',
     materialCentre: 'Main Store',
@@ -49,9 +49,28 @@ export default function SalesLedgerEntry() {
     }));
   }, []);
 
-  const [lines, setLines] = useState<LedgerLine[]>([
-    { id: '1', sno: 1, description: '', qty: 0, unit: '', price: 0, amount: 0, gstRate: 18, isLocked: false, serials: [] }
-  ]);
+  const ensureMinimumRows = useCallback((data: LedgerLine[]) => {
+    const minRows = 12;
+    if (data.length >= minRows) return data;
+    const padding = Array.from({ length: minRows - data.length }, (_, i) => ({
+      id: `empty-${Date.now()}-${i}`,
+      sno: data.length + i + 1,
+      productName: '',
+      description: '',
+      qty: 0,
+      unit: '',
+      price: 0,
+      amount: 0,
+      gstRate: 18,
+      isLocked: false,
+      serials: []
+    }));
+    return [...data, ...padding];
+  }, []);
+
+  const [lines, setLines] = useState<LedgerLine[]>(() => ensureMinimumRows([
+    { id: '1', sno: 1, productName: '', description: '', qty: 0, unit: '', price: 0, amount: 0, gstRate: 18, isLocked: false, serials: [] }
+  ]));
 
   const [sundries, setSundries] = useState<BillSundry[]>([
     { id: 'S1', name: 'Freight & Forwarding', percentage: 0, amount: 0 },
@@ -63,17 +82,79 @@ export default function SalesLedgerEntry() {
   const [selectedSerials, setSelectedSerials] = useState<string[]>([]);
   const [isBilled, setIsBilled] = useState(false);
   const [billedInvoice, setBilledInvoice] = useState<any>(null);
+  const [descriptionModal, setDescriptionModal] = useState<{ isOpen: boolean; rowIndex: number; value: string }>({ isOpen: false, rowIndex: -1, value: '' });
+  const [ticketSummary, setTicketSummary] = useState<{
+    itemsUsed: any[],
+    purchases: any[],
+    expenses: any[],
+    engineer?: string,
+    client?: string
+  } | null>(null);
+
+  const jobCosts = useMemo(() => {
+    if (!ticketSummary) return { items: 0, purchases: 0, expenses: 0, total: 0 };
+    
+    const items = ticketSummary.itemsUsed.reduce((acc, curr) => {
+      const itm = inventory.find(i => i.id === curr.id || i.name === curr.item);
+      return acc + (curr.qty * (itm?.purchase_price || 0));
+    }, 0);
+    
+    const purchases = ticketSummary.purchases.reduce((acc, curr) => acc + curr.cost, 0);
+    const expenses = ticketSummary.expenses.reduce((acc, curr) => acc + curr.amount, 0);
+    
+    return {
+      items,
+      purchases,
+      expenses,
+      total: items + purchases + expenses
+    };
+  }, [ticketSummary, inventory]);
 
   useEffect(() => {
     if (isBilled && billedInvoice) {
       const timer = setTimeout(() => {
-        // Stop any background loading/HMR that might break print preview
         window.stop();
         window.print();
       }, 2000);
       return () => clearTimeout(timer);
     }
   }, [isBilled, billedInvoice]);
+
+  useEffect(() => {
+    if (!header.ticketId) {
+      setTicketSummary(null);
+      return;
+    }
+
+    const fetchTicketSummary = async () => {
+      try {
+        const res = await fetch(`/api/ticket-summary?ticketNo=${header.ticketId}`);
+        const data = await res.json();
+        setTicketSummary(data);
+        
+        if (data.client) {
+          setHeader(prev => ({ ...prev, partyAccount: data.client }));
+        }
+      } catch (err) {
+        console.error("Failed to fetch ticket summary:", err);
+      }
+    };
+
+    fetchTicketSummary();
+  }, [header.ticketId]);
+
+  // INTELLI-FILL REVERSE SYNC
+  useEffect(() => {
+    if (!header.partyAccount || header.ticketId) return;
+
+    const matches = tickets.filter(t => t.customer_name === header.partyAccount);
+    if (matches.length === 1) {
+      const match = matches[0];
+      if (header.ticketId !== match.id) {
+        setHeader(prev => ({ ...prev, ticketId: match.id }));
+      }
+    }
+  }, [header.partyAccount, tickets, header.ticketId]);
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
   const [ticketSearch, setTicketSearch] = useState('');
   const scanRef = useRef<HTMLInputElement>(null);
@@ -89,25 +170,6 @@ export default function SalesLedgerEntry() {
     sundryTotal,
     grandTotal
   } = useMemo(() => calculateLedgerTotals(lines, sundries, isTaxApplied, header.gstType), [lines, sundries, isTaxApplied, header.gstType]);
-
-  const ensureMinimumRows = useCallback((currentLines: LedgerLine[]) => {
-    const minRows = 12;
-    if (currentLines.length < minRows) {
-      const pad = Array.from({ length: minRows - currentLines.length }).map((_, i) => ({
-        id: `empty-${i}`,
-        sno: currentLines.length + i + 1,
-        description: '',
-        qty: 0,
-        unit: '',
-        price: 0,
-        amount: 0,
-        gstRate: 0,
-        isLocked: false
-      }));
-      return [...currentLines, ...pad];
-    }
-    return currentLines;
-  }, []);
 
   useEffect(() => {
     setLines(prev => ensureMinimumRows(prev));
@@ -149,12 +211,35 @@ export default function SalesLedgerEntry() {
     });
   };
 
+  const openDescriptionModal = (index: number) => {
+    const line = lines[index];
+    if (!line.description && !line.productId) return;
+    setDescriptionModal({
+      isOpen: true,
+      rowIndex: index,
+      value: line.description || ''
+    });
+  };
+
+  const saveDescription = () => {
+    if (descriptionModal.rowIndex === -1) return;
+    updateLine(descriptionModal.rowIndex, 'description', descriptionModal.value);
+    setDescriptionModal({ isOpen: false, rowIndex: -1, value: '' });
+    
+    // Auto focus Quantity cell after description
+    setTimeout(() => {
+        const qtyInput = document.querySelector(`input[data-row="${descriptionModal.rowIndex}"][data-col="2"]`) as HTMLInputElement;
+        qtyInput?.focus();
+    }, 50);
+  };
+
   const addRow = useCallback(() => {
     setLines(prev => {
       const lastSno = prev.length > 0 ? prev[prev.length - 1].sno : 0;
       return [...prev, {
         id: `row-${Date.now()}`,
         sno: lastSno + 1,
+        productName: '',
         description: '',
         qty: 0,
         unit: '',
@@ -168,42 +253,7 @@ export default function SalesLedgerEntry() {
   }, []);
 
 
-  const importTicketItems = (ticketId: string) => {
-    const ticket = tickets.find(t => t.id === ticketId);
-    if (!ticket || !ticket.requirements || ticket.requirements.length === 0) {
-      toast.error("No billable requirements found in ticket");
-      return;
-    }
 
-    setLines(prev => {
-      // Find first empty row to start importing, or append
-      const existingLines = prev.filter(l => l.description || l.productId);
-      const requirements = ticket.requirements || [];
-      
-      const newLines = requirements.map((req: any, i: number) => {
-        const item = inventory.find(it => it.id === req.item_id);
-        return {
-          id: `imp-${Date.now()}-${i}-${Math.random()}`,
-          sno: 0,
-          ticketId: ticket.id,
-          productId: item?.id || (typeof req.item_id === 'string' ? req.item_id : undefined),
-          description: item?.name || req.item_id,
-          qty: req.qty,
-          unit: (item?.unit || 'NOS.').toUpperCase(),
-          gstRate: item?.gst_rate || 18,
-          price: item?.sale_price || 0,
-          amount: calculateLineAmount(req.qty, item?.sale_price || 0),
-          isLocked: !!item?.is_serialized,
-          serials: []
-        };
-      });
-
-      const result = [...existingLines, ...newLines];
-      return ensureMinimumRows(result.map((l, i) => ({ ...l, sno: i + 1 })));
-    });
-    
-    toast.success(`Imported ${ticket.requirements.length} items from ${ticket.id}`);
-  };
 
   const handleBill = async () => {
     // Step 1: Validate
@@ -321,24 +371,110 @@ export default function SalesLedgerEntry() {
     const revenueTxns = txns.filter(tx => tx.type === 'REVENUE' && tx.reference_id === ticketId);
     // For now we just add a service line
     setLines(prev => {
-      const next = prev.filter(l => l.description || l.productId);
+      const next = prev.filter(l => l.productName || l.productId);
       const newLine: LedgerLine = {
         id: `line-${Date.now()}`,
         sno: next.length + 1,
-        description: `Service for ${ticketId}`,
+        productName: `Service for ${ticketId}`,
+        description: '',
         ticketId: ticketId,
         qty: 1,
         unit: 'NOS.',
-        price: 0, // User to fill
+        price: 0, 
         amount: 0,
         gstRate: 18,
-        isLocked: false
+        isLocked: false,
+        serials: []
       };
-      return [...next, newLine];
+      return ensureMinimumRows([...next, newLine]);
     });
     setIsTicketModalOpen(false);
     setTicketSearch('');
     toast.success(`Ticket ${ticketId} added`);
+  };
+
+  const importTicketItems = async (ticketId: string) => {
+    if (!ticketSummary) return;
+
+    setLines(prev => {
+      const existing = prev.filter(l => l.productName || l.productId);
+      const newItemsFromStock = ticketSummary.itemsUsed.map((item, idx) => {
+        const masterItem = inventory.find(i => i.id === item.id || i.name === item.item);
+        return {
+            id: `bulk-s-${Date.now()}-${idx}`,
+            sno: existing.length + idx + 1,
+            ticketId: ticketId,
+            productId: masterItem?.id,
+            productName: masterItem?.name || item.item,
+            description: '',
+            qty: item.qty,
+            unit: (masterItem?.unit || 'NOS.').toUpperCase(),
+            gstRate: masterItem?.gst_rate || 18,
+            price: masterItem?.sale_price || 0,
+            amount: calculateLineAmount(item.qty, masterItem?.sale_price || 0),
+            isLocked: !!masterItem?.is_serialized,
+            serials: []
+        };
+      });
+
+      const newItemsFromPurchases = ticketSummary.purchases.map((item, idx) => {
+        return {
+            id: `bulk-p-${Date.now()}-${idx}`,
+            sno: existing.length + newItemsFromStock.length + idx + 1,
+            ticketId: ticketId,
+            productName: item.item,
+            description: 'ADDITIONAL PURCHASE',
+            qty: item.qty,
+            unit: 'NOS.',
+            gstRate: 18,
+            price: item.cost / item.qty,
+            amount: item.cost,
+            isLocked: false,
+            serials: []
+        };
+      });
+
+      return ensureMinimumRows([...existing, ...newItemsFromStock, ...newItemsFromPurchases]);
+    });
+    toast.success(`Imported all items for ${ticketId}`);
+  };
+
+  const importSingleItem = (item: any) => {
+    setLines(prev => {
+      const existingLines = prev.filter(l => l.productName || l.productId);
+      
+      const masterItem = inventory.find(i => i.id === item.id || i.name === item.item);
+      const newLine = {
+        id: `imp-${Date.now()}-${Math.random()}`,
+        sno: existingLines.length + 1,
+        ticketId: header.ticketId,
+        productId: masterItem?.id,
+        productName: masterItem?.name || item.item,
+        description: '',
+        qty: item.qty,
+        unit: (masterItem?.unit || 'NOS.').toUpperCase(),
+        gstRate: masterItem?.gst_rate || 18,
+        price: masterItem?.sale_price || 0,
+        amount: calculateLineAmount(item.qty, masterItem?.sale_price || 0),
+        isLocked: !!masterItem?.is_serialized,
+        serials: []
+      };
+
+      const result = [...existingLines, newLine];
+      
+      // Auto-focus and OPEN Description Modal
+      setTimeout(() => {
+        const newRowIdx = existingLines.length;
+        setDescriptionModal({
+            isOpen: true,
+            rowIndex: newRowIdx,
+            value: ''
+        });
+      }, 150);
+
+      return ensureMinimumRows(result.map((l, i) => ({ ...l, sno: i + 1 })));
+    });
+    toast.success(`Added ${item.item} to ledger`);
   };
 
   const handleQuit = () => router.push('/dashboard');
@@ -383,7 +519,7 @@ export default function SalesLedgerEntry() {
               <label className="text-[9px] font-black text-gray-400 italic tracking-tighter w-12">DATE</label>
               <input
                 type="date"
-                value={header.date}
+                value={header.date || ''}
                 onChange={e => setHeader({ ...header, date: e.target.value })}
                 className="bg-transparent outline-none font-black text-xs italic uppercase tracking-tighter w-full"
               />
@@ -392,13 +528,25 @@ export default function SalesLedgerEntry() {
           <div className="col-span-2 p-3 border-r border-gray-200">
             <div className="flex items-center gap-3">
               <label className="text-[9px] font-black text-gray-400 italic tracking-tighter w-12">VCH NO.</label>
-              <span className="font-black text-xs italic uppercase tracking-tighter text-blue-700">{header.voucherNumber}</span>
+              <input 
+                value={header.voucherNumber} 
+                onChange={e => setHeader({ ...header, voucherNumber: e.target.value })} 
+                className="bg-transparent outline-none font-black text-xs italic uppercase tracking-tighter text-blue-700 w-full" 
+              />
             </div>
           </div>
           <div className="col-span-2 p-3 border-r border-gray-200">
             <div className="flex items-center gap-3">
               <label className="text-[9px] font-black text-gray-400 italic tracking-tighter w-12">TYPE</label>
-              <span className="font-black text-xs italic uppercase tracking-tighter">{header.type}</span>
+              <select 
+                value={header.type} 
+                onChange={e => setHeader({ ...header, type: e.target.value })} 
+                className="bg-transparent outline-none font-black text-xs italic uppercase tracking-tighter cursor-pointer"
+              >
+                <option value="LOCAL">LOCAL</option>
+                <option value="INTERSTATE">INTERSTATE</option>
+                <option value="EXEMPTED">EXEMPTED</option>
+              </select>
             </div>
           </div>
           <div className="col-span-2 p-3">
@@ -434,11 +582,12 @@ export default function SalesLedgerEntry() {
               <EntityLookup
                 type="contact"
                 contactFilter="CLIENT"
-                value={header.partyAccount}
-                onChange={val => setHeader({ ...header, partyAccount: val })}
-                onSelect={contact => setHeader(prev => ({ ...prev, partyAccount: contact.name }))}
+                value={header.partyAccount || ''}
+                onChange={val => !header.ticketId && setHeader({ ...header, partyAccount: val || '' })}
+                onSelect={contact => !header.ticketId && setHeader(prev => ({ ...prev, partyAccount: contact.name || '' }))}
                 placeholder="Search Customer Account (F2 to Register)..."
-                className="flex-1 font-black text-base italic text-blue-700 uppercase tracking-tight"
+                className={cn("flex-1 font-black text-base italic text-blue-700 uppercase tracking-tight", header.ticketId && "opacity-50 pointer-events-none")}
+                readOnly={!!header.ticketId}
               />
             </div>
           </div>
@@ -449,9 +598,10 @@ export default function SalesLedgerEntry() {
                 <EntityLookup
                   type="ticket"
                   value={header.ticketId || ''}
-                  onChange={val => setHeader({ ...header, ticketId: val })}
+                  ticketFilter={{ client: header.partyAccount }}
+                  onChange={val => setHeader({ ...header, ticketId: val || '' })}
                   onSelect={ticket => {
-                    setHeader(prev => ({ ...prev, ticketId: ticket.id, partyAccount: ticket.customer_name || prev.partyAccount }));
+                    setHeader(prev => ({ ...prev, ticketId: ticket.id || '', partyAccount: ticket.customer_name || prev.partyAccount }));
                   }}
                   placeholder="Link to Primary Ticket..."
                   className="flex-1 font-black text-sm italic text-amber-700 uppercase tracking-tight"
@@ -467,7 +617,7 @@ export default function SalesLedgerEntry() {
             <div className="flex items-center gap-6">
               <label className="text-[9px] font-black text-gray-400 italic tracking-tighter w-16 whitespace-nowrap">MAT. CENTRE</label>
               <input
-                value={header.materialCentre}
+                value={header.materialCentre || ''}
                 onChange={e => setHeader({ ...header, materialCentre: e.target.value })}
                 className="flex-1 bg-transparent outline-none font-black text-xs italic uppercase tracking-tighter"
               />
@@ -477,7 +627,7 @@ export default function SalesLedgerEntry() {
             <div className="flex items-center gap-6">
               <label className="text-[9px] font-black text-gray-400 italic tracking-tighter w-24 whitespace-nowrap">SUPPLIER REF</label>
               <input
-                value={header.supplierReference}
+                value={header.supplierReference || ''}
                 onChange={e => setHeader({ ...header, supplierReference: e.target.value })}
                 placeholder="PO-001"
                 className="flex-1 bg-transparent outline-none font-black text-xs italic uppercase tracking-tighter"
@@ -491,7 +641,7 @@ export default function SalesLedgerEntry() {
           <div className="flex items-center gap-6">
             <label className="text-[9px] font-black text-gray-400 italic tracking-tighter w-16">NARRATION</label>
             <input
-              value={header.narration}
+              value={header.narration || ''}
               onChange={e => setHeader({ ...header, narration: e.target.value })}
               placeholder="Voucher specific remarks..."
               className="flex-1 bg-transparent outline-none font-bold text-[11px] italic uppercase tracking-tight text-gray-600"
@@ -500,91 +650,216 @@ export default function SalesLedgerEntry() {
         </div>
       </div>
 
-      {/* MAIN GRID */}
-      <div className="flex-1 overflow-auto bg-white border-b-2 border-[var(--color-ledger-border)] relative">
-        <table className="w-full text-sm border-collapse" style={{ tableLayout: 'fixed' }}>
-          <thead className="bg-[#1E293B] text-white sticky top-0 z-10 font-black text-[9px] tracking-widest uppercase italic">
-            <tr>
-              <th className="border-r border-[#334155] px-2 py-2 text-center w-12">S.N.</th>
-              <th className="border-r border-[#334155] px-4 py-2 text-left">PRODUCT_SPECIFICATION</th>
-              <th className="border-r border-[#334155] px-2 py-2 text-right w-20">QUANTITY</th>
-              <th className="border-r border-[#334155] px-2 py-2 text-center w-16">UOM</th>
-              <th className="border-r border-[#334155] px-2 py-2 text-right w-24">RATE (₹)</th>
-              <th className="border-r border-[#334155] px-2 py-2 text-right w-16">GST%</th>
-              <th className="px-4 py-2 text-right w-32">TOTAL (₹)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lines.map((line, rowIndex) => (
-              <tr key={line.id} className="border-b border-gray-100 hover:bg-blue-50/30 transition-colors">
-                <td className="border-r border-gray-100 px-2 py-1 text-center font-black text-gray-300 text-[10px] italic">{line.sno}.</td>
-                <td className="border-r border-gray-100 px-2 py-1 relative">
-                  <EntityLookup
-                    ref={rowIndex === lines.findIndex(l => !l.description) ? scanRef : null}
-                    type="item"
-                    value={line.description}
-                    onChange={(val) => updateLine(rowIndex, 'description', val)}
-                    onSelect={(item) => {
-                      updateLine(rowIndex, 'description', item);
-                      setTimeout(() => {
-                        const qtyInput = document.querySelector(`input[data-row="${rowIndex}"][data-col="2"]`) as HTMLInputElement;
-                        qtyInput?.focus();
-                      }, 50);
-                    }}
-                    onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 1, lines.length, 5, addRow)}
-                    data-row={rowIndex}
-                    data-col={1}
-                    className="w-full bg-transparent outline-none font-black text-sm px-1"
-                  />
-                </td>
-                <td className="border-r border-gray-100 px-2 py-1">
-                  <div className="relative flex items-center">
+      {/* MAIN CONTENT AREA: GRID + SIDEBAR */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* MAIN GRID */}
+        <div className="flex-1 overflow-auto bg-white border-b-2 border-[var(--color-ledger-border)] relative custom-scrollbar">
+          <table className="w-full text-sm border-collapse" style={{ tableLayout: 'fixed' }}>
+            <thead className="bg-[#1E293B] text-white sticky top-0 z-10 font-black text-[9px] tracking-widest uppercase italic">
+              <tr>
+                <th className="border-r border-[#334155] px-2 py-2 text-center w-12">S.N.</th>
+                <th className="border-r border-[#334155] px-4 py-2 text-left w-64">ITEM_NAME</th>
+                <th className="border-r border-[#334155] px-4 py-2 text-left">TECHNICAL_DESCRIPTION</th>
+                <th className="border-r border-[#334155] px-2 py-2 text-right w-20">QUANTITY</th>
+                <th className="border-r border-[#334155] px-2 py-2 text-center w-16">UOM</th>
+                <th className="border-r border-[#334155] px-2 py-2 text-right w-24">RATE (₹)</th>
+                <th className="border-r border-[#334155] px-2 py-2 text-right w-16">GST%</th>
+                <th className="border-r border-[#334155] px-4 py-2 text-right w-32">TOTAL (₹)</th>
+                <th className="px-2 py-2 text-center w-10"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((line, rowIndex) => (
+                <tr key={line.id} className="border-b border-gray-100 hover:bg-blue-50/30 transition-colors group">
+                  <td className="border-r border-gray-100 px-2 py-1 text-center font-black text-gray-300 text-[10px] italic">{line.sno}.</td>
+                  {/* ITEM NAME COLUMN */}
+                  <td className="border-r border-gray-100 px-2 py-1 relative">
+                    <EntityLookup
+                      ref={rowIndex === lines.findIndex(l => !l.productName) ? scanRef : null}
+                      type="item"
+                      value={line.productName || ''}
+                      onChange={(val) => updateLine(rowIndex, 'productName', val || '')}
+                      onSelect={(item) => {
+                        updateLine(rowIndex, 'productName', item);
+                        // Auto-open description matrix
+                        setTimeout(() => {
+                          openDescriptionModal(rowIndex);
+                        }, 50);
+                      }}
+                      onKeyDown={(e) => handleGridKeyDown(e, rowIndex, 1, lines.length, 5, addRow)}
+                      data-row={rowIndex}
+                      data-col={1}
+                      className="w-full bg-transparent outline-none font-black text-sm px-1"
+                    />
+                  </td>
+                  {/* DESCRIPTION COLUMN */}
+                  <td className="border-r border-gray-100 px-2 py-1 relative">
                     <input
-                      type="number"
-                      value={line.qty || ''}
-                      onChange={e => updateLine(rowIndex, 'qty', e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') {
-                          const masterItem = inventory.find(i => i.id === line.productId);
-                          if (masterItem?.is_serialized && Number(line.qty) > 0) {
-                            e.preventDefault();
-                            openSerialSelection(rowIndex);
-                            return;
+                      value={line.description || ''}
+                      onChange={(e) => updateLine(rowIndex, 'description', e.target.value)}
+                      onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                              e.preventDefault();
+                              openDescriptionModal(rowIndex);
+                          } else {
+                              handleGridKeyDown(e, rowIndex, 2, lines.length, 5, addRow);
                           }
-                        }
-                        handleGridKeyDown(e, rowIndex, 2, lines.length, 4, addRow);
                       }}
                       data-row={rowIndex}
                       data-col={2}
-                      className="w-full bg-transparent outline-none font-black text-sm text-right px-1 pr-5"
+                      className="w-full bg-transparent outline-none font-black text-xs italic text-gray-500 px-1 truncate"
+                      placeholder="ENTER SPECS..."
                     />
-                    {inventory.find(i => i.id === line.productId)?.is_serialized && (
-                      <button
-                        onClick={() => openSerialSelection(rowIndex)}
-                        className="absolute right-0.5 text-blue-500 hover:text-blue-700 p-0.5"
+                  </td>
+                  <td className="border-r border-gray-100 px-2 py-1">
+                    <div className="relative flex items-center">
+                      <input
+                        type="number"
+                        value={line.qty || ''}
+                        onChange={e => updateLine(rowIndex, 'qty', e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            const masterItem = inventory.find(i => i.id === line.productId);
+                            if (masterItem?.is_serialized && Number(line.qty) > 0) {
+                              e.preventDefault();
+                              openSerialSelection(rowIndex);
+                              return;
+                            }
+                          }
+                          handleGridKeyDown(e, rowIndex, 3, lines.length, 4, addRow);
+                        }}
+                        data-row={rowIndex}
+                        data-col={3}
+                        className="w-full bg-transparent outline-none font-black text-sm text-right px-1 pr-5"
+                      />
+                      {inventory.find(i => i.id === line.productId)?.is_serialized && (
+                        <button
+                          onClick={() => openSerialSelection(rowIndex)}
+                          className="absolute right-0.5 text-blue-500 hover:text-blue-700 p-0.5"
+                        >
+                          <QrCode className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                  <td className="border-r border-gray-100 px-2 py-1 text-center font-black text-xs italic">{line.unit}</td>
+                  <td className="border-r border-gray-100 px-2 py-1">
+                    <input type="number" value={line.price || ''} onChange={e => updateLine(rowIndex, 'price', e.target.value)} onKeyDown={e => handleGridKeyDown(e, rowIndex, 4, lines.length, 4, addRow)} data-row={rowIndex} data-col={4} className="w-full bg-transparent outline-none font-black text-sm text-right px-1" />
+                  </td>
+                  <td className="border-r border-gray-100 px-2 py-1">
+                    <input type="number" value={line.gstRate || ''} onChange={e => updateLine(rowIndex, 'gstRate', e.target.value)} onKeyDown={e => handleGridKeyDown(e, rowIndex, 5, lines.length, 4, addRow)} data-row={rowIndex} data-col={5} className="w-full bg-transparent outline-none font-black text-sm text-right px-1" />
+                  </td>
+                  <td className="border-r border-gray-100 px-4 py-1 text-right font-black text-sm italic">{line.amount > 0 ? line.amount.toFixed(2) : ''}</td>
+                  <td className="px-2 py-1 text-center">
+                    {(line.productName || line.productId) && (
+                      <button 
+                        onClick={() => {
+                          setLines(prev => {
+                            const newLines = prev.filter(l => l.id !== line.id);
+                            return ensureMinimumRows(newLines.map((l, i) => ({ ...l, sno: i + 1 })));
+                          });
+                        }}
+                        className="text-gray-300 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
                       >
-                        <QrCode className="w-3 h-3" />
+                        <X className="w-4 h-4" />
                       </button>
                     )}
-                  </div>
-                </td>
-                <td className="border-r border-gray-100 px-2 py-1 text-center font-black text-xs italic">{line.unit}</td>
-                <td className="border-r border-gray-100 px-2 py-1">
-                  <input type="number" value={line.price || ''} onChange={e => updateLine(rowIndex, 'price', e.target.value)} onKeyDown={e => handleGridKeyDown(e, rowIndex, 3, lines.length, 4, addRow)} data-row={rowIndex} data-col={3} className="w-full bg-transparent outline-none font-black text-sm text-right px-1" />
-                </td>
-                <td className="border-r border-gray-100 px-2 py-1">
-                  <input type="number" value={line.gstRate || ''} onChange={e => updateLine(rowIndex, 'gstRate', e.target.value)} onKeyDown={e => handleGridKeyDown(e, rowIndex, 4, lines.length, 4, addRow)} data-row={rowIndex} data-col={4} className="w-full bg-transparent outline-none font-black text-sm text-right px-1" />
-                </td>
-                <td className="px-4 py-1 text-right font-black text-sm italic">{line.amount > 0 ? line.amount.toFixed(2) : ''}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* TICKET IMPORT HUB - RIGHT SIDEBAR */}
+        {ticketSummary && (
+          <div className="w-80 shrink-0 bg-[#F8FAFC] border-l-2 border-[var(--color-ledger-border)] flex flex-col animate-in slide-in-from-right duration-300">
+            <div className="bg-[#1E293B] text-white p-4">
+              <div className="text-[10px] font-black italic tracking-widest text-blue-400 uppercase">Ticket Import Hub</div>
+              <div className="text-sm font-black italic uppercase tracking-tighter mt-1">{header.ticketId}</div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+              {/* SECTION: ITEMS USED */}
+              {ticketSummary.itemsUsed.length > 0 && (
+                <div className="space-y-3">
+                  <div className="text-[9px] font-black text-gray-400 italic tracking-[0.2em] uppercase border-b border-gray-200 pb-1">Stock Consumption</div>
+                  {ticketSummary.itemsUsed.map((item, idx) => (
+                    <div key={idx} className="bg-white p-3 border border-gray-100 rounded-xl shadow-sm hover:border-blue-300 transition-all group">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[11px] font-black italic uppercase text-gray-900 leading-tight truncate">{item.item}</div>
+                          <div className="text-[10px] font-bold italic text-gray-400 mt-1 uppercase">Required: {item.qty} Nos</div>
+                        </div>
+                        <button 
+                          onClick={() => importSingleItem(item)}
+                          className="bg-blue-600 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-blue-700"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* SECTION: ADDITIONAL PURCHASES */}
+              {ticketSummary.purchases.length > 0 && (
+                <div className="space-y-3">
+                  <div className="text-[9px] font-black text-amber-600 italic tracking-[0.2em] uppercase border-b border-amber-100 pb-1">Outside Purchases</div>
+                  {ticketSummary.purchases.map((item, idx) => (
+                    <div key={idx} className="bg-white p-3 border border-amber-50 rounded-xl shadow-sm hover:border-amber-300 transition-all group">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[11px] font-black italic uppercase text-amber-900 leading-tight truncate">{item.item}</div>
+                          <div className="text-[10px] font-bold italic text-amber-400 mt-1 uppercase">Qty: {item.qty} | ₹{item.cost.toLocaleString()}</div>
+                        </div>
+                        <button 
+                          onClick={() => importSingleItem(item)}
+                          className="bg-amber-600 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-amber-700"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* SECTION: EXPENSES (View Only) */}
+              {ticketSummary.expenses.length > 0 && (
+                <div className="space-y-3 opacity-60">
+                  <div className="text-[9px] font-black text-gray-400 italic tracking-[0.2em] uppercase border-b border-gray-200 pb-1">Job Expenses</div>
+                  {ticketSummary.expenses.map((exp, idx) => (
+                    <div key={idx} className="flex justify-between items-center text-[10px] font-bold italic text-gray-500 uppercase px-1">
+                      <span>{exp.name}</span>
+                      <span>₹{exp.amount.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Sidebar Footer */}
+            <div className="p-4 bg-white border-t border-gray-100">
+              <div className="flex justify-between items-center text-[10px] font-black italic uppercase tracking-tighter">
+                <span className="text-gray-400">Total Ticket Value</span>
+                <span className="text-blue-900">₹{jobCosts.total.toLocaleString()}</span>
+              </div>
+              <button 
+                onClick={() => importTicketItems(header.ticketId!)}
+                className="w-full mt-3 bg-blue-900 text-white py-2 font-black text-[10px] italic uppercase tracking-widest hover:bg-blue-950 transition-colors"
+              >
+                IMPORT ALL DATA
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* FOOTER PANELS */}
       <div className="h-44 shrink-0 flex bg-white/50 border-t-2 border-[var(--color-ledger-border)]">
-        <div className="w-1/4 border-r border-gray-200 p-4 overflow-y-auto custom-scrollbar">
+        <div className="w-80 border-r border-gray-200 p-4 overflow-y-auto custom-scrollbar">
           <div className="text-[9px] font-black text-gray-400 mb-2 italic tracking-widest uppercase">Tax Intelligence HUD</div>
           <div className="space-y-2">
             <div className="flex justify-between text-[11px] font-black italic border-b border-gray-100 pb-1">
@@ -614,6 +889,7 @@ export default function SalesLedgerEntry() {
             ))}
           </div>
         </div>
+
         <div className="flex-1 flex flex-col justify-center items-center gap-4">
           <div className="bg-black text-white px-8 py-4 shadow-2xl">
             <div className="text-[10px] font-bold text-gray-400 tracking-widest mb-1 italic">GRAND TOTAL</div>
@@ -677,6 +953,50 @@ export default function SalesLedgerEntry() {
               <div className="mt-8 flex gap-4">
                 <Button variant="secondary" onClick={() => setShowSerialModal(false)} className="flex-1">CANCEL</Button>
                 <Button onClick={confirmSerialSelection} className="flex-[2] bg-[#003366]">CONFIRM {selectedSerials.length} UNITS</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* DESCRIPTION MATRIX MODAL */}
+      {descriptionModal.isOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[32px] w-full max-w-2xl shadow-2xl overflow-hidden border-4 border-[#003366] animate-in zoom-in-95 duration-200">
+            <div className="bg-[#003366] text-white p-6 flex justify-between items-center">
+              <div>
+                <h3 className="font-black text-lg uppercase italic tracking-tighter">Description Matrix</h3>
+                <p className="text-[10px] opacity-60 font-bold uppercase italic tracking-widest mt-1">
+                  Item: {lines[descriptionModal.rowIndex]?.productName || "General Specification"} | Row {descriptionModal.rowIndex + 1}
+                </p>
+              </div>
+              <button onClick={() => setDescriptionModal({ ...descriptionModal, isOpen: false })} className="hover:rotate-90 transition-transform">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-8">
+              <div className="space-y-4">
+                <label className="text-[10px] font-black text-gray-400 italic tracking-widest uppercase pl-1">Full Technical Specification</label>
+                <textarea
+                  autoFocus
+                  value={descriptionModal.value}
+                  onChange={(e) => setDescriptionModal({ ...descriptionModal, value: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.ctrlKey) {
+                        e.preventDefault();
+                        saveDescription();
+                    }
+                  }}
+                  className="w-full h-48 bg-gray-50 border-2 border-gray-100 rounded-2xl p-6 font-black text-sm italic uppercase tracking-tight outline-none focus:border-[#003366] transition-colors resize-none"
+                  placeholder="Enter detailed description, part numbers, or service notes..."
+                />
+                <div className="flex justify-between items-center px-1">
+                    <p className="text-[9px] font-black text-gray-400 italic uppercase tracking-tighter">Press CTRL + ENTER to Save</p>
+                    <div className="flex gap-3">
+                        <Button variant="secondary" onClick={() => setDescriptionModal({ ...descriptionModal, isOpen: false })}>CANCEL</Button>
+                        <Button onClick={saveDescription} className="bg-[#003366] px-8">UPDATE MATRIX</Button>
+                    </div>
+                </div>
               </div>
             </div>
           </div>

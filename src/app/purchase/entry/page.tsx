@@ -32,7 +32,7 @@ function PurchaseLedgerEntryContent() {
     series: 'Main',
     date: new Date().toISOString().split('T')[0],
     voucherNumber: 'PUR/26-27/0000',
-    type: 'Purchase',
+    type: 'LOCAL',
     gstType: 'LGST 18% (Registered)',
     partyAccount: '',
     materialCentre: 'Main Godown (Warehouse A)',
@@ -312,13 +312,25 @@ function PurchaseLedgerEntryContent() {
           <div className="col-span-2 p-3 border-r border-gray-200">
             <div className="flex items-center gap-3">
               <label className="text-[9px] font-black text-gray-400 italic tracking-tighter w-12">VCH NO.</label>
-              <span className="font-black text-xs italic uppercase tracking-tighter text-blue-700">{header.voucherNumber}</span>
+              <input 
+                value={header.voucherNumber} 
+                onChange={e => setHeader({ ...header, voucherNumber: e.target.value })} 
+                className="bg-transparent outline-none font-black text-xs italic uppercase tracking-tighter text-blue-700 w-full" 
+              />
             </div>
           </div>
           <div className="col-span-2 p-3 border-r border-gray-200">
             <div className="flex items-center gap-3">
               <label className="text-[9px] font-black text-gray-400 italic tracking-tighter w-12">TYPE</label>
-              <span className="font-black text-xs italic uppercase tracking-tighter">DIRECT</span>
+              <select 
+                value={header.type} 
+                onChange={e => setHeader({ ...header, type: e.target.value })} 
+                className="bg-transparent outline-none font-black text-xs italic uppercase tracking-tighter cursor-pointer"
+              >
+                <option value="LOCAL">LOCAL</option>
+                <option value="INTERSTATE">INTERSTATE</option>
+                <option value="EXEMPTED">EXEMPTED</option>
+              </select>
             </div>
           </div>
           <div className="col-span-2 p-3">

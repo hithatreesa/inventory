@@ -2,21 +2,22 @@
 
 import React, { useState } from 'react'
 import { Modal } from './BaseModal'
-import { Save, Package, DollarSign, Tag, FileText } from 'lucide-react'
+import { Save, Package, DollarSign, Tag, FileText, Camera, Upload, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { useData } from '@/lib/context/DataContext'
 import { toast } from 'sonner'
 import { EntityLookup } from '../shared/EntityLookup'
+import { cn } from '@/lib/utils'
 
-export function OutsidePurchaseModal({
+export function AdditionalPurchaseModal({
   isOpen,
   onClose
 }: {
   isOpen: boolean;
   onClose: () => void;
 }) {
-  const { recordOutsidePurchase } = useData()
+  const { recordAdditionalPurchase } = useData()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [form, setForm] = useState({
@@ -24,7 +25,8 @@ export function OutsidePurchaseModal({
     qty: '',
     cost: '',
     ticket_id: '',
-    notes: ''
+    notes: '',
+    billImageUrl: ''
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -36,15 +38,16 @@ export function OutsidePurchaseModal({
 
     setIsSubmitting(true)
     try {
-      await recordOutsidePurchase({
+      await recordAdditionalPurchase({
         item_name: form.item_name,
         qty: Number(form.qty),
         cost: Number(form.cost),
         ticket_id: form.ticket_id,
-        notes: form.notes
+        notes: form.notes,
+        attachment: form.billImageUrl
       })
-      toast.success('Outside Purchase recorded successfully')
-      setForm({ item_name: '', qty: '', cost: '', ticket_id: '', notes: '' })
+      toast.success('Additional Purchase recorded successfully')
+      setForm({ item_name: '', qty: '', cost: '', ticket_id: '', notes: '', billImageUrl: '' })
       onClose()
     } catch (err: any) {
       toast.error(err.message || 'Action failed')
@@ -53,11 +56,20 @@ export function OutsidePurchaseModal({
     }
   }
 
+  const handleFileUpload = (file: File) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setForm(prev => ({ ...prev, billImageUrl: reader.result as string }));
+      toast.success("Receipt captured");
+    };
+    reader.readAsDataURL(file);
+  }
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="REGISTER: OUTSIDE PURCHASE"
+      title="REGISTER: ADDITIONAL PURCHASE"
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-2 gap-4">
@@ -82,7 +94,7 @@ export function OutsidePurchaseModal({
               type="number"
               placeholder="1"
               value={form.qty}
-              onChange={e => setForm({ ...form, qty: e.target.value })}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, qty: e.target.value })}
               disabled={isSubmitting}
               className="font-black italic"
             />
@@ -95,7 +107,7 @@ export function OutsidePurchaseModal({
               type="number"
               placeholder="0.00"
               value={form.cost}
-              onChange={e => setForm({ ...form, cost: e.target.value })}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, cost: e.target.value })}
               disabled={isSubmitting}
               className="font-black italic"
             />
@@ -122,12 +134,44 @@ export function OutsidePurchaseModal({
             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Internal Remarks</label>
             <textarea
               rows={3}
-              placeholder="Vendor details, reason for outside purchase, etc."
+              placeholder="Vendor details, reason for additional purchase, etc."
               value={form.notes}
-              onChange={e => setForm({ ...form, notes: e.target.value })}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setForm({ ...form, notes: e.target.value })}
               disabled={isSubmitting}
               className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold resize-none italic outline-none focus:ring-2 focus:ring-primary/20"
             />
+          </div>
+
+          <div className="col-span-2 space-y-1.5">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Digital Receipt / Attachment</label>
+            <div className={cn(
+              "relative h-32 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center transition-all overflow-hidden",
+              form.billImageUrl ? "border-primary/20 bg-primary/5" : "border-gray-100 bg-gray-50 hover:bg-gray-100/80"
+            )}>
+              {form.billImageUrl ? (
+                <>
+                  <img src={form.billImageUrl} alt="receipt" className="w-full h-full object-contain p-2" />
+                  <button 
+                    type="button"
+                    onClick={() => setForm({ ...form, billImageUrl: '' })}
+                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600 transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </>
+              ) : (
+                <label className="w-full h-full flex flex-col items-center justify-center cursor-pointer">
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
+                  />
+                  <Camera className="w-6 h-6 text-gray-300 mb-1" />
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Upload Receipt</span>
+                </label>
+              )}
+            </div>
           </div>
         </div>
 

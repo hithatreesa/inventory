@@ -12,6 +12,7 @@ export interface GstConfig {
   name: string
   rate: number
   hsn?: string
+  gstType?: string
 }
 
 export interface InventoryItem {
@@ -299,6 +300,7 @@ export interface Ticket {
   id: string;
   title: string;
   customer_name: string;
+  engineer_id?: string;
   requirements: TicketRequirement[];
   created_at?: string;
 }
@@ -353,13 +355,15 @@ interface DataContextType {
   engineers: Engineer[]
   addEngineer: (data: { name: string, type: "IT" | "TECHNICAL" }) => void
   recordManualExpense: (data: { expenseId: string, amount: number, date: string, reference?: string, notes?: string }) => Promise<void>
-  recordOutsidePurchase: (data: { 
-    item_name: string, 
-    qty: number, 
-    cost: number, 
+  recordAdditionalPurchase: (data: {
+    item_name: string,
+    qty: number,
+    cost: number,
     ticket_id: string,
-    notes?: string
+    notes?: string,
+    attachment?: string
   }) => Promise<void>
+  commitTransaction: (data: Partial<engine.Transaction>) => Promise<void>
   processPO: (header: { vendor: string, date: string, reference: string, warehouse: string, invoiceNumber: string }, lines: PurchaseLine[], sundry?: any[]) => Promise<void>
   processInward: (header: { vendor: string, date: string, reference: string, warehouse: string, invoiceNumber: string }, lines: PurchaseLine[], sundry?: any[]) => Promise<void>
   issueToEngineer: (engineerId: string, lines: any[], metadata?: { ticket_id?: string, customer_name?: string }) => Promise<void>
@@ -437,20 +441,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [logs, setLogs] = useState<Log[]>([])
   const [expenseConfigs, setExpenseConfigs] = useState<ExpenseConfig[]>(MOCK_EXPENSES)
   const [tickets, setTickets] = useState<Ticket[]>([
-    { id: 'TICKET-101', title: 'Network Outage @ HQ', customer_name: 'Main Office', requirements: [{ item_id: 'ITM001', qty: 1 }] },
-    { id: 'TICKET-102', title: 'Server Upgrade', customer_name: 'Data Center', requirements: [{ item_id: 'ITM002', qty: 2 }] },
-    { id: 'TICKET-103', title: 'Network Expansion - Phase 1', customer_name: 'Main Office', requirements: [
-      { item_id: 'Configuration Charges', qty: 1 },
-      { item_id: 'Installation Charges', qty: 1 }
-    ] },
-    { id: 'TICKET-104', title: 'Camera Installation (12 units)', customer_name: 'Main Office', requirements: [
-      { item_id: 'ITM003', qty: 12 },
-      { item_id: 'Camera Termination', qty: 12 },
-      { item_id: 'DVR Configuration', qty: 1 }
-    ] },
-    { id: 'TICKET-105', title: 'Annual Maintenance Contract', customer_name: 'Main Office', requirements: [
-      { item_id: 'Service Charges', qty: 1 }
-    ] },
+    { id: 'TCK-001', title: 'Network Setup @ Acme', customer_name: 'Acme Corp', engineer_id: 'eng1', created_at: '2026-05-01', requirements: [] },
+    { id: 'TCK-002', title: 'Server Maintenance @ Globex', customer_name: 'Globex Inc', engineer_id: 'eng2', created_at: '2026-05-02', requirements: [] },
+    { id: 'TCK-003', title: 'CCTV Install @ Nexus', customer_name: 'Nexus Tech Supplies', engineer_id: 'eng3', created_at: '2026-05-04', requirements: [] },
   ])
   const [invoices, setInvoices] = useState<InvoiceRecord[]>(() => {
     if (typeof window !== 'undefined') {
@@ -469,11 +462,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const saved = localStorage.getItem('inventory_gst_configs');
       const parsed = saved ? JSON.parse(saved) : [];
       return parsed.length > 0 ? parsed : [
-        { id: 'gst-1', name: 'GST 18%', rate: 18, hsn: '8471' },
-        { id: 'gst-2', name: 'GST 12%', rate: 12, hsn: '8517' },
-        { id: 'gst-3', name: 'GST 5%', rate: 5, hsn: '8443' },
-        { id: 'gst-4', name: 'GST 28%', rate: 28, hsn: '8703' },
-        { id: 'gst-0', name: 'Exempted', rate: 0, hsn: '0000' }
+        { id: 'gst-1', name: 'GST 18%', rate: 18, hsn: '8471', gstType: 'LOCAL' },
+        { id: 'gst-2', name: 'GST 12%', rate: 12, hsn: '8517', gstType: 'LOCAL' },
+        { id: 'gst-3', name: 'GST 5%', rate: 5, hsn: '8443', gstType: 'LOCAL' },
+        { id: 'gst-4', name: 'GST 28%', rate: 28, hsn: '8703', gstType: 'LOCAL' },
+        { id: 'gst-0', name: 'Exempted', rate: 0, hsn: '0000', gstType: 'LOCAL' }
       ];
     }
     return [];
@@ -727,7 +720,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       // (If linked to a ticket, stock was already reduced during ticket assignment/usage)
       if (line.productId && !line.ticketId) {
         const available = engine.getAvailableStock(line.productId);
-        
+
         // Handle serialization
         let targetSerials: string[] = [];
         if (line.serials && line.serials.length > 0) {
@@ -824,12 +817,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // POS SALE FLOW
   // -------------------------------------------------------------
   const sellFromPOS = async (
-    cartItems: Array<{ 
-      id: string; 
-      qty: number; 
-      price?: number; 
-      gstRate?: number; 
-      name?: string; 
+    cartItems: Array<{
+      id: string;
+      qty: number;
+      price?: number;
+      gstRate?: number;
+      name?: string;
       serials?: string[];
       ticketId?: string;
     }>,
@@ -839,7 +832,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       throw new Error('HARD_FAIL: EMPTY_CART');
 
     const saleRef = `POS-${Date.now()}`;
-    
+
     // 1. Calculate totals using central ledger logic if possible, or build manually
     let subtotal = 0;
     let totalTax = 0;
@@ -881,7 +874,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     // 2. Finalize using unified billing engine (Handles Stock + Revenue + Invoice State)
     await finalizeBill(invoice);
-    
+
     addLog(`POS_SALE_COMMITTED: ${saleRef} | Total: ₹${invoice.grand_total}`);
   }
 
@@ -987,26 +980,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     addLog(`EXPENSE RECORDED: ${expense.name} | Amount: ₹${data.amount}`);
   }
 
-  const recordOutsidePurchase = async (data: { 
-    item_name: string, 
-    qty: number, 
-    cost: number, 
+  const recordAdditionalPurchase = async (data: {
+    item_name: string,
+    qty: number,
+    cost: number,
     ticket_id: string,
-    notes?: string
+    notes?: string,
+    attachment?: string
   }) => {
     if (!data.ticket_id) throw new Error("HARD_FAIL: TICKET_ID_REQUIRED");
     if (data.qty <= 0) throw new Error("HARD_FAIL: INVALID_QTY");
     if (data.cost <= 0) throw new Error("HARD_FAIL: INVALID_COST");
 
     engine.commitTransaction({
-      id: `TXN-OP-${Date.now()}`,
+      id: `TXN-AP-${Date.now()}`,
       item_id: data.item_name,
-      serial: `OP-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      type: 'OUTSIDE_PURCHASE',
+      serial: `AP-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      type: 'ADDITIONAL_PURCHASE',
       quantity: data.qty,
       cost: data.cost,
       amount: data.cost * data.qty,
-      source: 'OUTSIDE_PURCHASE',
+      source: 'ADDITIONAL_PURCHASE',
+      attachment: data.attachment,
       affects_stock: false,
       status: 'COMPLETED',
       date: new Date().toISOString().split('T')[0],
@@ -1016,7 +1011,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       notes: data.notes
     });
 
-    addLog(`OUTSIDE PURCHASE RECORDED: ${data.item_name} for ${data.ticket_id}`);
+    addLog(`ADDITIONAL PURCHASE RECORDED: ${data.item_name} for ${data.ticket_id}`);
     await fetchData();
   }
 
@@ -1552,7 +1547,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     recordExpense,
     recordManualExpense: recordExpense,
     saveTicketData,
-    recordOutsidePurchase,
+    recordAdditionalPurchase,
+    commitTransaction: async (data: Partial<engine.Transaction>) => {
+      engine.commitTransaction(data);
+      addLog(`TRANSACTION COMMITTED: ${data.id || 'NEW'}`);
+    },
     getTicketProfit: (ticketNo: string) => engine.getTicketProfit(ticketNo, transactions),
     getAvailableStock: (productId: string) => engine.getAvailableStock(productId),
     addEngineer: (data: { name: string, type: "IT" | "TECHNICAL" }) => {

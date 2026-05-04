@@ -15,7 +15,8 @@ export type TransactionType =
   | "JOURNAL"
   | "PO"
   | "PURCHASE"
-  | "OUTSIDE_PURCHASE";
+  | "ADDITIONAL_PURCHASE"
+  | "TRAVEL_EXPENSE";
 
 export interface Transaction {
   id: string
@@ -27,7 +28,7 @@ export interface Transaction {
   qty?: number       // alias used by some callers
   quantity: number
 
-  source?: "PURCHASE" | "OUTSIDE_PURCHASE" | "STORE_ISSUE" | "RETURN" | "JOB_USAGE"
+  source?: "PURCHASE" | "ADDITIONAL_PURCHASE" | "STORE_ISSUE" | "RETURN" | "JOB_USAGE"
   affects_stock?: boolean
 
   engineer_id?: string
@@ -138,28 +139,28 @@ loadLedger();
 // --------------------------------------------------
 // SEED DATA
 // --------------------------------------------------
-serialCounters["ITM001"] = 2;
-serialCounters["ITM002"] = 1;
 transactions.push(
-  { id: "MOCK-1", type: "INWARD", serial: "ITM001-1", item_id: "ITM001", timestamp: Date.now(), quantity: 1, to_location: "STORE" },
-  { id: "MOCK-2", type: "INWARD", serial: "ITM001-2", item_id: "ITM001", timestamp: Date.now(), quantity: 1, to_location: "STORE" },
-  { id: "MOCK-3", type: "INWARD", serial: "ITM002-1", item_id: "ITM002", timestamp: Date.now(), quantity: 1, to_location: "STORE" },
-  { id: "MOCK-4", type: "ASSIGN", serial: "ITM001-1", item_id: "ITM001", engineer_id: "eng1", timestamp: Date.now(), quantity: 1, from_location: "STORE", to_location: "ENGINEER" },
-  
-  // TICKET-101 Test Case
-  { id: "TXN-T101-1", type: "OUTWARD", serial: "ITM001-2", item_id: "ITM001", timestamp: Date.now() - 86400000, quantity: 1, reference: "TICKET-101", purchase_price: 38000, engineer_id: "eng1" },
-  { id: "TXN-T101-2", type: "EXPENSE", serial: "EXP-101", item_id: "exp1", timestamp: Date.now() - 86400000, quantity: 1, reference: "TICKET-101", price: 500, sub_type: "INTERNAL" },
-  { id: "TXN-T101-3", type: "REVENUE", serial: "REV-101", item_id: "REVENUE", timestamp: Date.now() - 86400000, quantity: 1, reference: "TICKET-101", price: 45000 },
+  // --- SEED INVENTORY (Stock Master) ---
+  { id: "SEED-1", type: "INWARD", serial: "CBL-BULK", item_id: "ITM-CBL", quantity: 1000, timestamp: Date.now() - 2000000, to_location: "STORE", purchase_price: 25 },
+  { id: "SEED-2", type: "INWARD", serial: "RTR-001", item_id: "ITM-RTR", quantity: 5, timestamp: Date.now() - 2000000, to_location: "STORE", purchase_price: 12000 },
+  { id: "SEED-3", type: "INWARD", serial: "SWT-001", item_id: "ITM-SWT", quantity: 10, timestamp: Date.now() - 2000000, to_location: "STORE", purchase_price: 4500 },
+  { id: "SEED-4", type: "INWARD", serial: "ADP-001", item_id: "ITM-ADP", quantity: 50, timestamp: Date.now() - 2000000, to_location: "STORE", purchase_price: 350 },
 
-  // TICKET-202 Test Case
-  { id: "TXN-T202-1", type: "OUTWARD", serial: "ITM002-1", item_id: "ITM002", timestamp: Date.now() - 172800000, quantity: 1, reference: "TICKET-202", purchase_price: 6500, engineer_id: "eng2" },
-  { id: "TXN-T202-2", type: "REVENUE", serial: "REV-202", item_id: "REVENUE", timestamp: Date.now() - 172800000, quantity: 1, reference: "TICKET-202", price: 12000 },
+  // --- TICKET-001: Network Setup @ Acme (Full Cycle) ---
+  { id: "T1-ISS-1", type: "OUTWARD", serial: "CBL-1", item_id: "ITM-CBL", quantity: 100, reference: "TCK-001", engineer_id: "eng1", timestamp: Date.now() - 86400000 },
+  { id: "T1-ISS-2", type: "OUTWARD", serial: "RTR-1", item_id: "ITM-RTR", quantity: 1, reference: "TCK-001", engineer_id: "eng1", timestamp: Date.now() - 86400000 },
+  { id: "T1-RET-1", type: "RETURN", serial: "CBL-1-RET", item_id: "ITM-CBL", quantity: 15, reference: "TCK-001", engineer_id: "eng1", timestamp: Date.now() - 43200000 },
+  { id: "T1-PUR-1", type: "CONSUMED", serial: "WALL-MOUNTS", item_id: "Wall Mounts", quantity: 10, ticket_id: "TCK-001", cost: 1500, source: "ADDITIONAL_PURCHASE", affects_stock: false, timestamp: Date.now() - 43200000 },
+  { id: "T1-EXP-1", type: "EXPENSE", serial: "EXP-T1", item_id: "Travel", quantity: 1, amount: 450, reference: "TCK-001", timestamp: Date.now() - 43200000, notes: "Site Visit" },
 
-  // Dummy Outside Purchases
-  { id: "OP-1", type: "CONSUMED", serial: "PVC-PIPE-10FT", item_id: "PVC Pipe 10ft", timestamp: Date.now() - 43200000, quantity: 2, ticket_id: "TICKET-101", cost: 450, source: "OUTSIDE_PURCHASE", affects_stock: false, date: "2024-04-26" },
-  { id: "OP-2", type: "CONSUMED", serial: "CAT6-CABLE-50M", item_id: "Cat6 Cable 50m", timestamp: Date.now() - 36000000, quantity: 1, ticket_id: "TICKET-101", cost: 1200, source: "OUTSIDE_PURCHASE", affects_stock: false, date: "2024-04-26" },
-  { id: "OP-3", type: "CONSUMED", serial: "ELECTRICAL-TAPE", item_id: "Electrical Tape", timestamp: Date.now() - 21600000, quantity: 5, ticket_id: "TICKET-102", cost: 250, source: "OUTSIDE_PURCHASE", affects_stock: false, date: "2024-04-27" },
-  { id: "OP-4", type: "CONSUMED", serial: "SCREWS-PACK-50", item_id: "Screws Pack 50", timestamp: Date.now() - 14400000, quantity: 1, ticket_id: "TICKET-102", cost: 150, source: "OUTSIDE_PURCHASE", affects_stock: false, date: "2024-04-27" }
+  // --- TICKET-002: Server Maintenance @ Globex ---
+  { id: "T2-ISS-1", type: "OUTWARD", serial: "SWT-1", item_id: "SWT-001", quantity: 1, reference: "TCK-002", engineer_id: "eng2", timestamp: Date.now() - 172800000 },
+  { id: "T2-EXP-1", type: "EXPENSE", serial: "EXP-T2", item_id: "Food", quantity: 1, amount: 200, reference: "TCK-002", timestamp: Date.now() - 172800000 },
+
+  // --- TICKET-003: CCTV Install @ Nexus ---
+  { id: "T3-ISS-1", type: "OUTWARD", serial: "ADP-1", item_id: "ITM-ADP", quantity: 8, reference: "TCK-003", engineer_id: "eng3", timestamp: Date.now() - 259200000 },
+  { id: "T3-PUR-1", type: "CONSUMED", serial: "BNC-CONNECTORS", item_id: "BNC Connectors", quantity: 16, ticket_id: "TCK-003", cost: 800, source: "ADDITIONAL_PURCHASE", affects_stock: false, timestamp: Date.now() - 259200000 },
+  { id: "T3-EXP-1", type: "EXPENSE", serial: "EXP-T3", item_id: "Fuel", quantity: 1, amount: 350, reference: "TCK-003", timestamp: Date.now() - 259200000 }
 );
 
 // --------------------------------------------------
@@ -303,28 +304,62 @@ export function buildState(
 }
 
 export function getTicketProfit(ticketNo: string, txns: Transaction[] = transactions): TicketSummary {
-  const ticketTxns = txns.filter(t => t.reference === ticketNo || t.ticket_id === ticketNo || t.reference_id === ticketNo);
+  const summary = getTicketSummary(ticketNo, txns);
   
-  let revenue = 0;
-  let cost = 0;
-  let expense = 0;
+  const revenue = txns.filter(t => (t.reference === ticketNo || t.ticket_id === ticketNo) && t.type === 'REVENUE')
+                      .reduce((acc, t) => acc + (t.amount || t.price || 0), 0);
 
-  ticketTxns.forEach(t => {
-    if (t.type === 'REVENUE') {
-      revenue += (t.amount || (t.quantity * (t.price || 0)));
-    } else if (t.type === 'OUTWARD' || t.type === 'CONSUMED') {
-      // Rule 2: Always use cost_snapshot (t.price or t.amount or t.cost)
-      const lineCost = t.cost || t.purchase_price || t.price || t.amount || 0;
-      cost += (lineCost * (t.quantity || 1));
-    } else if (t.type === 'EXPENSE') {
-      expense += (t.amount || (t.quantity * (t.price || 0)));
-    }
-  });
+  const cost = summary.itemsUsed.reduce((acc, t) => acc + (t.qty * (t.cost || 0)), 0) +
+               summary.purchases.reduce((acc, t) => acc + t.cost, 0);
 
+  const expense = summary.expenses.reduce((acc, t) => acc + t.amount, 0);
+  
   const profit = revenue - cost - expense;
   const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
 
   return { revenue, cost, expense, profit, margin };
+}
+
+export function getTicketSummary(ticketNo: string, txns: Transaction[] = transactions) {
+  const ticketTxns = txns.filter(t => t.reference === ticketNo || t.ticket_id === ticketNo || t.reference_id === ticketNo);
+  
+  // 1. Calculate Net Items Used (Issue - Return)
+  const itemMap: Record<string, { item: string, qty: number, id: string, cost: number }> = {};
+  
+  ticketTxns.forEach(t => {
+    if (t.type === 'OUTWARD' || t.type === 'RETURN') {
+      const isReturn = t.type === 'RETURN';
+      const key = t.item_id;
+      if (!itemMap[key]) {
+        itemMap[key] = { item: t.item_id, qty: 0, id: t.item_id, cost: t.purchase_price || t.price || 0 };
+      }
+      itemMap[key].qty += isReturn ? -t.quantity : t.quantity;
+    }
+  });
+
+  // 2. Fetch Purchases (Outside Purchases / Consumed)
+  const purchases = ticketTxns
+    .filter(t => t.type === 'CONSUMED' && (t.source === 'ADDITIONAL_PURCHASE' || t.source === 'PURCHASE'))
+    .map(t => ({
+      item: t.item_id || t.serial,
+      qty: t.quantity,
+      cost: t.cost || t.amount || 0
+    }));
+
+  // 3. Fetch Expenses
+  const expenses = ticketTxns
+    .filter(t => t.type === 'EXPENSE')
+    .map(t => ({
+      name: t.item_id,
+      amount: t.amount || t.price || 0,
+      billImageUrl: (t as any).metadata?.attachment || '/placeholder-bill.jpg'
+    }));
+
+  return {
+    itemsUsed: Object.values(itemMap).filter(i => i.qty > 0),
+    purchases,
+    expenses
+  };
 }
 
 // --------------------------------------------------
@@ -333,15 +368,15 @@ export function getTicketProfit(ticketNo: string, txns: Transaction[] = transact
 
 export function validateTransaction(txn: any, ledger: Transaction[] = transactions) {
   const state = buildState(ledger);
-  
+
   // Rule 7: Ticket Linking
   if (!txn.reference && txn.type !== 'ADJUSTMENT' && txn.type !== 'INWARD' && txn.type !== 'JOURNAL') {
     throw new Error("HARD_FAIL: MISSING_TICKET");
   }
 
   // Rule 5 & 6: Financial Valuations
-  if ((txn.type === 'EXPENSE' || txn.type === 'REVENUE' || txn.type === 'OUTWARD') && 
-      (txn.amount === undefined && txn.price === undefined)) {
+  if ((txn.type === 'EXPENSE' || txn.type === 'REVENUE' || txn.type === 'OUTWARD') &&
+    (txn.amount === undefined && txn.price === undefined)) {
     throw new Error("HARD_FAIL: INVALID_AMOUNT");
   }
 
@@ -386,15 +421,15 @@ export function commitTransaction(txn: any) {
   return transactions;
 }
 
-export function executeInward(params: { 
-  productId: string, 
-  serial: string, 
+export function executeInward(params: {
+  productId: string,
+  serial: string,
   barcode?: string,
-  qty: number, 
-  gst: number, 
-  price: number, 
+  qty: number,
+  gst: number,
+  price: number,
   source: string,
-  metadata?: Partial<Transaction> 
+  metadata?: Partial<Transaction>
 }) {
   const { productId, serial, barcode, qty, gst, price, source, metadata } = params;
 

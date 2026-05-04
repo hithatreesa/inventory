@@ -29,7 +29,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { MetricCard } from '@/components/shared/MetricCard'
 import { ItemModal } from '@/components/modals/ItemModal'
-import { OutsidePurchaseModal } from '@/components/modals/OutsidePurchaseModal'
+import { AdditionalPurchaseModal } from '@/components/modals/AdditionalPurchaseModal'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
@@ -337,7 +337,7 @@ export default function InventoryPage() {
             item={editingItem}
          />
 
-         <OutsidePurchaseModal
+         <AdditionalPurchaseModal
             isOpen={isOPModalOpen}
             onClose={() => setIsOPModalOpen(false)}
          />
@@ -478,13 +478,10 @@ export default function InventoryPage() {
                                     className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/10"
                                  />
                               </th>
-                              <th className="px-6 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic">Product Specification</th>
-                              <th className="px-6 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic">Division</th>
-                              <th className="px-6 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic">Warehouse</th>
-                              <th className="px-6 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic text-center">On Hand</th>
-                              <th className="px-6 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic text-center">In Use</th>
-                              <th className="px-6 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic text-right">Unit Val</th>
-                              <th className="px-6 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic text-center">Status</th>
+                              <th className="px-6 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic">Item</th>
+                              <th className="px-6 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic">Category</th>
+                              <th className="px-6 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic">Unit</th>
+                              <th className="px-6 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic text-right">Price</th>
                               <th className="px-8 py-5 text-sm font-black text-gray-400 uppercase tracking-widest italic text-right">Actions</th>
                            </tr>
                         </thead>
@@ -504,36 +501,15 @@ export default function InventoryPage() {
                                  </td>
                                  <td className="px-6 py-6 font-bold text-text-main">
                                     <p className="font-bold text-[#003366] italic tracking-tight uppercase leading-none">{item.name}</p>
-                                    <p className="text-sm font-mono font-black text-gray-400 uppercase tracking-widest mt-1.5">{item.sku}</p>
                                  </td>
                                  <td className="px-6 py-6">
                                     <span className="text-sm font-black tracking-widest italic uppercase text-primary/60">{item.category}</span>
                                  </td>
                                  <td className="px-6 py-6">
-                                    <p className="text-sm font-black text-gray-400 uppercase tracking-widest italic">{item.location}</p>
-                                 </td>
-                                 <td className="px-6 py-6 text-center">
-                                    <button
-                                       onClick={(e) => { e.stopPropagation(); setActivePanel({ type: 'serials', id: item.id }); }}
-                                       className="mx-auto px-3 py-1 bg-[#003366]/5 rounded-xl border border-[#003366]/10 flex items-center justify-center gap-2 hover:bg-[#003366]/10 transition-all group/sn active:scale-95"
-                                    >
-                                       <Hash className="w-3 h-3 text-[#003366] opacity-40 group-hover/sn:opacity-100" />
-                                       <span className="text-sm font-black text-[#003366] italic tabular-nums">{item.total_qty} Units</span>
-                                    </button>
-                                 </td>
-                                 <td className="px-6 py-6 text-center">
-                                    <p className="text-sm font-black text-gray-400 tabular-nums italic">{item.assigned_qty}</p>
+                                    <p className="text-sm font-black text-gray-400 uppercase tracking-widest italic">{item.unit || 'nos'}</p>
                                  </td>
                                  <td className="px-6 py-6 text-right font-black italic text-sm text-[#003366] tabular-nums tracking-tighter">
                                     ₹{(item.price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                 </td>
-                                 <td className="px-6 py-6 text-center">
-                                    <span className={cn(
-                                       "italic font-black text-sm tracking-tighter uppercase px-2.5 h-6 flex items-center justify-center rounded-lg shadow-sm border border-transparent",
-                                       (item.total_qty - item.assigned_qty) > 0 ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
-                                    )}>
-                                       {(item.total_qty - item.assigned_qty) > 0 ? 'In Stock' : 'Out of Stock'}
-                                    </span>
                                  </td>
                                  <td className="px-8 py-6 text-right" onClick={(e) => e.stopPropagation()}>
                                     <div className="flex items-center justify-end gap-1">
@@ -732,13 +708,12 @@ export default function InventoryPage() {
                      </div>
                   </div>
                   <div className="space-y-6 pt-4">
-                     <h4 className="text-sm font-black text-[#003366] uppercase tracking-[0.2em] border-b border-gray-50 pb-4 italic">Specifications</h4>
+                     <h4 className="text-sm font-black text-[#003366] uppercase tracking-[0.2em] border-b border-gray-50 pb-4 italic">Item Details</h4>
                      <div className="space-y-4">
                         {[
-                           { label: 'Warehouse', value: activeItem.location || 'Main Distribution' },
-                           { label: 'Brand', value: activeItem.brand || 'N/A' },
-                           { label: 'Price (Default)', value: `₹${(activeItem.price || 0).toLocaleString('en-IN')}` },
-                           { label: 'GST Configuration', value: activeItem.category === 'Hardware' ? '18%' : '12%' },
+                           { label: 'Category', value: activeItem.category },
+                           { label: 'Unit', value: activeItem.unit || 'nos' },
+                           { label: 'Price', value: `₹${(activeItem.price || 0).toLocaleString('en-IN')}` },
                         ].map((row, i) => (
                            <div key={i} className="flex justify-between items-center py-2 px-4 rounded-xl hover:bg-gray-50 transition-colors group">
                               <span className="text-sm font-black text-gray-400 uppercase tracking-widest italic group-hover:text-primary transition-colors">{row.label}</span>

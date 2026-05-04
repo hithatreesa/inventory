@@ -12,7 +12,7 @@ export function GstMaster() {
   const { gstConfigs, addGstConfig, updateGstConfig, deleteGstConfig } = useData()
   const [isAdding, setIsAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [formData, setFormData] = useState({ name: '', rate: 0, hsn: '' })
+  const [formData, setFormData] = useState({ name: '', rate: 0, hsn: '', gstType: 'LOCAL' })
 
   const handleSave = async () => {
     if (!formData.name || formData.rate < 0) {
@@ -28,7 +28,7 @@ export function GstMaster() {
         await addGstConfig(formData)
         toast.success("New GST Slab Registered")
       }
-      setFormData({ name: '', rate: 0, hsn: '' })
+      setFormData({ name: '', rate: 0, hsn: '', gstType: 'LOCAL' })
       setIsAdding(false)
       setEditingId(null)
     } catch (err: any) {
@@ -44,7 +44,7 @@ export function GstMaster() {
           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Compliance & HSN Standards</p>
         </div>
         <Button
-          onClick={() => { setIsAdding(true); setEditingId(null); setFormData({ name: '', rate: 0, hsn: '' }); }}
+          onClick={() => { setIsAdding(true); setEditingId(null); setFormData({ name: '', rate: 0, hsn: '', gstType: 'LOCAL' }); }}
           className="rounded-xl italic font-black uppercase text-[10px] tracking-widest px-8 h-12 bg-[#003366] hover:bg-[#002244]"
         >
           <Plus className="w-4 h-4 mr-2" /> Add Tax Slab
@@ -64,7 +64,7 @@ export function GstMaster() {
               <X className="w-4 h-4" />
             </button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="space-y-2">
               <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">Item Name / Category</label>
               <Input
@@ -93,6 +93,18 @@ export function GstMaster() {
                 className="h-14 rounded-2xl bg-gray-50 border-gray-100 font-bold focus:ring-2 focus:ring-[#003366]/20 transition-all"
               />
             </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1 italic">GST Type (Tax Nature)</label>
+              <select
+                value={formData.gstType}
+                onChange={e => setFormData({ ...formData, gstType: e.target.value })}
+                className="w-full h-14 rounded-2xl bg-gray-50 border-gray-100 font-black italic px-4 outline-none focus:ring-2 focus:ring-[#003366]/20 transition-all cursor-pointer appearance-none"
+              >
+                <option value="LOCAL">LOCAL</option>
+                <option value="INTERSTATE">INTERSTATE</option>
+                <option value="EXEMPTED">EXEMPTED</option>
+              </select>
+            </div>
           </div>
           <div className="flex justify-end gap-4 mt-10 pt-6 border-t border-gray-50">
             <Button variant="ghost" onClick={() => { setIsAdding(false); setEditingId(null); }} className="rounded-xl px-8 italic font-black uppercase text-[10px] tracking-widest text-gray-400">Abort</Button>
@@ -109,6 +121,7 @@ export function GstMaster() {
             <tr className="bg-gray-50/50 border-b border-gray-100">
               <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest italic">Compliance Identity</th>
               <th className="px-6 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-center">HSN Mapping</th>
+              <th className="px-6 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-center">Tax Nature</th>
               <th className="px-6 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-center">Tax Rate</th>
               <th className="px-10 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest italic text-right">Operations</th>
             </tr>
@@ -133,13 +146,22 @@ export function GstMaster() {
                   </span>
                 </td>
                 <td className="px-6 py-6 text-center">
+                  <span className={cn(
+                    "inline-flex px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest italic",
+                    gst.gstType === 'INTERSTATE' ? "bg-blue-100 text-blue-600" : 
+                    gst.gstType === 'EXEMPTED' ? "bg-gray-100 text-gray-400" : "bg-emerald-100 text-emerald-600"
+                  )}>
+                    {gst.gstType || 'LOCAL'}
+                  </span>
+                </td>
+                <td className="px-6 py-6 text-center">
                   <span className="text-xl font-black text-[#003366] italic tabular-nums leading-none block">{gst.rate}%</span>
                   <span className="text-[8px] font-black text-green-500 uppercase tracking-widest mt-1 block italic">Standard Slab</span>
                 </td>
                 <td className="px-10 py-6 text-right">
                   <div className="flex justify-end gap-2 opacity-40 group-hover:opacity-100 transition-opacity duration-300">
                     <button
-                      onClick={() => { setEditingId(gst.id); setFormData({ name: gst.name, rate: gst.rate, hsn: gst.hsn || '' }); }}
+                      onClick={() => { setEditingId(gst.id); setFormData({ name: gst.name, rate: gst.rate, hsn: gst.hsn || '', gstType: gst.gstType || 'LOCAL' }); }}
                       className="w-10 h-10 rounded-xl bg-gray-50 text-gray-400 hover:text-[#003366] hover:bg-white hover:shadow-md border border-transparent hover:border-gray-100 transition-all flex items-center justify-center"
                     >
                       <Edit2 className="w-4 h-4" />

@@ -15,9 +15,11 @@ interface EntityLookupProps {
   placeholder?: string;
   className?: string;
   contactFilter?: 'VENDOR' | 'CLIENT' | 'ALL';
+  ticketFilter?: { client?: string; engineer?: string };
   onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void;
   "data-row"?: number;
   "data-col"?: number;
+  readOnly?: boolean;
 }
 
 // Hook for Contact Logic
@@ -117,7 +119,7 @@ function useEngineerLookup(value: string) {
 }
 
 // Hook for Ticket Logic
-function useTicketLookup(value: string) {
+function useTicketLookup(value: string, filter?: { client?: string; engineer?: string }) {
   const { tickets } = useData();
   const [debouncedValue, setDebouncedValue] = useState(value);
 
@@ -128,18 +130,25 @@ function useTicketLookup(value: string) {
 
   const results = useMemo(() => {
     const q = debouncedValue.toLowerCase();
-    return (tickets || []).filter((t: any) =>
-      !q ||
-      t.id.toLowerCase().includes(q) ||
-      (t.title && t.title.toLowerCase().includes(q)) ||
-      (t.customer_name && t.customer_name.toLowerCase().includes(q))
-    ).slice(0, 10).map((t: any) => ({ ...t, name: t.id, type: 'ticket' }));
-  }, [debouncedValue, tickets]);
+    return (tickets || []).filter((t: any) => {
+      const matchesSearch = !q ||
+        t.id.toLowerCase().includes(q) ||
+        (t.title && t.title.toLowerCase().includes(q)) ||
+        (t.customer_name && t.customer_name.toLowerCase().includes(q));
+      
+      const matchesFilter = !filter || (
+        (!filter.client || t.customer_name === filter.client) &&
+        (!filter.engineer || t.engineer_id === filter.engineer)
+      );
+
+      return matchesSearch && matchesFilter;
+    }).slice(0, 10).map((t: any) => ({ ...t, name: t.id, type: 'ticket' }));
+  }, [debouncedValue, tickets, filter]);
 
   return results;
 }
 
-export const EntityLookup = React.forwardRef<HTMLInputElement, EntityLookupProps>(({ type, value, onChange, onSelect, placeholder, className, contactFilter, onKeyDown: onKeyDownProp, ...rest }: EntityLookupProps, ref) => {
+export const EntityLookup = React.forwardRef<HTMLInputElement, EntityLookupProps>(({ type, value, onChange, onSelect, placeholder, className, contactFilter, ticketFilter, onKeyDown: onKeyDownProp, readOnly, ...rest }: EntityLookupProps, ref) => {
   const { inventory } = useData();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -151,7 +160,7 @@ export const EntityLookup = React.forwardRef<HTMLInputElement, EntityLookupProps
   const itemResults = useItemLookup(value);
   const expenseResults = useExpenseLookup(value);
   const engineerResults = useEngineerLookup(value);
-  const ticketResults = useTicketLookup(value);
+  const ticketResults = useTicketLookup(value, ticketFilter);
   const results = type === 'contact' ? contactResults : (type === 'item' ? itemResults : (type === 'expense' ? expenseResults : (type === 'engineer' ? engineerResults : ticketResults)));
 
   const handleSelect = useCallback((item: any) => {
@@ -200,13 +209,16 @@ export const EntityLookup = React.forwardRef<HTMLInputElement, EntityLookupProps
   }, [type]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (onKeyDownProp) {
+      onKeyDownProp(e);
+      if (e.defaultPrevented) return;
+    }
 
     if (!isOpen) {
       if (e.key === 'ArrowDown' || e.key === 'Enter') {
         if (e.key === 'Enter' && value === "") return; // Don't open on empty enter if grid navigation is needed
         setIsOpen(true);
       }
-      if (onKeyDownProp) onKeyDownProp(e);
       return;
     }
 
@@ -245,10 +257,6 @@ export const EntityLookup = React.forwardRef<HTMLInputElement, EntityLookupProps
       setIsOpen(false);
       return;
     }
-
-    if (onKeyDownProp) {
-      onKeyDownProp(e);
-    }
   };
 
   return (
@@ -259,11 +267,15 @@ export const EntityLookup = React.forwardRef<HTMLInputElement, EntityLookupProps
           type="text"
           value={value}
           onChange={(e) => {
+            if (readOnly) return;
             onChange(e.target.value);
             setIsOpen(true);
           }}
-          onFocus={() => setIsOpen(true)}
+          onFocus={() => {
+            if (!readOnly) setIsOpen(true);
+          }}
           onKeyDown={handleKeyDown}
+          readOnly={readOnly}
           {...rest}
           placeholder={placeholder || `Search ${type}...`}
           className="w-full bg-transparent outline-none font-black text-text-main italic tracking-tight uppercase placeholder:opacity-30"
@@ -274,8 +286,8 @@ export const EntityLookup = React.forwardRef<HTMLInputElement, EntityLookupProps
       </div>
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-100 rounded-2xl shadow-2xl z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
+        <div className="absolute top-full left-0 mt-2 w-[450px] max-w-[90vw] bg-white border border-gray-100 rounded-[24px] shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 ring-1 ring-black/5">
+          <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
             {type !== 'expense' && type !== 'engineer' && type !== 'ticket' && (
               <div
                 onClick={handleCreateNew}
@@ -317,12 +329,12 @@ export const EntityLookup = React.forwardRef<HTMLInputElement, EntityLookupProps
                         isSelected ? "bg-primary/5 border-primary" : "border-transparent hover:bg-gray-50"
                       )}
                     >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className={cn("text-sm font-black uppercase italic tracking-tight", isSelected ? "text-primary" : "text-gray-900")}>
+                      <div className="flex justify-between items-start gap-4">
+                        <div className="flex-1 min-w-0">
+                          <p className={cn("text-base font-black uppercase italic tracking-tight leading-tight truncate", isSelected ? "text-primary" : "text-gray-900")}>
                             {item.name}
                           </p>
-                          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                             {type === 'item' ? (
                               <>
                                 {item.sku && <span>SKU: {item.sku}</span>}

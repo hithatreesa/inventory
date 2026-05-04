@@ -1,332 +1,556 @@
 "use client"
 
-import React, { useState, useMemo, useCallback, useEffect, Suspense } from 'react'
+import React, { useState, Suspense, useMemo, useEffect } from 'react'
 import {
-    Plus,
     Receipt,
     Calendar,
     User,
-    Search,
-    Filter,
-    ArrowUpRight,
-    Wallet,
-    Trash2,
-    TrendingUp,
-    Zap,
-    HardDrive,
-    ShoppingBag,
-    DollarSign,
-    Save,
-    Package,
     Ticket,
-    Clock
+    DollarSign,
+    Upload,
+    Trash2,
+    FileText,
+    Save,
+    Image as ImageIcon,
+    Camera,
+    Plus,
+    Package,
+    ShoppingBag,
+    Plane,
+    Wallet,
+    X,
+    CheckCircle2
 } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
-import { useData, Engineer } from '@/lib/context/DataContext'
+import { useData } from '@/lib/context/DataContext'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { EntityLookup } from '@/components/shared/EntityLookup'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
-interface ItemUsage {
+interface PurchaseItem {
     id: string
-    itemId: string
-    serial?: string
-    name: string
-    qty: number
-    cost: number
-    requiresSerial?: boolean
-    isInvalid?: boolean
+    item: string
+    qty: string
+    unit: string
+    price: string
+    gst_rate: string | number
 }
 
-interface ExpenseEntry {
-    id: string
-    name: string
-    amount: number
-    sub_type?: string
-    invoiceRef?: string
-}
-
-function ExpensesContent() {
-    const { transactions, saveTicketData, inventory, engineers, expenseConfigs } = useData()
+function ExpenseModuleContent() {
+    const { commitTransaction, recordAdditionalPurchase, tickets } = useData()
     const searchParams = useSearchParams()
     const pageType = searchParams.get('type') || 'job'
 
-    const pageTitle = useMemo(() => {
+    // PREMIUM THEME SYSTEM (Deep Navy Blue)
+    const theme = useMemo(() => {
+        const baseBlue = {
+            primary: '#003B73',
+            dark: '#002D59',
+            light: '#E6F0FF',
+            accent: '#004C99',
+            text: '#001A33',
+        }
         switch (pageType) {
-            case 'outside': return 'Outside Purchase Ledger'
-            case 'transport': return 'Travel Expenses'
-            default: return 'Job Expense Entry'
+            case 'outside':
+                return { ...baseBlue, icon: <ShoppingBag className="w-8 h-8" /> }
+            case 'transport':
+                return { ...baseBlue, icon: <Plane className="w-8 h-8" /> }
+            default:
+                return { ...baseBlue, icon: <Wallet className="w-8 h-8" /> }
         }
     }, [pageType])
 
-    // Header State
-    const [ticketNo, setTicketNo] = useState("")
-    const [customer, setCustomer] = useState("")
-    const [engineer, setEngineer] = useState<Engineer | null>(null)
-
-    // Table States
-    const [items, setItems] = useState<ItemUsage[]>([
-        { id: `item-init-${Date.now()}`, itemId: "", serial: "", name: "", qty: 1, cost: 0, requiresSerial: false }
-    ])
-    const [expenses, setExpenses] = useState<ExpenseEntry[]>([
-        { id: `exp-init-${Date.now()}`, name: "", amount: 0 }
-    ])
-    const [revenue, setRevenue] = useState<string>("")
-    const [jobDate, setJobDate] = useState(new Date().toISOString().split('T')[0])
-
-    // Job Temporal State
-    const [jobStartDay, setJobStartDay] = useState(new Date().toISOString().split('T')[0])
-    const [jobStartTime, setJobStartTime] = useState("09:00")
-    const [jobEndDay, setJobEndDay] = useState(new Date().toISOString().split('T')[0])
-    const [jobEndTime, setJobEndTime] = useState("18:00")
+    const pageTitle = useMemo(() => {
+        if (pageType === 'outside') return 'Additional Purchase'
+        if (pageType === 'transport') return 'Travel Expenses'
+        return 'General Expense'
+    }, [pageType])
 
     const [isSaving, setIsSaving] = useState(false)
+    const [form, setForm] = useState({
+        ticketNo: '',
+        client: '',
+        engineer: '',
+        date: new Date().toISOString().split('T')[0],
+        amount: '',
+        billImageUrl: '',
+        type: 'LOCAL'
+    })
 
-    // Fetch existing data
-    const fetchExisting = useCallback(async () => {
-        if (!ticketNo) return;
-        const existing = transactions.filter(t => t.reference === ticketNo);
-        if (existing.length === 0) return;
+    const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>(
+        Array.from({ length: 15 }, (_, i) => ({
+            id: `p-${Date.now()}-${i}`,
+            item: '',
+            qty: '',
+            unit: 'NOS',
+            price: '',
+            gst_rate: 18
+        }))
+    )
 
-        const firstTxn = existing[0];
-        setCustomer(firstTxn.customer_name || "");
+    // DRAFT PERSISTENCE (AGENTS.md Directive)
+    useEffect(() => {
+        const savedForm = localStorage.getItem('EXPENSE_DRAFT_FORM')
+        const savedItems = localStorage.getItem('EXPENSE_DRAFT_ITEMS')
+        if (savedForm) setForm(JSON.parse(savedForm))
+        if (savedItems) setPurchaseItems(JSON.parse(savedItems))
+    }, [])
 
-        const engId = existing.find(t => t.engineer_id && t.engineer_id !== 'N/A')?.engineer_id;
-        const eng = engineers.find((e: Engineer) => e.id === engId);
-        if (eng) setEngineer(eng);
+    useEffect(() => {
+        localStorage.setItem('EXPENSE_DRAFT_FORM', JSON.stringify(form))
+        localStorage.setItem('EXPENSE_DRAFT_ITEMS', JSON.stringify(purchaseItems))
+    }, [form, purchaseItems])
 
-        const loadedItems: ItemUsage[] = existing
-            .filter(t => t.type === 'OUTWARD')
-            .map(t => {
-                const catalogItem = inventory.find(i => i.id === t.item_id);
-                return {
-                    id: t.id,
-                    itemId: t.item_id,
-                    serial: t.serial,
-                    name: catalogItem?.name || 'Unknown Item',
-                    qty: t.quantity,
-                    cost: t.price || 0,
-                    requiresSerial: catalogItem?.is_serialized || false
-                }
-            });
+    // INTELLI-FILL REVERSE SYNC (Requirement 3)
+    useEffect(() => {
+        if (!form.client && !form.engineer) return;
 
-        const loadedExpenses: ExpenseEntry[] = existing
-            .filter(t => t.type === 'EXPENSE')
-            .map(t => {
-                const config = expenseConfigs.find(c => c.id === t.expense_id);
-                return {
-                    id: t.id,
-                    name: config?.name || t.expense_id || 'Expense',
-                    amount: t.price || 0
-                }
-            });
+        // Find tickets matching current client/engineer pair
+        const matches = tickets.filter(t => 
+            (!form.client || t.customer_name === form.client) &&
+            (!form.engineer || t.engineer_id === form.engineer)
+        );
 
-        const revTxn = existing.find(t => t.type === 'REVENUE');
-
-        if (loadedItems.length > 0) setItems([...loadedItems, { id: `item-next-${Date.now()}`, itemId: "", serial: "", name: "", qty: 1, cost: 0, requiresSerial: false }]);
-        if (loadedExpenses.length > 0) setExpenses([...loadedExpenses, { id: `exp-next-${Date.now()}`, name: "", amount: 0 }]);
-        setRevenue(revTxn?.price?.toString() || "");
-    }, [ticketNo, transactions, inventory, expenseConfigs, engineers]);
-
-    const totals = useMemo(() => {
-        const finalItems = items.filter(i => i.itemId);
-        const finalExpenses = expenses.filter(e => e.name);
-
-        const itemCost = finalItems.reduce((sum, i) => sum + (i.qty * i.cost), 0);
-        const opexCost = finalExpenses.reduce((sum, e) => sum + e.amount, 0);
-        const totalCost = itemCost + opexCost;
-        const revVal = Number(revenue) || 0;
-        const profit = revVal - totalCost;
-
-        let jobDuration = 0;
-        try {
-            const start = new Date(`${jobStartDay}T${jobStartTime}`);
-            const end = new Date(`${jobEndDay}T${jobEndTime}`);
-            const diffMs = end.getTime() - start.getTime();
-            if (diffMs > 0) {
-                jobDuration = Number((diffMs / (1000 * 60 * 60)).toFixed(2));
+        // If exactly one match exists and it's not the current one, resolve it
+        if (matches.length === 1) {
+            const match = matches[0];
+            if (form.ticketNo !== match.id) {
+                setForm(prev => ({ 
+                    ...prev, 
+                    ticketNo: match.id,
+                    // Auto-fill date if it was the default today's date
+                    date: (prev.date === new Date().toISOString().split('T')[0]) ? (match.created_at || prev.date) : prev.date
+                }));
             }
-        } catch (e) { }
+        }
+    }, [form.client, form.engineer, tickets, form.ticketNo]);
 
-        return { itemCost, opexCost, totalCost, revenue: revVal, profit, jobDuration };
-    }, [items, expenses, revenue, jobStartDay, jobStartTime, jobEndDay, jobEndTime])
+    const updatePurchaseItem = (id: string, field: keyof PurchaseItem, value: string) => {
+        setPurchaseItems(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p))
+    }
 
-    const addItem = () => setItems(prev => [...prev, { id: `item-${Date.now()}`, itemId: "", serial: "", name: "", qty: 1, cost: 0, requiresSerial: false }])
-    const addExpense = () => setExpenses(prev => [...prev, { id: `exp-${Date.now()}`, name: "", amount: 0 }])
-    const removeItem = (id: string) => setItems(prev => prev.filter(i => i.id !== id))
-    const removeExpense = (id: string) => setExpenses(prev => prev.filter(e => e.id !== id))
+    const removePurchaseItem = (id: string) => {
+        setPurchaseItems(prev => {
+            const filtered = prev.filter(p => p.id !== id);
+            if (filtered.length === 0) {
+                return [
+                    { id: `p-${Date.now()}-0`, item: '', qty: '', unit: 'NOS', price: '', gst_rate: '0' }
+                ];
+            }
+            return filtered;
+        });
+    }
+
+    const addMoreRows = () => {
+        const startIdx = purchaseItems.length;
+        const newRows = Array.from({ length: 10 }, (_, i) => ({
+            id: `p-${Date.now()}-${startIdx + i}`,
+            item: '',
+            qty: '',
+            unit: 'NOS',
+            price: '',
+            gst_rate: '0'
+        }));
+        setPurchaseItems([...purchaseItems, ...newRows]);
+    }
+
+    const activeItems = purchaseItems.filter(p => p.item || p.price);
+
+    const totalBaseAmount = useMemo(() => {
+        return activeItems.reduce((sum, p) => sum + (Number(p.qty) * Number(p.price)), 0)
+    }, [activeItems])
+
+    const totalTaxAmount = useMemo(() => {
+        return activeItems.reduce((sum, p) => {
+            const base = (Number(p.qty) * Number(p.price));
+            return sum + (base * (Number(p.gst_rate) / 100));
+        }, 0)
+    }, [activeItems])
+
+    const totalPurchaseAmount = useMemo(() => {
+        return totalBaseAmount + totalTaxAmount;
+    }, [totalBaseAmount, totalTaxAmount])
+
+    const handleFileUpload = (file: File) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            setForm(prev => ({ ...prev, billImageUrl: reader.result as string }));
+            toast.success("RECEIPT_CAPTURED");
+        };
+        reader.readAsDataURL(file);
+    }
 
     const handleSave = async () => {
-        if (!ticketNo || !engineer) return toast.error("❌ HARD_FAIL: Ticket Ref and Personnel required");
+        if (!form.ticketNo) return toast.error("HARD_FAIL: TICKET_REQUIRED");
+        const activeItems = purchaseItems.filter(p => p.item.trim() !== '');
+
+        const saveOperation = async () => {
+            if (pageType === 'outside') {
+                if (activeItems.length === 0) throw new Error("HARD_FAIL: NO_ITEMS");
+                for (const p of activeItems) {
+                    await recordAdditionalPurchase({
+                        item_name: p.item,
+                        qty: Number(p.qty) || 0,
+                        cost: Number(p.price) || 0,
+                        ticket_id: form.ticketNo,
+                        notes: `CLIENT: ${form.client} | ENG: ${form.engineer} | UNIT: ${p.unit}`,
+                        attachment: form.billImageUrl
+                    });
+                }
+            } else {
+                if (!form.amount) throw new Error("HARD_FAIL: AMOUNT_REQUIRED");
+                await commitTransaction({
+                    type: pageType === 'transport' ? 'TRAVEL_EXPENSE' : 'EXPENSE',
+                    reference: form.ticketNo,
+                    customer_name: form.client,
+                    engineer_id: form.engineer,
+                    date: form.date,
+                    amount: Number(form.amount),
+                    price: Number(form.amount),
+                    notes: form.billImageUrl ? `PROOF: ${form.billImageUrl}` : '',
+                    item_id: pageType === 'transport' ? 'exp1' : 'exp5',
+                    serial: `${pageType === 'transport' ? 'TRV' : 'EXP'}-${Date.now()}`,
+                    timestamp: Date.now()
+                });
+            }
+
+            // Clear Drafts on Success
+            localStorage.removeItem('EXPENSE_DRAFT_FORM');
+            localStorage.removeItem('EXPENSE_DRAFT_ITEMS');
+            setForm({ ticketNo: '', client: '', engineer: '', date: new Date().toISOString().split('T')[0], amount: '', billImageUrl: '', type: form.type });
+            setPurchaseItems(Array.from({ length: 15 }, (_, i) => ({
+                id: `p-${Date.now()}-${i}`,
+                item: '',
+                qty: '',
+                unit: 'NOS',
+                price: '',
+                gst_rate: '0'
+            })));
+        };
+
         setIsSaving(true);
         try {
-            await saveTicketData(ticketNo, {
-                customer,
-                engineerId: engineer?.id,
-                items: items.filter(i => i.itemId),
-                expenses: expenses.filter(e => e.name),
-                outsideExpenses: [],
-                revenue: totals.revenue,
-                date: jobDate
+            await toast.promise(saveOperation(), {
+                loading: 'COMMITTING TO LEDGER...',
+                success: 'TRANSACTION_COMMITTED',
+                error: (err) => {
+                    return err.message || "HARD_FAIL: REJECTED";
+                }
             });
-            toast.success(`Ledger Updated: ${ticketNo}`);
-        } catch (e) {
-            toast.error("❌ HARD_FAIL: Persistence failure");
         } finally {
             setIsSaving(false);
         }
     }
 
     return (
-        <div className="min-h-screen bg-gray-50 pb-20">
-            <div className="max-w-[1600px] mx-auto px-6 lg:px-12 pt-12 space-y-10">
-                {/* Header Section */}
-                <div className="bg-white p-10 rounded-[48px] border border-gray-100 shadow-xl shadow-blue-900/5 space-y-10">
-                    <div className="flex flex-col lg:flex-row justify-between items-start gap-8">
-                        <div className="space-y-2">
-                            <div className="flex items-center gap-3">
-                                <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-blue-600/30">
-                                    <Receipt className="w-7 h-7" />
-                                </div>
-                                <div className="space-y-2">
-                                    <h1 className="text-5xl font-black text-blue-950 italic tracking-tighter uppercase leading-none">{pageTitle}</h1>
-                                    <p className="text-blue-600/40 font-black text-[10px] uppercase tracking-[0.4em] italic mt-2 ml-1">Financial Intelligence HUD</p>
-                                </div>
-                            </div>
+        <div className="min-h-screen bg-[#F1F5F9] p-4 lg:p-10 font-sans transition-colors duration-500 overflow-hidden flex flex-col h-screen">
+            <div className="max-w-[1900px] mx-auto space-y-8 flex flex-col flex-1 w-full">
+
+                {/* HUD HEADER */}
+                <div className="bg-white/70 backdrop-blur-2xl p-8 rounded-[40px] shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-white/50 flex flex-col md:flex-row justify-between items-center gap-6 shrink-0">
+                    <div className="flex items-center gap-6">
+                        <div
+                            className="w-16 h-16 rounded-[24px] flex items-center justify-center text-white shadow-2xl transition-all duration-500"
+                            style={{ backgroundColor: theme.primary, boxShadow: `0 20px 40px ${theme.primary}33` }}
+                        >
+                            {theme.icon}
                         </div>
-                        <div className="flex gap-4">
-                            <Button onClick={handleSave} disabled={isSaving} className="h-16 px-10 rounded-3xl font-black italic tracking-[0.2em] uppercase transition-all duration-300 bg-blue-600 text-white hover:bg-blue-700 shadow-2xl shadow-blue-600/20 active:scale-95">
-                                {isSaving ? "Persisting..." : "Commit to Ledger"}
-                            </Button>
+                        <div>
+                            <h1 className="text-4xl font-black italic uppercase tracking-tighter leading-none text-[#001A33]">
+                                {pageTitle}
+                            </h1>
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em] mt-3 italic">Audit Ready Ledger System // v2.0</p>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 pt-8 border-t border-gray-50">
-                        <div className="space-y-3">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic ml-2">Job / Expense Ref</label>
-                            <div className="relative group">
-                                <Input value={ticketNo} onChange={e => setTicketNo(e.target.value.toUpperCase())} onBlur={fetchExisting} placeholder="TICKET-000" className="h-14 bg-gray-50 border-none rounded-2xl px-6 font-black italic text-blue-900 uppercase tracking-widest focus:ring-2 focus:ring-blue-100" />
-                                <Ticket className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-300" />
+                    <div className="flex items-center gap-10">
+                        <div className="text-right">
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic mb-2">Total (Inc. GST)</p>
+                            <div className="text-4xl font-black italic flex items-center gap-2 transition-colors duration-500 text-[#001A33]">
+                                <span className="text-xl text-gray-300">₹</span>
+                                {pageType === 'outside' ? totalPurchaseAmount.toLocaleString() : (Number(form.amount) || 0).toLocaleString()}
                             </div>
+                            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest italic mt-2">
+                                Base: ₹{totalBaseAmount.toLocaleString()} // Tax: ₹{totalTaxAmount.toLocaleString()}
+                            </p>
                         </div>
-                        <div className="space-y-3">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic ml-2">Customer / Project</label>
-                            <Input value={customer} onChange={e => setCustomer(e.target.value)} placeholder="CLIENT NAME..." className="h-14 bg-gray-50 border-none rounded-2xl px-6 font-bold text-gray-700" />
-                        </div>
-                        <div className="space-y-3">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic ml-2">Assigned Personnel</label>
-                            <EntityLookup type="engineer" value={engineer?.name || ""} onChange={(val) => !val && setEngineer(null)} onSelect={(eng: Engineer) => setEngineer(eng)} placeholder="SELECT ENGINEER..." />
-                        </div>
-                        <div className="space-y-3">
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic ml-2">Date</label>
-                            <Input type="date" value={jobDate} onChange={e => setJobDate(e.target.value)} className="h-14 bg-gray-50 border-none rounded-2xl px-6 font-bold text-gray-700" />
-                        </div>
+                        <Button
+                            onClick={handleSave}
+                            disabled={isSaving}
+                            className="h-20 px-14 rounded-[30px] text-white font-black italic uppercase tracking-widest transition-all active:scale-95 shadow-[0_20px_50px_rgba(0,100,255,0.3)] flex items-center gap-3 border-none text-xl hover:brightness-110"
+                            style={{ backgroundColor: theme.primary }}
+                        >
+                            <Save className="w-6 h-6" />
+                            {isSaving ? "PROCESSING..." : "Commit Transaction"}
+                        </Button>
                     </div>
                 </div>
 
-                {/* Temporal HUD Stats */}
-                {pageType === 'job' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <div className="bg-white p-6 rounded-[40px] border border-gray-100 shadow-sm space-y-3">
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic ml-1">Start Point (Date)</p>
-                            <Input type="date" value={jobStartDay} onChange={e => setJobStartDay(e.target.value)} className="h-12 bg-gray-50/50 border-none rounded-2xl font-black italic text-blue-900" />
-                        </div>
-                        <div className="bg-white p-6 rounded-[40px] border border-gray-100 shadow-sm space-y-3">
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic ml-1">Start Point (Time)</p>
-                            <Input type="time" value={jobStartTime} onChange={e => setJobStartTime(e.target.value)} className="h-12 bg-gray-50/50 border-none rounded-2xl font-black italic text-blue-900" />
-                        </div>
-                        <div className="bg-white p-6 rounded-[40px] border border-gray-100 shadow-sm space-y-3">
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic ml-1">End Point (Date)</p>
-                            <Input type="date" value={jobEndDay} onChange={e => setJobEndDay(e.target.value)} className="h-12 bg-gray-50/50 border-none rounded-2xl font-black italic text-emerald-900" />
-                        </div>
-                        <div className="bg-white p-6 rounded-[40px] border border-gray-100 shadow-sm space-y-3">
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest italic ml-1">End Point (Time)</p>
-                            <Input type="time" value={jobEndTime} onChange={e => setJobEndTime(e.target.value)} className="h-12 bg-gray-50/50 border-none rounded-2xl font-black italic text-emerald-900" />
-                        </div>
-                    </div>
-                )}
+                <div className="flex-1 overflow-hidden">
+                    {/* MAIN CONTENT AREA */}
+                    <div className="h-full flex flex-col min-h-0">
+                        {pageType === 'outside' ? (
+                            <div className="flex gap-8 h-full min-h-0 overflow-hidden p-6 pt-4">
+                                {/* METADATA COMMAND SIDEBAR */}
+                                <div className="w-[400px] shrink-0 bg-white/70 backdrop-blur-3xl p-8 rounded-[40px] border border-white/50 shadow-2xl overflow-y-auto custom-scrollbar">
+                                    <div className="space-y-8">
+                                        <div className="space-y-3">
+                                            <label className="text-[11px] font-black uppercase tracking-[0.3em] text-gray-400 italic ml-1">Reference Ticket</label>
+                                            <EntityLookup
+                                                type="ticket"
+                                                value={form.ticketNo || ''}
+                                                ticketFilter={{ client: form.client, engineer: form.engineer }}
+                                                onChange={(val) => setForm({ ...form, ticketNo: val || '' })}
+                                                onSelect={(ticket) => setForm({ 
+                                                    ...form, 
+                                                    ticketNo: ticket.id || '', 
+                                                    client: ticket.customer_name || '',
+                                                    engineer: ticket.engineer_id || '',
+                                                    date: ticket.created_at || form.date
+                                                })}
+                                                placeholder="SEARCH TICKET..."
+                                                className="h-14 bg-white border-2 border-gray-100 rounded-[18px] px-6 font-black italic text-sm shadow-lg focus:border-blue-500 transition-all"
+                                            />
+                                        </div>
 
-                {/* Ledger Body */}
-                <div className="grid gap-10 grid-cols-1">
-                    {/* Main Ledger */}
-                    <div className="w-full space-y-8">
-                        <div className="bg-white rounded-[48px] border border-gray-100 shadow-sm overflow-hidden">
-                            <div className="px-8 py-6 border-b border-gray-50 flex justify-between items-center bg-gray-50/30">
-                                <div className="flex items-center gap-3 font-black text-[10px] uppercase tracking-[0.2em] italic text-blue-900">
-                                    <Package className="w-4 h-4" /> Product Consumption Ledger
+                                        <div className="space-y-3">
+                                            <label className="text-[11px] font-black uppercase tracking-[0.3em] text-gray-400 italic ml-1 transition-colors duration-500" style={{ color: theme.primary }}>Digital Proof</label>
+                                            <div
+                                                onClick={() => document.getElementById('receipt-upload')?.click()}
+                                                className="aspect-[4/3] rounded-[30px] border-2 border-dashed border-gray-200 bg-white flex flex-col items-center justify-center gap-4 cursor-pointer hover:border-blue-400 hover:shadow-xl transition-all group relative overflow-hidden"
+                                            >
+                                                {form.billImageUrl ? (
+                                                    <img src={form.billImageUrl} className="w-full h-full object-cover" alt="Bill" />
+                                                ) : (
+                                                    <>
+                                                        <div className="w-14 h-14 rounded-full bg-gray-50 flex items-center justify-center text-gray-300 group-hover:text-blue-500 transition-colors">
+                                                            <Camera className="w-6 h-6" />
+                                                        </div>
+                                                        <p className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-400 italic">Capture Proof</p>
+                                                    </>
+                                                )}
+                                                <input id="receipt-upload" type="file" className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} />
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-6">
+                                            <div className="space-y-3">
+                                                <label className="text-[11px] font-black uppercase tracking-[0.3em] text-gray-400 italic ml-1">Ledger Date</label>
+                                                <Input
+                                                    type="date"
+                                                    value={form.date}
+                                                    onChange={(e) => setForm({ ...form, date: e.target.value })}
+                                                    className="h-12 bg-white border-2 border-gray-100 rounded-[15px] px-5 font-black italic text-xs shadow-md"
+                                                />
+                                            </div>
+                                            <div className="space-y-3">
+                                                <label className="text-[11px] font-black uppercase tracking-[0.3em] text-gray-400 italic ml-1">Purchase Type</label>
+                                                <select 
+                                                    value={form.type}
+                                                    onChange={(e) => setForm({ ...form, type: e.target.value })}
+                                                    className="w-full h-12 bg-white border-2 border-gray-100 rounded-[15px] px-5 font-black italic text-xs shadow-md outline-none cursor-pointer"
+                                                >
+                                                    <option value="LOCAL">LOCAL</option>
+                                                    <option value="INTERSTATE">INTERSTATE</option>
+                                                    <option value="EXEMPTED">EXEMPTED</option>
+                                                </select>
+                                            </div>
+                                            <div className="space-y-3">
+                                                <label className="text-[11px] font-black uppercase tracking-[0.3em] text-gray-400 italic ml-1">Assignment Personnel</label>
+                                                <EntityLookup
+                                                    type="engineer"
+                                                    value={form.engineer || ''}
+                                                    onChange={(val) => setForm({ ...form, engineer: val || '' })}
+                                                    onSelect={(eng) => setForm({ ...form, engineer: eng.id })}
+                                                    placeholder="SELECT ENGINEER..."
+                                                    className="h-12 bg-white border-2 border-gray-100 rounded-[15px] px-5 font-black italic text-xs shadow-md"
+                                                />
+                                            </div>
+                                            <div className="space-y-3">
+                                                <label className="text-[11px] font-black uppercase tracking-[0.3em] text-gray-400 italic ml-1">Customer Name</label>
+                                                <EntityLookup
+                                                    type="contact"
+                                                    value={form.client || ''}
+                                                    onChange={(val) => setForm({ ...form, client: val || '' })}
+                                                    onSelect={(contact) => setForm({ ...form, client: contact.name })}
+                                                    placeholder="SEARCH CUSTOMER..."
+                                                    className="h-12 bg-white border-2 border-gray-100 rounded-[15px] px-5 font-black italic text-xs shadow-md"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <Button onClick={addItem} variant="ghost" size="sm" className="text-[9px] font-black uppercase text-blue-600 italic">+ Add Product</Button>
+
+                                {/* MANIFEST STAGE */}
+                                <div className="flex-1 flex flex-col min-h-0">
+                                    <div className="grid grid-cols-[60px_1fr_100px_100px_150px] gap-0 items-end shrink-0">
+                                        <div className="h-16 rounded-t-[24px] flex items-center justify-center text-[10px] font-black text-white uppercase italic tracking-widest border-r border-white/5" style={{ backgroundColor: theme.dark }}>S.N.</div>
+                                        <div className="h-16 rounded-t-[24px] px-8 flex items-center text-[11px] font-black text-white uppercase italic tracking-widest border-r border-white/5" style={{ backgroundColor: theme.primary }}>PRODUCT SPECIFICATION</div>
+                                        <div className="h-16 rounded-t-[24px] flex items-center justify-center text-[10px] font-black text-white uppercase italic tracking-widest border-r border-white/5 opacity-90" style={{ backgroundColor: theme.primary }}>QTY</div>
+                                        <div className="h-16 rounded-t-[24px] flex items-center justify-center text-[10px] font-black text-white uppercase italic tracking-widest border-r border-white/5 opacity-80" style={{ backgroundColor: theme.primary }}>UOM</div>
+                                        <div className="h-16 rounded-t-[24px] flex items-center justify-end px-8 text-[12px] font-black text-white uppercase italic tracking-widest shadow-2xl relative overflow-hidden" style={{ backgroundColor: theme.primary }}>
+                                            <span className="relative z-10">RATE (₹)</span>
+                                            <div className="absolute top-0 right-0 w-full h-full bg-black/10" />
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white/70 backdrop-blur-xl rounded-b-[30px] shadow-2xl border border-white/50 overflow-hidden flex flex-col flex-1 min-h-0">
+                                        <div className="flex-1 overflow-auto custom-scrollbar">
+                                            <table className="w-full border-collapse">
+                                                <tbody>
+                                                    {purchaseItems.map((p, idx) => (
+                                                        <tr key={p.id} className={cn("transition-all border-b border-gray-100", idx % 2 === 0 ? "bg-white" : "bg-[#F8FAFC]")}>
+                                                            <td className="w-[60px] px-2 py-4 text-center text-[12px] font-black text-gray-400 italic">{idx + 1}.</td>
+                                                            <td className="px-0 py-0 border-r border-gray-100">
+                                                                <EntityLookup
+                                                                    type="item"
+                                                                    value={p.item || ''}
+                                                                    onChange={(val) => updatePurchaseItem(p.id, 'item', val || '')}
+                                                                    onSelect={(item) => updatePurchaseItem(p.id, 'item', item.name || '')}
+                                                                    placeholder="ITEM SPECIFICATION..."
+                                                                    className="w-full h-12 bg-transparent border-none px-8 font-black italic text-xs uppercase tracking-tight"
+                                                                />
+                                                            </td>
+                                                            <td className="w-[100px] px-0 py-0 border-r border-gray-100">
+                                                                <input type="number" value={p.qty || ''} onChange={(e) => updatePurchaseItem(p.id, 'qty', e.target.value)} className="w-full h-12 bg-transparent border-none text-center font-black text-sm outline-none" />
+                                                            </td>
+                                                            <td className="w-[100px] px-0 py-0 border-r border-gray-100">
+                                                                <input value={p.unit || ''} onChange={(e) => updatePurchaseItem(p.id, 'unit', e.target.value.toUpperCase())} className="w-full h-12 bg-transparent border-none text-center font-black text-[10px] uppercase tracking-widest outline-none" />
+                                                            </td>
+                                                            <td className="w-[150px] px-0 py-0">
+                                                                <input type="number" value={p.price || ''} onChange={(e) => updatePurchaseItem(p.id, 'price', e.target.value)} className="w-full h-12 bg-transparent border-none text-right px-8 font-black text-sm italic outline-none text-blue-600" />
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div className="p-6 bg-[#F1F3F9]/50 flex justify-between items-center border-t border-white/50 shrink-0">
+                                            <button onClick={addMoreRows} className="h-12 px-8 rounded-[18px] font-black uppercase tracking-[0.2em] transition-all italic flex items-center gap-3 shadow-xl hover:scale-105 active:scale-95 border-none group text-[11px]" style={{ backgroundColor: theme.primary, color: 'white' }}>
+                                                <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" />
+                                                <span>Add Manifest Line</span>
+                                            </button>
+                                            <p className="text-[10px] font-bold text-gray-400 italic">Audit registry secured v2.0</p>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div className="p-0">
-                                <table className="w-full text-left border-collapse">
-                                    <thead className="sticky top-0 bg-gray-50/50 z-10">
-                                        <tr className="border-b border-gray-200 text-[9px] font-black text-gray-700 uppercase tracking-[0.2em] italic">
-                                            <th className="px-8 py-4">Product Specification</th>
-                                            <th className="px-4 py-4 text-center">Quantity</th>
-                                            <th className="px-4 py-4 text-right">Rate</th>
-                                            <th className="px-8 py-4 text-right">Total</th>
-                                            <th className="w-12"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-50">
-                                        {items.map((item, idx) => (
-                                            <tr key={item.id} className="group hover:bg-blue-50/30 transition-colors">
-                                                <td className="px-8 py-4">
-                                                    <EntityLookup
-                                                        type="item"
-                                                        value={item.name}
-                                                        onChange={(val: string) => {
-                                                            const copy = [...items];
-                                                            copy[idx].name = val;
-                                                            setItems(copy);
-                                                        }}
-                                                        onSelect={(it: any) => {
-                                                            const copy = [...items];
-                                                            copy[idx].itemId = it.id;
-                                                            copy[idx].name = it.name;
-                                                            copy[idx].cost = it.purchase_price || 0;
-                                                            copy[idx].requiresSerial = !!it.is_serialized;
-                                                            if (idx === items.length - 1) {
-                                                                copy.push({ id: `item-${Date.now()}`, itemId: "", serial: "", name: "", qty: 1, cost: 0, requiresSerial: false });
-                                                            }
-                                                            setItems(copy);
-                                                        }}
-                                                        placeholder="SEARCH MASTER..."
+                        ) : (
+                            <div className="h-full flex items-start justify-center p-6 pt-4 overflow-y-auto custom-scrollbar">
+                                <div className="max-w-3xl w-full bg-white/70 backdrop-blur-3xl p-10 rounded-[40px] border border-white/50 shadow-2xl">
+                                    <div className="space-y-8">
+                                        <div className="space-y-3">
+                                            <label className="text-[11px] font-black uppercase tracking-[0.3em] text-gray-400 italic ml-1">Reference Ticket</label>
+                                            <EntityLookup
+                                                type="ticket"
+                                                value={form.ticketNo || ''}
+                                                ticketFilter={{ client: form.client, engineer: form.engineer }}
+                                                onChange={(val) => setForm({ ...form, ticketNo: val || '' })}
+                                                onSelect={(ticket) => setForm({ 
+                                                    ...form, 
+                                                    ticketNo: ticket.id || '', 
+                                                    client: ticket.customer_name || '',
+                                                    engineer: ticket.engineer_id || '',
+                                                    date: ticket.created_at || form.date
+                                                })}
+                                                placeholder="SEARCH TICKET..."
+                                                className="h-16 bg-white border-2 border-gray-100 rounded-[20px] px-8 font-black italic text-lg shadow-lg focus:border-blue-500 transition-all"
+                                            />
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-8">
+                                            <div className="space-y-3">
+                                                <label className="text-[11px] font-black uppercase tracking-[0.3em] text-gray-400 italic ml-1 transition-colors duration-500" style={{ color: theme.primary }}>Digital Proof</label>
+                                                <div
+                                                    onClick={() => document.getElementById('receipt-upload')?.click()}
+                                                    className="aspect-[3/2] rounded-[30px] border-2 border-dashed border-gray-200 bg-white flex flex-col items-center justify-center gap-4 cursor-pointer hover:border-blue-400 hover:shadow-xl transition-all group relative overflow-hidden"
+                                                >
+                                                    {form.billImageUrl ? (
+                                                        <img src={form.billImageUrl} className="w-full h-full object-cover" alt="Bill" />
+                                                    ) : (
+                                                        <>
+                                                            <div className="w-16 h-16 rounded-full bg-gray-50 flex items-center justify-center text-gray-300 group-hover:text-blue-500 transition-colors">
+                                                                <Camera className="w-8 h-8" />
+                                                            </div>
+                                                            <p className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-400 italic">Capture Proof</p>
+                                                        </>
+                                                    )}
+                                                    <input
+                                                        id="receipt-upload"
+                                                        type="file"
+                                                        className="hidden"
+                                                        accept="image/*"
+                                                        onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
                                                     />
-                                                </td>
-                                                <td className="px-4 py-4">
-                                                    <input type="number" value={item.qty} onChange={e => {
-                                                        const copy = [...items];
-                                                        copy[idx].qty = Number(e.target.value);
-                                                        setItems(copy);
-                                                    }} className="w-full bg-transparent border-none text-center font-bold outline-none" />
-                                                </td>
-                                                <td className="px-4 py-4">
-                                                    <input type="number" value={item.cost} onChange={e => {
-                                                        const copy = [...items];
-                                                        copy[idx].cost = Number(e.target.value);
-                                                        setItems(copy);
-                                                    }} className="w-full bg-transparent border-none text-right font-bold outline-none" />
-                                                </td>
-                                                <td className="px-8 py-4 text-right font-black italic">₹{(item.qty * item.cost).toLocaleString()}</td>
-                                                <td className="px-4">
-                                                    <button onClick={() => removeItem(item.id)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100"><Trash2 className="w-4 h-4" /></button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                    <tfoot className="bg-gray-50/50">
-                                        <tr className="border-t border-gray-200">
-                                            <td colSpan={4} className="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] italic text-right">Consumption Sub-Total</td>
-                                            <td className="px-8 py-4 text-right font-black text-xl italic text-blue-900 underline decoration-blue-500/30 underline-offset-8">₹{totals.itemCost.toLocaleString()}</td>
-                                            <td></td>
-                                        </tr>
-                                    </tfoot>
-                                </table>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-8 flex flex-col justify-center">
+                                                <div className="space-y-3">
+                                                    <label className="text-[11px] font-black uppercase tracking-[0.3em] text-gray-400 italic ml-1">Ledger Date</label>
+                                                    <Input
+                                                        type="date"
+                                                        value={form.date}
+                                                        onChange={(e) => setForm({ ...form, date: e.target.value })}
+                                                        className="h-14 bg-white border-2 border-gray-100 rounded-[18px] px-6 font-black italic text-sm shadow-md"
+                                                    />
+                                                </div>
+                                                <div className="space-y-3">
+                                                    <label className="text-[11px] font-black uppercase tracking-[0.3em] text-gray-400 italic ml-1">Purchase Type</label>
+                                                    <select 
+                                                        value={form.type}
+                                                        onChange={(e) => setForm({ ...form, type: e.target.value })}
+                                                        className="w-full h-14 bg-white border-2 border-gray-100 rounded-[18px] px-6 font-black italic text-sm shadow-md outline-none cursor-pointer"
+                                                    >
+                                                        <option value="LOCAL">LOCAL</option>
+                                                        <option value="INTERSTATE">INTERSTATE</option>
+                                                        <option value="EXEMPTED">EXEMPTED</option>
+                                                    </select>
+                                                </div>
+                                                <div className="space-y-3">
+                                                    <label className="text-[12px] font-black uppercase tracking-[0.3em] italic ml-1 transition-colors duration-500" style={{ color: theme.primary }}>Commit Amount (₹)</label>
+                                                    <Input
+                                                        type="number"
+                                                        value={form.amount || ''}
+                                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, amount: e.target.value })}
+                                                        placeholder="0.00"
+                                                        className="h-16 border-none rounded-[20px] px-8 font-black italic text-3xl shadow-xl text-blue-900"
+                                                        style={{ backgroundColor: `${theme.primary}10` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-8">
+                                            <div className="space-y-3">
+                                                <label className="text-[11px] font-black uppercase tracking-[0.3em] text-gray-400 italic ml-1">Assignment Personnel</label>
+                                                <EntityLookup
+                                                    type="engineer"
+                                                    value={form.engineer || ''}
+                                                    onChange={(val) => setForm({ ...form, engineer: val || '' })}
+                                                    onSelect={(eng) => setForm({ ...form, engineer: eng.id })}
+                                                    placeholder="SELECT ENGINEER..."
+                                                    className="h-14 bg-white border-2 border-gray-100 rounded-[18px] px-6 font-black italic text-sm shadow-md"
+                                                />
+                                            </div>
+                                            <div className="space-y-3">
+                                                <label className="text-[11px] font-black uppercase tracking-[0.3em] text-gray-400 italic ml-1">Customer Name</label>
+                                                <EntityLookup
+                                                    type="contact"
+                                                    value={form.client || ''}
+                                                    onChange={(val) => setForm({ ...form, client: val || '' })}
+                                                    onSelect={(contact) => setForm({ ...form, client: contact.name })}
+                                                    placeholder="SEARCH CUSTOMER NAME..."
+                                                    className="h-14 bg-white border-2 border-gray-100 rounded-[18px] px-6 font-black italic text-sm shadow-md"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -334,10 +558,10 @@ function ExpensesContent() {
     )
 }
 
-export default function ExpensesPage() {
+            export default function UnifiedPremiumExpensePage() {
     return (
-        <Suspense fallback={<div className="p-20 text-center font-black italic uppercase tracking-widest text-gray-400">Loading Intelligence...</div>}>
-            <ExpensesContent />
-        </Suspense>
-    )
+            <Suspense fallback={<div className="p-24 text-center font-black italic uppercase tracking-widest text-gray-400 animate-pulse">Initializing Financial Intelligence Registry...</div>}>
+                <ExpenseModuleContent />
+            </Suspense>
+            )
 }

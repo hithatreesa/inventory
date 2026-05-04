@@ -40,7 +40,7 @@ const masterSubItems = [
 ]
 
 const expenseSubItems = [
-  { name: 'OUTSIDE PURCHASE', icon: ShoppingCart, href: '/expenses?type=outside' },
+  { name: 'ADDITIONAL PURCHASE', icon: ShoppingCart, href: '/expenses?type=outside' },
   { name: 'TRANSPORTATION', icon: Wallet, href: '/expenses?type=transport' },
 ]
 

@@ -370,19 +370,19 @@ function EngineerIssueContent() {
                         <table className="w-full border-collapse">
                             <thead>
                                 <tr className="bg-gray-50 border-b border-gray-100">
-                                    <th className="px-10 py-5 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest italic w-[45%]">Item Identity</th>
-                                    <th className="px-6 py-5 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest italic w-[15%]">Qty</th>
-                                    <th className="px-6 py-5 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest italic w-[25%]">Status / Scans</th>
-                                    <th className="px-10 py-5 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest italic w-[15%]">Actions</th>
+                                    <th className="px-12 py-8 text-left text-xs font-black text-gray-400 uppercase tracking-widest italic w-[45%]">Item Identity</th>
+                                    <th className="px-8 py-8 text-center text-xs font-black text-gray-400 uppercase tracking-widest italic w-[15%]">Qty</th>
+                                    <th className="px-8 py-8 text-center text-xs font-black text-gray-400 uppercase tracking-widest italic w-[25%]">Status / Scans</th>
+                                    <th className="px-12 py-8 text-right text-xs font-black text-gray-400 uppercase tracking-widest italic w-[15%]">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
                                 {lines.map((l) => (
                                     <tr key={l.id} className="hover:bg-gray-50/50 transition-all group">
-                                        <td className="px-10 py-6">
-                                            <div className="space-y-1">
-                                                <p className="text-lg font-black text-[#1A1C21] italic truncate">{l.name}</p>
-                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{l.category} | {l.brand} | {l.model}</p>
+                                        <td className="px-12 py-10">
+                                            <div className="space-y-2">
+                                                <p className="text-2xl font-black text-[#1A1C21] italic tracking-tight truncate leading-none">{l.name}</p>
+                                                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">{l.category} | {l.brand} | {l.model}</p>
                                             </div>
                                             {l.isSerialized && l.serials.length > 0 && (
                                                 <div className="mt-3 flex flex-wrap gap-2">
@@ -395,12 +395,12 @@ function EngineerIssueContent() {
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="px-6 py-6 text-center">
+                                        <td className="px-8 py-10 text-center">
                                             <input
                                                 type="number"
                                                 value={l.qty}
                                                 onChange={(e) => setLines(prev => prev.map(item => item.id === l.id ? { ...item, qty: parseInt(e.target.value) || 0 } : item))}
-                                                className="w-16 bg-transparent text-center text-xl font-black text-[#1A1C21] outline-none"
+                                                className="w-24 h-16 bg-gray-50/50 rounded-2xl text-center text-3xl font-black text-[#1A1C21] outline-none border border-transparent focus:border-primary/20 transition-all"
                                             />
                                         </td>
                                         <td className="px-6 py-6">
@@ -419,15 +419,15 @@ function EngineerIssueContent() {
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="px-10 py-6 text-right">
-                                            <div className="flex justify-end gap-2">
+                                        <td className="px-12 py-10 text-right">
+                                            <div className="flex justify-end gap-3">
                                                 {l.isSerialized && l.serials.length < l.qty && (
-                                                    <button onClick={() => triggerScan(l.id)} className="p-2.5 bg-primary/10 text-primary rounded-xl hover:bg-primary hover:text-white transition-all shadow-sm">
-                                                        <Scan className="w-4 h-4" />
+                                                    <button onClick={() => triggerScan(l.id)} className="p-4 bg-primary text-white rounded-2xl hover:scale-110 transition-all shadow-lg shadow-primary/20">
+                                                        <Scan className="w-6 h-6" />
                                                     </button>
                                                 )}
-                                                <button onClick={() => setLines(lines.filter(item => item.id !== l.id))} className="p-2.5 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all shadow-sm">
-                                                    <Trash2 className="w-4 h-4" />
+                                                <button onClick={() => setLines(lines.filter(item => item.id !== l.id))} className="p-4 bg-red-50 text-red-500 rounded-2xl hover:bg-red-500 hover:text-white transition-all">
+                                                    <Trash2 className="w-6 h-6" />
                                                 </button>
                                             </div>
                                         </td>
@@ -435,8 +435,8 @@ function EngineerIssueContent() {
                                 ))}
 
                                 {pendingRow && (
-                                    <tr className="bg-primary/[0.02] border-2 border-primary/20 animate-in slide-in-from-bottom-2 duration-300">
-                                        <td className="px-10 py-8">
+                                    <tr className="bg-primary/[0.03] border-y-4 border-primary/20 animate-in slide-in-from-bottom-4 duration-500">
+                                        <td className="px-12 py-12">
                                             <EntityLookup
                                                 type="item"
                                                 value={pendingRow.name}
@@ -451,24 +451,24 @@ function EngineerIssueContent() {
                                                     model: item.model
                                                 })}
                                                 placeholder="SEARCH ITEM TO ISSUE..."
-                                                className="w-full h-14 bg-white border border-gray-100 rounded-2xl px-6 font-black italic outline-none focus:border-primary text-base shadow-sm"
+                                                className="w-full h-20 bg-white border-2 border-primary/10 rounded-[28px] px-8 font-black italic outline-none focus:border-primary text-xl shadow-xl"
                                             />
                                         </td>
-                                        <td className="px-6 py-8 text-center">
+                                        <td className="px-8 py-12 text-center">
                                             <input
                                                 type="number"
                                                 value={pendingRow.qty}
                                                 onChange={(e) => setPendingRow({...pendingRow, qty: parseInt(e.target.value) || 0})}
-                                                className="w-20 h-14 bg-white border border-gray-100 rounded-2xl text-center text-xl font-black outline-none shadow-sm focus:border-primary"
+                                                className="w-28 h-20 bg-white border-2 border-primary/10 rounded-[28px] text-center text-4xl font-black outline-none shadow-xl focus:border-primary"
                                             />
                                         </td>
-                                        <td className="px-6 py-8 text-center text-[10px] font-black text-gray-300 uppercase tracking-widest italic">
-                                            Pending...
+                                        <td className="px-8 py-12 text-center text-xs font-black text-gray-400 uppercase tracking-widest italic">
+                                            Awaiting Entry...
                                         </td>
-                                        <td className="px-10 py-8 text-right">
-                                            <div className="flex justify-end gap-2">
-                                                <button onClick={() => setPendingRow(null)} className="h-14 w-14 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center hover:bg-red-100 transition-all border border-red-100 shadow-sm"><X className="w-5 h-5" /></button>
-                                                <button onClick={() => commitLine(true)} className="h-14 w-14 bg-primary text-white rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20 hover:scale-105 transition-all"><CheckCircle2 className="w-5 h-5" /></button>
+                                        <td className="px-12 py-12 text-right">
+                                            <div className="flex justify-end gap-4">
+                                                <button onClick={() => setPendingRow(null)} className="h-20 w-20 bg-red-50 text-red-500 rounded-[28px] flex items-center justify-center hover:bg-red-100 transition-all border-2 border-red-100 shadow-lg"><X className="w-8 h-8" /></button>
+                                                <button onClick={() => commitLine(true)} className="h-20 w-20 bg-primary text-white rounded-[28px] flex items-center justify-center shadow-[0_20px_50px_rgba(0,102,255,0.3)] hover:scale-105 transition-all"><CheckCircle2 className="w-8 h-8" /></button>
                                             </div>
                                         </td>
                                     </tr>
